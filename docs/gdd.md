@@ -95,14 +95,14 @@ SpellFire has a hard class division: Gunslingers and Mages. There is no cross-cl
 | Aim requirement          | High (Overwatch-like)          | Low (forgiving; lead/predict)    |
 | Downtime / punish window | Reload, recoil, mag management | Mana depletion, cooldowns        |
 | Specialisation axis      | None enforced — free mix       | Element affinity (loadout rule)  |
-| Build visibility         | Hidden until used              | Self-advertising (element-heavy) |
+| Build visibility         | Weapon visible; toolkit hidden until used | Self-advertising (element-heavy) |
 | Permanent identity       | None — fluid armory            | None — fluid armory              |
 
 > **Known permanent tuning burden.** Because the classes are asymmetric in feel, the team effectively balances three matchups: Gunslinger v Gunslinger, Mage v Mage, and Gunslinger v Mage. The cross-class matchup will always be the sorest, and its balance is skill-dependent: in low-skill play mages feel oppressive (no aim tax); in high-skill play gunslingers pull ahead (they dodge telegraphs *and* convert aim fully). Expect a persistent new-player perception that mages are strong and gunslingers are hard. This is an intended skill matchup, tracked as an ongoing tuning cost.
 
 **Build-visibility asymmetry (intentional)**
 
-Element affinity makes mage builds partly readable in advance — an opponent sees a fire-heavy mage and can pre-plan dodges. Gunslinger builds stay hidden because tools are mixed freely and only revealed on use. Mages are more counter-buildable; gunslingers surprise. This is a fair trade against the mage’s lower aim tax and a knob to lean on if the matchup skews.
+Element affinity makes mage builds partly readable in advance — an opponent sees a fire-heavy mage and can pre-plan dodges. The Gunslinger's equipped gun is the opposite of hidden: it must be visible and identifiable at all times (an opponent needs to read range, rate of fire, and weight class off it, the same way weapon read matters in any aim-based shooter). What stays hidden is the *rest of the loadout* — deployables (smoke, flashbang, riot shield) and a situational heavy-weapon swap — mixed freely and only revealed on use. Mages are more counter-buildable at a glance; gunslingers reveal their gun immediately but keep their tactical kit a surprise. This is a fair trade against the mage's lower aim tax and a knob to lean on if the matchup skews.
 
 ## 4. The Gunslinger
 
@@ -404,6 +404,26 @@ Two farming verbs with distinct vulnerability profiles and distinct material rol
 
 - **Both verbs are necessary.** You cannot get everything by only fighting or only mining; a farming trip naturally mixes both.
 
+### 8.5 Enemy mob classes
+
+Killable mobs (§8.4) are not a single generic enemy — they come in distinct **classes**, each with its own body, AI, and combat behaviour, the same way Gunslinger and Mage are distinct player classes. This document specifies the first mob class, the **Sentry**, as the template for how a class is defined; further classes are future scope (§12.3) and are expected to cover other archetypes (e.g. mobile chasers, casters, swarms).
+
+#### Sentries — the first mob class
+
+**Archetype: a stationary, turret-based ranged attacker, in the literal Diep.io tank idiom.** Where §10.5 deliberately moved *players* away from the fused body-plus-barrel tank look (toward a body that *holds* a separate weapon), Sentries keep that idiom outright: a fixed body with an independently rotating cannon fused to it. This is a deliberate visual fork — a fused turret silhouette reads as *mob*, a body-holding-a-weapon silhouette reads as *player*, at a glance, in a crowded fight (V1, V3).
+
+- **No leash, no pursuit.** A Sentry does not move from its placement; it only rotates its turret. It cannot be kited into another zone or onto another player, which resolves that part of the open mob-behaviour question in §12.1 for this class (mobile classes added later will need their own leash/aggro answer).
+
+- **Detection and engagement.** A Sentry acquires the nearest player inside its aggro radius, rotates its turret to track them, and attacks. Per the universal rule that every damaging tool has a dodge vector (§11), a Sentry's shot is telegraphed using the same standardized telegraph grammar defined for spells in §10.6 (a translucent shape that fills over a pre-resolve window before the shot fires) rather than a bespoke effect — reusing the grammar players already know keeps a new mob class free to add without teaching a new visual language. The fired shot itself is a dodgeable projectile, never a hitscan or instant-resolve hit, consistent with P1: a Sentry is a positioning check, not a stat check.
+
+- **Difficulty scales with danger tier, not with a new mechanic.** Per §7.1, the same Sentry archetype appears in every band; what changes with tier is shot cadence, telegraph speed, and turret count (e.g. a single slow barrel in the Fringe vs. a multi-barrel spread in the Deadlands) — harder to dodge, not harder-hitting per shot, keeping mob difficulty legible through the same "higher tier = higher execution demand" logic used for spell tiers (§5.3) rather than raw damage inflation.
+
+- **Placement is a world-structure tool, not just a spawn table.** Sentries are placed to guard chokepoints and node clusters (§8.4), layering a PvE clearance check on top of the existing PvP contest for that spot — a squad must suppress or bait out the Sentry's shots while still watching for rival players, reinforcing the "someone mines, someone watches" squad role (P3).
+
+- **Visual identity.** A Sentry's body-plus-turret is element/biome-tinted per §10.4 like any other mob (§10.5), and carries the same outline/threat-ring hostility read as a player (§10.6) — a Sentry is read as *hostile mob* by silhouette, and as *dangerous-in-what-way* by its turret count and tint.
+
+**OPEN —** Exact aggro radius, shot cadence per tier, turret-count progression, and whether a Sentry can be baited into wasting a telegraphed shot from outside its own range are unset; the *behaviour shape* above is locked, values are to tune (§12.1).
+
 ## 9. Squads & world bosses
 
 ### 9.1 Squads
@@ -453,7 +473,7 @@ The in-world image is generated from code — primitives, parameters, and math �
 
 #### V3 — Form encodes function
 
-Because the combat model demands that everything be read at a glance (every spell has a dodge vector; gunslinger builds are hidden until used, §3–5), appearance is a *language*, not decoration: hue names an element, silhouette names a class, a projectile's shape names its type, a ground shape names a telegraph. Style is a readability system first (V1), aesthetics second.
+Because the combat model demands that everything be read at a glance (every spell has a dodge vector; a gunslinger's equipped weapon is always visible; their tactical toolkit is hidden until used, §3–5), appearance is a *language*, not decoration: hue names an element, silhouette names a class, weapon silhouette names weight class and range, a projectile's shape names its type, a ground shape names a telegraph. Style is a readability system first (V1), aesthetics second.
 
 #### V4 — Atmosphere through palette, not detail
 
@@ -513,19 +533,23 @@ The safe centre reads bright, clean, and daylit (most Diep.io-like); the Deadlan
 
 ### 10.5 Entity design language
 
-Every actor is a body primitive plus procedural attachments that *are* its loadout.
+**Characters hold their weapon; they are not their weapon.** This is a deliberate departure from Diep.io's tank idiom (where the barrel *is* fused into the body) toward the standard top-down-shooter convention (in the vein of Hotline Miami, Nuclear Throne, Enter the Gungeon, Brotato): a distinct body primitive plus a distinct weapon primitive, held at a hand/grip point and rotating around it to track aim. This reads as more recognizably a *character* than a *vehicle*, and keeps class, body, and equipped gear as three separately legible layers rather than one fused shape.
 
-- **Bodies.** A player is a simple body primitive (e.g. a circle or a rounded polygon). Class is read from silhouette, not from a sprite:
-  - **Gunslinger** — an angular/harder body with a **muzzle stub** indicating facing/aim, in the Diep.io "tank barrel" idiom. Guns are procedural rectangle-and-shape attachments that appear per equipped weapon.
-  - **Mage** — a softer/rounder body carrying a visible **staff/orbital** element, tinted by the mage's dominant element (§10.4).
+- **Bodies.** A player is a small humanoid-suggestive primitive — e.g. a torso capsule/polygon with a simple directional head or shoulder line — built from the same flat-fill-plus-outline vocabulary (§10.2), not a photoreal figure. Class is read from body proportions and palette, not from a sprite:
+  - **Gunslinger** — an angular, neutral-toned body.
+  - **Mage** — a softer, rounder body, tinted by the mage's dominant element (§10.4).
 
-- **Aim/facing is always shown.** The barrel stub or staff points where the actor aims — the same cue Diep.io uses — so an opponent can read a threat direction instantly. This is required by the combat model, where dodging depends on reading aim.
+- **Held weapons, always visible.** Both classes permanently render their equipped weapon as a separate primitive gripped at a fixed hand point, independent of the body's own fill/outline:
+  - **Gun (Gunslinger)** — a full procedural silhouette built from its slotted parts (barrel length/width, magazine, muzzle, scope, attachments, §6.2), held and visible at all times, not just when firing. An opponent must be able to identify weight class and likely range/rate-of-fire off the held silhouette alone, at any time — the way weapon read works in any aim-based shooter.
+  - **Staff (Mage)** — an equally permanent held silhouette (shaft plus a core/focus head per its slotted components, §5.4), tinted by the mage's dominant element (§10.4), visible at all times, not only on cast.
 
-- **The build-visibility asymmetry is rendered, not just stated (§3).** The mage's dominant element *colors its body/orbital* → self-advertising, pre-counterable. The gunslinger's body stays **neutral** and its weapon shape is only fully expressed *when drawn/fired* → hidden until used. The visual style is the delivery mechanism for a design rule already committed in §3.
+- **Aim/facing is always shown.** The held gun or staff rotates around its hand pivot to point where the actor aims, so an opponent can read a threat direction instantly. This is required by the combat model, where dodging depends on reading aim.
+
+- **The build-visibility asymmetry is rendered, not just stated (§3).** The mage's dominant element *colors both body and staff* → self-advertising, pre-counterable. The gunslinger's *gun* is equally visible and identifiable at all times — weapon read is symmetric with the mage's element read. The asymmetry lives one layer deeper: the gunslinger's **toolkit** (deployables — smoke, flashbang, riot shield — and a situational heavy-weapon swap) carries no permanent held silhouette and renders only when drawn/deployed → hidden until used. The visual style is the delivery mechanism for the design rule committed in §3: gun and staff visible, tactical kit hidden.
 
 - **Weapons/staves are procedural from their recipe (§6.2).** A crafted gun's shape is a function of its slotted parts; a staff's is a function of its components. Two players with different builds look different because the parts differ, at no art cost — the crafting data and the rendered shape are the same data (V2).
 
-- **Mobs, nodes, drops, bosses.** Mobs are body primitives themed to their biome (element-tinted, §10.4). Harvest nodes are static procedural clusters, colored to the mat they yield. Dropped materials are small primitives in the mat's color. World bosses are large, higher-vertex-count procedural constructs, biome-themed and legible in silhouette from far off (they are the flashpoint, §9.2).
+- **Mobs, nodes, drops, bosses.** Mobs are body primitives themed to their biome (element-tinted, §10.4). Unlike players, mob classes are free to use the fused body-plus-attachment tank idiom this section deliberately moved players away from — e.g. the Sentry (§8.5), a body with a fused rotating turret — since a fused-silhouette read as *mob* and a held-weapon read as *player* is itself a useful class-of-actor cue (V3). Harvest nodes are static procedural clusters, colored to the mat they yield. Dropped materials are small primitives in the mat's color. World bosses are large, higher-vertex-count procedural constructs, biome-themed and legible in silhouette from far off (they are the flashpoint, §9.2).
 
 ### 10.6 Readability as a system
 
@@ -610,7 +634,8 @@ Collected known-unresolved items. None block the current design; each is either 
 | Ranged-poke role   | No element owns pure ranged poke — gap or intentional? | Decide before finalising the 5-element set               |
 | Outpost blockading | How to prevent camping an outpost’s only exit          | Exit-invulnerability and/or multiple exits               |
 | Respawn cost       | Respawn timer; does a rim death send you far back?     | Long walk-back = primary geared-player penalty           |
-| Mob behaviour      | Leash, aggro range, kiteable onto other players?       | At 3s TTK, mob aggro is a PvP tool — design deliberately |
+| Mob behaviour      | Leash, aggro range, kiteable onto other players?       | Resolved for Sentries (no leash, §8.5); open for future mobile mob classes |
+| Sentry values      | Aggro radius, shot cadence per tier, turret-count curve | Behaviour shape locked (§8.5); numbers are a balance-pass item |
 | Starter kit        | What a zero-material new player spawns with            | Defines the floor of the compressed power band           |
 | Palette validation | Exact element hues + a colorblind-safe palette pass    | Validate for value/shape separation, not hue alone (§10.6) |
 | Renderer choice    | 2D engine/backend for procedural draw at 100 players   | Deferred to architecture doc; bounds effect/glow density (§10.8) |
@@ -634,6 +659,8 @@ Categories intentionally out of scope for this draft. Each will get its own sect
 - **Social systems / guilds / territory.** Includes whether outposts become capturable — connects to §7.3 open items.
 
 - **Onboarding & tutorial.** Especially important given the Gunslinger’s high mechanical floor and the mage-feels-strong perception (§3).
+
+- **Further mob classes beyond the Sentry.** §8.5 specifies only the first class (stationary/turret). Mobile chasers, casters with their own telegraphed spellcasting, and swarm/low-value classes are all future scope, each needing its own leash/aggro answer.
 
 - **Full numeric balance pass.** HP/damage bands, mana pools, cooldowns, drop rates, insurance %, harvest times, threshold %, XP curves — the spreadsheet that follows this document.
 
