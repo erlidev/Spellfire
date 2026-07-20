@@ -14,7 +14,7 @@ Version 0.1 — Systems Design Draft
 
 **Scope.** This document specifies SpellFire's *systems and their design intent* — the rules of the game and why each rule exists. It deliberately contains almost no final numbers. Where a mechanic is locked but its value is not (time-to-kill windows aside), the value is marked *to tune*. A GDD fixes the shape of a system; a balance spreadsheet, produced later, fixes its values. Committing fake-precise numbers here would imply decisions that have not been made.
 
-**Status tags.** Sections or lines marked **OPEN** are known-unresolved design areas, not oversights. Amber callout boxes flag either an open decision or an *accepted tradeoff* — a known imperfection the team has chosen on purpose. These are collected again in §11.
+**Status tags.** Sections or lines marked **OPEN** are known-unresolved design areas, not oversights. Amber callout boxes flag either an open decision or an *accepted tradeoff* — a known imperfection the team has chosen on purpose. These are collected again in §12.
 
 **Design pillars.** Every system below is justified against the four pillars in §1. When two desirable features conflict, the pillars break the tie. If a future change violates a pillar, that is the signal to reconsider the change, not the pillar.
 
@@ -151,7 +151,7 @@ The Gunslinger has no skill tree (a deliberate ‘separate experience’ from th
 <tbody>
 <tr class="odd">
 <td><p><strong>Critical guardrail — rarer materials buy skill ceiling, never power.</strong> A heavy or rare-material gun must sit in the <em>same compressed effective-DPS band</em> as a starter gun: harder to control (recoil, move-spread, weight/slow), with higher payoff when mastered, not a bigger number. If rare-mat guns are simply stronger, ‘farm rare mats → win’ becomes vertical power by another name and violates P1/P2.</p>
-<p><strong>Consequence to accept — pacing is now pure economy tuning.</strong> With no skill-tree gate, material grind is the <em>only</em> thing between a new player and every weapon. Gunslinger progression pace is therefore entirely a drop-rate problem (see §11, pacing).</p></td>
+<p><strong>Consequence to accept — pacing is now pure economy tuning.</strong> With no skill-tree gate, material grind is the <em>only</em> thing between a new player and every weapon. Gunslinger progression pace is therefore entirely a drop-rate problem (see §12, pacing).</p></td>
 </tr>
 </tbody>
 </table>
@@ -340,7 +340,7 @@ Biomes are a second axis, completely independent of the danger rings. Under Mode
 
 **OPEN —** Outpost blockading. A safe zone whose only exit can be camped is a soft spawn-camp. Mitigations to specify: brief exit-invulnerability and/or multiple exits per outpost.
 
-**OPEN —** Outposts are currently contestable-but-not-destroyable. Whether deep outposts can be blockaded, captured, or upgraded is deferred (see §11, social/territory).
+**OPEN —** Outposts are currently contestable-but-not-destroyable. Whether deep outposts can be blockaded, captured, or upgraded is deferred (see §12, social/territory).
 
 ## 8. Economy, death & PvP loop
 
@@ -433,7 +433,147 @@ Two farming verbs with distinct vulnerability profiles and distinct material rol
 
 > **Accepted consequence.** Coordinated 4-stacks will reliably take the top-4 rare slots, so rare boss mats are effectively squad-gated (consistent with P3). The participation floor ensures a soloist who contributed meaningfully still leaves with *something*, so losing the ranking is not a total loss.
 
-## 10. Cross-cutting invariants
+## 10. Visual & art direction
+
+**Scope.** This section fixes SpellFire's *visual language* and the intent behind it — what things are made of, how the screen stays readable, and how atmosphere is produced — with the same discipline as the systems sections: shapes are locked, specific color and size values are *to tune*. It does not choose a rendering engine; the style is written renderer-agnostically (see the note at the end of §10.8).
+
+The reference point is Diep.io: a screen built almost entirely from flat geometric primitives drawn in code, not from painted sprites. SpellFire adopts that language and bends it to an MMORPG's needs — five elements, danger tiers, biomes, and 100 players on screen — without abandoning the clean, abstract, instantly-readable look.
+
+### 10.1 Visual pillars
+
+Four commitments constrain every art decision, ordered; when they conflict the earlier wins. They are the visual counterpart to the design pillars in §1 and answer to them.
+
+#### V1 — Readability before beauty
+
+At 3s TTK with up to 100 players and dense telegraphs, the screen's first job is to be *parsed*, not admired. Every stylistic choice must survive a cluttered teamfight. Where a prettier option costs legibility, the legible option wins. This pillar directly serves P1 (skill decides fights): a fight lost to visual confusion is not a skill loss.
+
+#### V2 — Procedural-first, authored by exception
+
+The in-world image is generated from code — primitives, parameters, and math — not from a library of painted assets. This keeps content cheap to add (a new gun part is a shape spec, not an art commission), keeps the look coherent as the world grows (P4), and makes every entity's stats and its appearance the *same data*. A short whitelist (§10.3) may be hand-authored; nothing in the play space may.
+
+#### V3 — Form encodes function
+
+Because the combat model demands that everything be read at a glance (every spell has a dodge vector; gunslinger builds are hidden until used, §3–5), appearance is a *language*, not decoration: hue names an element, silhouette names a class, a projectile's shape names its type, a ground shape names a telegraph. Style is a readability system first (V1), aesthetics second.
+
+#### V4 — Atmosphere through palette, not detail
+
+Mood and place come from color, value, and grid — cheap, global, procedural channels — never from added surface detail that would clutter the read. A lethal rim *feels* different because it is darker and desaturated, not because it is busier.
+
+### 10.2 The primitive vocabulary
+
+Everything in the play space is composed from a small closed set of drawable primitives, so the whole game shares one visual grammar:
+
+- **Shapes:** filled circles, regular/irregular polygons, rectangles/capsules, arcs, and line segments. No bitmap textures, no photographic detail, no gradients as a *rule* (a single radial/linear ramp is permitted only as a deliberate effect — glow, telegraph falloff — never as surface texture).
+
+- **The outline rule (locked).** Every gameplay entity and projectile is drawn as a flat fill plus a single darker outline stroke of consistent relative weight. The outline is what makes overlapping primitives legible against the world and against each other; it is the single most identity-defining choice of the style and is non-negotiable in the play space. Outline color is a *channel* (see §10.6), not fixed black.
+
+- **Flat fills.** Interiors are solid color. An entity's fill is its identity color (§10.4); shading, if any, is a flat second polygon, not a gradient.
+
+- **The grid.** The ground is a procedural grid of thin lines, as in Diep.io — it gives motion a reference frame (you read your own speed against it) at zero asset cost. Grid color and cell size are palette-driven (§10.4).
+
+### 10.3 The procedural rule and the authored whitelist
+
+**In-world = 100% procedural.** Everything that exists in the game world — player and mob bodies, weapons and staves, projectiles, spell effects, telegraphs, nodes, drops, world props, the terrain and grid — is drawn from the primitive vocabulary at runtime from parameters. No painted sprite ever appears in the play space. This is V2, enforced.
+
+**Authored exceptions (the whitelist).** Only the following may be hand-authored image assets, because they live *outside* the play space and benefit from craft the primitive grammar can't give:
+
+| Allowed authored asset | Where it lives | Why exempt |
+|------------------------|----------------|------------|
+| UI iconography | HUD, menus, inventory, crafting screens | Dense symbolic clarity at tiny sizes; not in the world |
+| Logo / wordmark | Title, loading, branding | Brand identity, one-time craft |
+| Marketing / splash art | Store pages, promo, out-of-game | Sales surface, never rendered in-game |
+
+> **The whitelist is a hard boundary, not a slippery slope.** The instant an authored asset appears *in the play space* — a painted gun sprite, a textured rock — V2 is broken and the coherence that makes procedural content cheap and consistent is gone. Icons are allowed precisely because they never render in the world. If a future feature wants in-world art, the answer is to extend the primitive vocabulary or its parameters, not to add a sprite.
+
+### 10.4 Palette system — global base, regional shift
+
+The palette is **one clean base look, modulated per region** (the chosen approach): the flat-primitive-plus-grid language is constant everywhere, but three ambient channels shift by location to produce biome identity and danger atmosphere (V4) without touching the entity grammar (V1).
+
+**Ambient channels (shift by location):**
+
+| Channel | Drives | Biome axis (§7.2) | Danger axis (§7.1) |
+|---------|--------|-------------------|--------------------|
+| Background value/tint | Overall mood | Hue by biome (fire = warm, frost = cool, …) | Darkens toward the rim |
+| Grid color/opacity | Ground read | Tinted to match biome | Fades / cools toward the rim |
+| Ambient saturation | "Safety" feel | — | Desaturates toward the lethal rim |
+
+The safe centre reads bright, clean, and daylit (most Diep.io-like); the Deadlands rim reads dark, desaturated, and cold. A player can gauge roughly how deep they are from ambient alone — a readability win that doubles as atmosphere, and reinforces the "steep, signposted gradient" the world design wants (§7.1).
+
+**Element reserved hues (locked as a set; exact values to tune).** Element color is a *fixed vocabulary* — the same hue always means the same element, everywhere, on spells, telegraphs, and element-aligned mats and props. This is V3 for magic.
+
+| Element (§5.2) | Reserved hue | Notes |
+|----------------|--------------|-------|
+| Fire | Red–orange | Warm, high value |
+| Frost | Cyan / pale blue | Cool, light |
+| Storm / Lightning | Yellow / gold | High value, high contrast (fast burst reads instantly) |
+| Arcane | Magenta / violet | Distinct from Storm's yellow and Frost's cyan |
+| Earth / Stone | Tan / earth-brown | Low saturation, heavy feel |
+
+> **Accepted constraint — the color budget is tight, and it is why we split channels.** Five element hues, a bright→dark biome/danger background, *and* team/threat identity all want color at once; naïvely they collide (Diep.io's "enemy = red" would clash with Fire). SpellFire resolves this by putting identity and allegiance on **separate visual channels** (§10.6): **fill = what it is** (element / neutral), **outline + threat-ring = whose side it's on**. Element lives in fills and effects; team/threat lives in outline color and an overhead ring. Background tint stays low-saturation so foreground hues always win the figure-ground read. This channel split is the mechanism that lets all three color systems coexist; breaking it (e.g. coloring enemy *fills* red) reintroduces the collision.
+
+### 10.5 Entity design language
+
+Every actor is a body primitive plus procedural attachments that *are* its loadout.
+
+- **Bodies.** A player is a simple body primitive (e.g. a circle or a rounded polygon). Class is read from silhouette, not from a sprite:
+  - **Gunslinger** — an angular/harder body with a **muzzle stub** indicating facing/aim, in the Diep.io "tank barrel" idiom. Guns are procedural rectangle-and-shape attachments that appear per equipped weapon.
+  - **Mage** — a softer/rounder body carrying a visible **staff/orbital** element, tinted by the mage's dominant element (§10.4).
+
+- **Aim/facing is always shown.** The barrel stub or staff points where the actor aims — the same cue Diep.io uses — so an opponent can read a threat direction instantly. This is required by the combat model, where dodging depends on reading aim.
+
+- **The build-visibility asymmetry is rendered, not just stated (§3).** The mage's dominant element *colors its body/orbital* → self-advertising, pre-counterable. The gunslinger's body stays **neutral** and its weapon shape is only fully expressed *when drawn/fired* → hidden until used. The visual style is the delivery mechanism for a design rule already committed in §3.
+
+- **Weapons/staves are procedural from their recipe (§6.2).** A crafted gun's shape is a function of its slotted parts; a staff's is a function of its components. Two players with different builds look different because the parts differ, at no art cost — the crafting data and the rendered shape are the same data (V2).
+
+- **Mobs, nodes, drops, bosses.** Mobs are body primitives themed to their biome (element-tinted, §10.4). Harvest nodes are static procedural clusters, colored to the mat they yield. Dropped materials are small primitives in the mat's color. World bosses are large, higher-vertex-count procedural constructs, biome-themed and legible in silhouette from far off (they are the flashpoint, §9.2).
+
+### 10.6 Readability as a system
+
+Per V1/V3, the look is a formal legibility layer. The following mappings are **locked as systems**; their exact shapes/values are to tune.
+
+- **Channel separation (locked):**
+
+| Visual channel | Encodes |
+|----------------|---------|
+| Fill color | Identity — element (mage/spell) or neutral (gunslinger); mat type (node/drop) |
+| Outline color | Allegiance — self / squad / neutral / hostile |
+| Overhead ring | Threat / targeting / squad marker (redundant with outline for colorblind safety) |
+| Shape / silhouette | Class (body) and projectile *type* |
+| Opacity | Telegraph state (pending vs. active vs. resolved) |
+
+- **Telegraph grammar (locked).** Because every damaging spell must have a dodge vector (§5), telegraphs are a *standardized* visual set, not per-spell art: a translucent ground shape (circle, cone, line, ring) in the element's hue that fills or intensifies over the pre-resolve window, then flashes on resolution. Shape names the affected area; hue names the element; opacity/fill names time-to-impact. A player learns the grammar once and reads every spell — including ones they've never seen — the same way. This is the visual half of the "no instant point-and-click damage" rule.
+
+- **Projectile shape encodes type (locked).** Bullets, sniper rounds (the hitscan-then-projectile exception, §4.2), spell bolts, AoE seeds, and thrown gadgets each have a distinct primitive silhouette, so an incoming shape is identifiable — and therefore dodgeable — on sight.
+
+- **Feedback (locked forms).** Damage = a brief flat white/red flash on the hit body (no sprite). Health and resource (mana) are flat rounded-rectangle bars with dark outlines, following the same outline rule. Death is a quick procedural burst of the body's own primitives, not a canned animation.
+
+- **Colorblind safety is a requirement, not a polish item.** Because so much meaning is on hue, every hue-coded distinction must carry a redundant non-hue cue — shape, outline pattern, ring, or icon — and the reserved hues are chosen for value/shape separation, not hue alone. (Palette validation is an OPEN item, §12.1.)
+
+### 10.7 World rendering
+
+- **Grid ground, biome-tinted (§10.2, §10.4).** The procedural grid is the constant floor; its tint and the background value carry biome and danger (V4).
+
+- **Biome identity is scatter + ambient, never texture.** A biome reads through (1) its ambient tint and (2) sparse procedural props/nodes in the biome's element hue — never a painted ground texture. Sparse by mandate: props must not compete with entities and telegraphs for the read (V1).
+
+- **Safe vs. open world is visually distinct.** Safe zones (hub, outposts) read unmistakably different from the contested world — brighter, calmer ambient, distinct grid — so the loadout-lock boundary (the economy's keystone rule, §6.1) is *seen*, not just enforced. Crossing out of safety should be visually obvious.
+
+- **Danger tier is legible from ambient (§10.4)** — the gradient toward the rim is a color/value ramp, supporting the "signposted, deliberate crossing" the world design requires (§7.1).
+
+### 10.8 Effects, motion, and juice
+
+- **Flat and primitive-based.** Explosions, muzzle flashes, and impacts are short-lived procedural primitives (expanding rings, shape bursts), not particle-sprite sheets. Glow/bloom is permitted sparingly as a deliberate emphasis (a resolving high-tier spell), never as ambient haze that erodes readability (V1).
+
+- **Motion sells the game.** Interpolation, easing, subtle scale/recoil pops, and camera feedback ("juice") are how a primitive-based game gains life — this is where polish budget goes, not surface detail. Motion must never obscure a telegraph or hitbox.
+
+- **Hitbox honesty.** A primitive's drawn shape should match its collision/hitbox closely; the abstract style makes this easy and it is required for fair dodging (P1/V1).
+
+**Renderer-agnostic note.** This section assumes only "fast 2D primitive drawing with per-frame redraw" — satisfiable by immediate-mode canvas or a retained/GPU 2D layer alike. The engine choice (perf at 100 players, batching, effect ceilings) is deferred to the architecture doc (`/docs/architecture.md`) and does not change any decision above. Effect density and glow use are the two knobs most likely to be renderer-bound; treat them as tunable to the chosen backend.
+
+### 10.9 What this section deliberately does not fix
+
+Locked here: the primitive grammar, the outline rule, the procedural boundary and whitelist, the palette-shift model, the element hue *set*, the channel-separation and telegraph *systems*. Left open (values, not shapes): exact hex values and saturation curves, precise body/attachment silhouettes per class and per part, grid dimensions, effect densities, and the colorblind-safe palette validation. These are the "balance spreadsheet" equivalents for art and are collected in §12.1.
+
+## 11. Cross-cutting invariants
 
 Rules that recur across systems and must hold everywhere. A change that breaks one of these breaks a pillar.
 
@@ -453,11 +593,17 @@ Rules that recur across systems and must hold everywhere. A change that breaks o
 
 - **Incentives reward cooperation; nothing taxes it.** Reward and difficulty nudge toward grouping; no rule (e.g. insurance) penalises group size.
 
-## 11. Open questions & deferred scope
+- **The play space is 100% procedural; only the whitelist is authored.** No painted sprite ever renders in the world. Authored assets are confined to UI icons, logo, and marketing art (§10.3).
+
+- **Form encodes function.** Element = reserved hue, class = silhouette, projectile type = shape, telegraph = standardized translucent ground shape. Identity lives in fills; allegiance/threat lives in outline + ring — the two never share a channel (§10.4, §10.6).
+
+- **Every hue-coded distinction carries a redundant non-hue cue.** Colorblind safety is a requirement, not polish (§10.6).
+
+## 12. Open questions & deferred scope
 
 Collected known-unresolved items. None block the current design; each is either a refinement or a category deliberately postponed.
 
-### 11.1 Open design decisions
+### 12.1 Open design decisions
 
 | **Area**           | **Question**                                           | **Recommendation / note**                                |
 |--------------------|--------------------------------------------------------|----------------------------------------------------------|
@@ -466,14 +612,16 @@ Collected known-unresolved items. None block the current design; each is either 
 | Respawn cost       | Respawn timer; does a rim death send you far back?     | Long walk-back = primary geared-player penalty           |
 | Mob behaviour      | Leash, aggro range, kiteable onto other players?       | At 3s TTK, mob aggro is a PvP tool — design deliberately |
 | Starter kit        | What a zero-material new player spawns with            | Defines the floor of the compressed power band           |
+| Palette validation | Exact element hues + a colorblind-safe palette pass    | Validate for value/shape separation, not hue alone (§10.6) |
+| Renderer choice    | 2D engine/backend for procedural draw at 100 players   | Deferred to architecture doc; bounds effect/glow density (§10.8) |
 
-### 11.2 Critical tuning problem — progression pacing
+### 12.2 Critical tuning problem — progression pacing
 
 With the handling gate removed, *material grind is the only thing between a new player and every weapon*, so Gunslinger (and to a lesser extent Mage) progression pace is entirely a drop-rate/economy problem with no other lever. The document sets the *form*; values are to tune.
 
 **OPEN —** Set target pacing: rough time to a first real crafted build, and to rim-viability (e.g. ‘first real build in ~X hours, rim-capable in ~Y’). Even coarse targets shape every drop rate.
 
-### 11.3 Deferred by choice
+### 12.3 Deferred by choice
 
 Categories intentionally out of scope for this draft. Each will get its own section later; none affects the systems above.
 
