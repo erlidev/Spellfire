@@ -1,3 +1,0 @@
-# Spellfire Testing Suite
-
-This was just a simple testing I made to sanity-check my Golang backend code and make sure that it worked. To run this, simply set up the Spellfire backend and install the required packages (`pyglet` and `websockets`), then generate the Protobuf Python files using the `client_packet.proto` and `server_packet.proto` files before running `main.py`. It also includes `terrain.py` which was just used for testing different terrain generation methods.

@@ -1,6 +1,0 @@
-CREATE TABLE IF NOT EXISTS "Users" (
-	"id" INTEGER NOT NULL UNIQUE,
-	"username" TEXT NOT NULL UNIQUE,
-	"inventory" TEXT,
-	PRIMARY KEY("id")
-);
