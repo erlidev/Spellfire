@@ -410,19 +410,19 @@ Killable mobs (§8.4) are not a single generic enemy — they come in distinct *
 
 #### Sentries — the first mob class
 
-**Archetype: a stationary, turret-based ranged attacker, in the literal Diep.io tank idiom.** Where §10.5 deliberately moved *players* away from the fused body-plus-barrel tank look (toward a body that *holds* a separate weapon), Sentries keep that idiom outright: a fixed body with an independently rotating cannon fused to it. This is a deliberate visual fork — a fused turret silhouette reads as *mob*, a body-holding-a-weapon silhouette reads as *player*, at a glance, in a crowded fight (V1, V3).
+**Archetype: a mobile ranged attacker, identical to a Diep.io tank in both body and behaviour.** Where §10.5 deliberately moved *players* away from the fused body-plus-barrel tank look (toward a body that *holds* a separate weapon), Sentries keep that idiom outright and unmodified: a body with an independently rotating cannon fused to it, which drives around the world the same way a Diep.io tank does and aims/fires independently of its own movement direction. This is a deliberate visual fork — a fused turret silhouette reads as *mob*, a body-holding-a-weapon silhouette reads as *player*, at a glance, in a crowded fight (V1, V3).
 
-- **No leash, no pursuit.** A Sentry does not move from its placement; it only rotates its turret. It cannot be kited into another zone or onto another player, which resolves that part of the open mob-behaviour question in §12.1 for this class (mobile classes added later will need their own leash/aggro answer).
+- **Patrols, chases, and can be kited — a real leash, not a fixed post.** A Sentry roams a patrol area when idle. On acquiring a target it drives toward and around them (as a Diep.io tank does) while its turret independently tracks and fires, up to a leash range from its patrol origin; beyond the leash it disengages and returns. This makes a Sentry kiteable — a player can pull it off a chokepoint, lead it onto another player, or run it out of its patrol area — which reopens rather than resolves the general mob-behaviour question in §12.1: leash distance and re-engage/reset rules are exactly the values that question is asking for, now scoped to a concrete first case.
 
-- **Detection and engagement.** A Sentry acquires the nearest player inside its aggro radius, rotates its turret to track them, and attacks. Per the universal rule that every damaging tool has a dodge vector (§11), a Sentry's shot is telegraphed using the same standardized telegraph grammar defined for spells in §10.6 (a translucent shape that fills over a pre-resolve window before the shot fires) rather than a bespoke effect — reusing the grammar players already know keeps a new mob class free to add without teaching a new visual language. The fired shot itself is a dodgeable projectile, never a hitscan or instant-resolve hit, consistent with P1: a Sentry is a positioning check, not a stat check.
+- **Detection and engagement.** A Sentry acquires the nearest player inside its aggro radius, then drives and turns to close/hold its preferred range while the turret tracks independently and attacks. Per the universal rule that every damaging tool has a dodge vector (§11), a Sentry's shot is telegraphed using the same standardized telegraph grammar defined for spells in §10.6 (a translucent shape that fills over a pre-resolve window before the shot fires) rather than a bespoke effect — reusing the grammar players already know keeps a new mob class free to add without teaching a new visual language. The fired shot itself is a dodgeable projectile, never a hitscan or instant-resolve hit, consistent with P1: a Sentry is a positioning check, not a stat check.
 
-- **Difficulty scales with danger tier, not with a new mechanic.** Per §7.1, the same Sentry archetype appears in every band; what changes with tier is shot cadence, telegraph speed, and turret count (e.g. a single slow barrel in the Fringe vs. a multi-barrel spread in the Deadlands) — harder to dodge, not harder-hitting per shot, keeping mob difficulty legible through the same "higher tier = higher execution demand" logic used for spell tiers (§5.3) rather than raw damage inflation.
+- **Difficulty scales with danger tier, not with a new mechanic.** Per §7.1, the same Sentry archetype appears in every band; what changes with tier is movement speed, shot cadence, telegraph speed, and turret count (e.g. a single slow barrel in the Fringe vs. a multi-barrel spread in the Deadlands) — harder to dodge and harder to disengage from, not harder-hitting per shot, keeping mob difficulty legible through the same "higher tier = higher execution demand" logic used for spell tiers (§5.3) rather than raw damage inflation.
 
-- **Placement is a world-structure tool, not just a spawn table.** Sentries are placed to guard chokepoints and node clusters (§8.4), layering a PvE clearance check on top of the existing PvP contest for that spot — a squad must suppress or bait out the Sentry's shots while still watching for rival players, reinforcing the "someone mines, someone watches" squad role (P3).
+- **Placement is a world-structure tool, not just a spawn table.** Sentries patrol chokepoints and node clusters (§8.4), layering a PvE clearance-or-kite check on top of the existing PvP contest for that spot — a squad must suppress, kite, or bait out the Sentry's shots while still watching for rival players, reinforcing the "someone mines, someone watches" squad role (P3).
 
 - **Visual identity.** A Sentry's body-plus-turret is element/biome-tinted per §10.4 like any other mob (§10.5), and carries the same outline/threat-ring hostility read as a player (§10.6) — a Sentry is read as *hostile mob* by silhouette, and as *dangerous-in-what-way* by its turret count and tint.
 
-**OPEN —** Exact aggro radius, shot cadence per tier, turret-count progression, and whether a Sentry can be baited into wasting a telegraphed shot from outside its own range are unset; the *behaviour shape* above is locked, values are to tune (§12.1).
+**OPEN —** Exact aggro radius, leash range and reset behaviour, movement/turn speed, shot cadence per tier, and turret-count progression are unset; the *behaviour shape* above is locked, values are to tune (§12.1).
 
 ## 9. Squads & world bosses
 
@@ -634,8 +634,8 @@ Collected known-unresolved items. None block the current design; each is either 
 | Ranged-poke role   | No element owns pure ranged poke — gap or intentional? | Decide before finalising the 5-element set               |
 | Outpost blockading | How to prevent camping an outpost’s only exit          | Exit-invulnerability and/or multiple exits               |
 | Respawn cost       | Respawn timer; does a rim death send you far back?     | Long walk-back = primary geared-player penalty           |
-| Mob behaviour      | Leash, aggro range, kiteable onto other players?       | Resolved for Sentries (no leash, §8.5); open for future mobile mob classes |
-| Sentry values      | Aggro radius, shot cadence per tier, turret-count curve | Behaviour shape locked (§8.5); numbers are a balance-pass item |
+| Mob behaviour      | Leash, aggro range, kiteable onto other players?       | Shape set by the Sentry (patrol/chase/leash/reset, §8.5); exact values open, and future mob classes may need different shapes |
+| Sentry values      | Aggro radius, leash range/reset, move speed, shot cadence and turret count per tier | Behaviour shape locked (§8.5); numbers are a balance-pass item |
 | Starter kit        | What a zero-material new player spawns with            | Defines the floor of the compressed power band           |
 | Palette validation | Exact element hues + a colorblind-safe palette pass    | Validate for value/shape separation, not hue alone (§10.6) |
 | Renderer choice    | 2D engine/backend for procedural draw at 100 players   | Deferred to architecture doc; bounds effect/glow density (§10.8) |
@@ -660,7 +660,7 @@ Categories intentionally out of scope for this draft. Each will get its own sect
 
 - **Onboarding & tutorial.** Especially important given the Gunslinger’s high mechanical floor and the mage-feels-strong perception (§3).
 
-- **Further mob classes beyond the Sentry.** §8.5 specifies only the first class (stationary/turret). Mobile chasers, casters with their own telegraphed spellcasting, and swarm/low-value classes are all future scope, each needing its own leash/aggro answer.
+- **Further mob classes beyond the Sentry.** §8.5 specifies only the first class (the mobile, Diep.io-tank-style Sentry). Other archetypes — casters with their own telegraphed spellcasting, swarm/low-value classes, stationary emplacements — are all future scope, each needing its own patrol/leash/aggro answer.
 
 - **Full numeric balance pass.** HP/damage bands, mana pools, cooldowns, drop rates, insurance %, harvest times, threshold %, XP curves — the spreadsheet that follows this document.
 
