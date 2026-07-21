@@ -7,8 +7,22 @@ import (
 	"spellfire/data"
 	"spellfire/server/internal/loadout"
 	"spellfire/server/internal/model"
+	"spellfire/server/internal/progression"
 	"spellfire/server/internal/tuning"
 )
+
+// kit is the ledger a freshly created character owns, which is what every test
+// about the default set and the starter kit must run against.
+func kit(tables *tuning.Tables, class model.Class) progression.Ledger {
+	return progression.New(progression.StarterKit(tables, class, "ledger-test"))
+}
+
+// everything is the ledger of a character that has unlocked all live content.
+// Tests about class, affinity, and retirement rules use it so ownership is not
+// the reason a case passes or fails.
+func everything(tables *tuning.Tables) progression.Ledger {
+	return progression.New(tables.UnlocksThrough(tables.Progression.MaxLevel))
+}
 
 func shipped(t *testing.T) *tuning.Tables {
 	t.Helper()
@@ -49,8 +63,8 @@ func edited(t *testing.T, files map[string]string) *tuning.Tables {
 func TestDefaultIsEquippableForBothClasses(t *testing.T) {
 	tables := shipped(t)
 	for _, class := range []model.Class{model.Gunslinger, model.Mage} {
-		set := loadout.Default(tables, class)
-		if err := loadout.Validate(tables, class, set); err != nil {
+		set := loadout.Default(tables, class, kit(tables, class))
+		if err := loadout.Validate(tables, class, kit(tables, class), set); err != nil {
 			t.Fatalf("%s default loadout is invalid: %v", class, err)
 		}
 		slots := loadout.Bar(tables, class, set)
@@ -67,8 +81,8 @@ func TestDefaultIsEquippableForBothClasses(t *testing.T) {
 
 func TestBarLaysClassesOutOverTheSameBindings(t *testing.T) {
 	tables := shipped(t)
-	gunslinger := loadout.Bar(tables, model.Gunslinger, loadout.Default(tables, model.Gunslinger))
-	mage := loadout.Bar(tables, model.Mage, loadout.Default(tables, model.Mage))
+	gunslinger := loadout.Bar(tables, model.Gunslinger, loadout.Default(tables, model.Gunslinger, kit(tables, model.Gunslinger)))
+	mage := loadout.Bar(tables, model.Mage, loadout.Default(tables, model.Mage, kit(tables, model.Mage)))
 	if len(gunslinger) != len(mage) {
 		t.Fatalf("bars differ: gunslinger %d, mage %d", len(gunslinger), len(mage))
 	}
@@ -92,16 +106,16 @@ func TestBarLaysClassesOutOverTheSameBindings(t *testing.T) {
 func TestAffinityGatesHighTierSpells(t *testing.T) {
 	tables := edited(t, map[string]string{"spells.json": grid})
 	signature := model.Loadout{Weapon: "starter-staff", Spells: []string{"fire-4", "", "", "", "", ""}}
-	if err := loadout.Validate(tables, model.Mage, signature); err == nil {
+	if err := loadout.Validate(tables, model.Mage, everything(tables), signature); err == nil {
 		t.Fatal("a lone tier-4 spell was accepted; affinity is not enforced")
 	}
 	built := model.Loadout{Weapon: "starter-staff", Spells: []string{"fire-4", "fire-bolt", "fire-2", "fire-3", "", ""}}
-	if err := loadout.Validate(tables, model.Mage, built); err != nil {
+	if err := loadout.Validate(tables, model.Mage, everything(tables), built); err != nil {
 		t.Fatalf("the 4 + 2 build its own rule describes was refused: %v", err)
 	}
 	// Padding with the same spell twice must not satisfy the requirement.
 	padded := model.Loadout{Weapon: "starter-staff", Spells: []string{"fire-4", "fire-bolt", "fire-bolt", "fire-bolt", "", ""}}
-	if err := loadout.Validate(tables, model.Mage, padded); err == nil {
+	if err := loadout.Validate(tables, model.Mage, everything(tables), padded); err == nil {
 		t.Fatal("a duplicated spell was accepted as its own affinity company")
 	}
 }
@@ -116,7 +130,7 @@ func TestValidateRejectsCrossClassAndUnknownContent(t *testing.T) {
 		"more slots than exist":         {Weapon: "starter-rifle", Gadgets: make([]string, tables.Loadout.GadgetSlots+1)},
 	}
 	for name, set := range cases {
-		if err := loadout.Validate(tables, model.Gunslinger, set); err == nil {
+		if err := loadout.Validate(tables, model.Gunslinger, everything(tables), set); err == nil {
 			t.Fatalf("%s was accepted", name)
 		}
 	}
@@ -130,14 +144,14 @@ func TestResolveFollowsRetirementAndGrantsRespec(t *testing.T) {
 		"retired.json": `{"old-bolt": {"kind": "spell", "replacement": "fire-bolt", "note": "renamed"}}`,
 	})
 	saved := model.Loadout{Weapon: "starter-staff", Spells: []string{"old-bolt", "", "", "", "", ""}, Version: tables.Manifest.Version}
-	set, respec := loadout.Resolve(tables, model.Mage, saved)
+	set, respec := loadout.Resolve(tables, model.Mage, everything(tables), saved)
 	if set.Spells[0] != "fire-bolt" {
 		t.Fatalf("retired spell resolved to %q, want the replacement", set.Spells[0])
 	}
 	if !respec {
 		t.Fatal("a set the content changed under did not grant a respec")
 	}
-	if err := loadout.Validate(tables, model.Mage, set); err != nil {
+	if err := loadout.Validate(tables, model.Mage, everything(tables), set); err != nil {
 		t.Fatalf("resolved set is invalid: %v", err)
 	}
 }
@@ -146,12 +160,12 @@ func TestResolveFollowsRetirementAndGrantsRespec(t *testing.T) {
 // means the set is re-validated and reported rather than silently carried.
 func TestResolveGrantsRespecOnAContentVersionBump(t *testing.T) {
 	tables := shipped(t)
-	saved := loadout.Default(tables, model.Mage)
-	if _, respec := loadout.Resolve(tables, model.Mage, saved); respec {
+	saved := loadout.Default(tables, model.Mage, kit(tables, model.Mage))
+	if _, respec := loadout.Resolve(tables, model.Mage, everything(tables), saved); respec {
 		t.Fatal("an unchanged set at the current version granted a respec")
 	}
 	saved.Version = tables.Manifest.Version - 1
-	set, respec := loadout.Resolve(tables, model.Mage, saved)
+	set, respec := loadout.Resolve(tables, model.Mage, everything(tables), saved)
 	if !respec {
 		t.Fatal("a set saved before a balance patch was not granted a respec")
 	}
@@ -165,7 +179,7 @@ func TestResolveGrantsRespecOnAContentVersionBump(t *testing.T) {
 func TestResolveDropsWhatNoLongerValidates(t *testing.T) {
 	tables := edited(t, map[string]string{"spells.json": grid})
 	saved := model.Loadout{Weapon: "starter-staff", Spells: []string{"fire-bolt", "fire-4", "", "", "", ""}}
-	set, respec := loadout.Resolve(tables, model.Mage, saved)
+	set, respec := loadout.Resolve(tables, model.Mage, everything(tables), saved)
 	if !respec {
 		t.Fatal("a repaired set did not grant a respec")
 	}
@@ -175,14 +189,14 @@ func TestResolveDropsWhatNoLongerValidates(t *testing.T) {
 	if set.Spells[0] != "fire-bolt" {
 		t.Fatalf("a legal slot was dropped: %q", set.Spells[0])
 	}
-	if err := loadout.Validate(tables, model.Mage, set); err != nil {
+	if err := loadout.Validate(tables, model.Mage, everything(tables), set); err != nil {
 		t.Fatalf("resolved set is still invalid: %v", err)
 	}
 }
 
 func TestResolveRearmsACharacterWhoseWeaponWasWithdrawn(t *testing.T) {
 	tables := shipped(t)
-	set, respec := loadout.Resolve(tables, model.Gunslinger, model.Loadout{Weapon: "withdrawn-gun"})
+	set, respec := loadout.Resolve(tables, model.Gunslinger, everything(tables), model.Loadout{Weapon: "withdrawn-gun"})
 	if set.Weapon != "starter-rifle" {
 		t.Fatalf("weapon resolved to %q, want the class starter", set.Weapon)
 	}
@@ -193,9 +207,9 @@ func TestResolveRearmsACharacterWhoseWeaponWasWithdrawn(t *testing.T) {
 
 func TestGadgetsFillTheGunslingerBar(t *testing.T) {
 	tables := edited(t, map[string]string{
-		"gadgets.json": `{"smoke": {"name": "Smoke canister", "class": "gunslinger", "starter": true, "ability": "rifle-shot"}}`,
+		"gadgets.json": `{"smoke": {"name": "Smoke canister", "class": "gunslinger", "starter": true, "unlock_level": 2, "ability": "rifle-shot"}}`,
 	})
-	set := loadout.Default(tables, model.Gunslinger)
+	set := loadout.Default(tables, model.Gunslinger, kit(tables, model.Gunslinger))
 	if set.Gadgets[0] != "smoke" {
 		t.Fatalf("starter gadget was not equipped: %v", set.Gadgets)
 	}
@@ -203,16 +217,58 @@ func TestGadgetsFillTheGunslingerBar(t *testing.T) {
 	if slots[1].Name != "Smoke canister" || slots[1].AbilityID == "" {
 		t.Fatalf("gadget slot resolved to %+v", slots[1])
 	}
-	if err := loadout.Validate(tables, model.Mage, model.Loadout{Weapon: "starter-staff", Gadgets: []string{"smoke"}}); err == nil {
+	if err := loadout.Validate(tables, model.Mage, everything(tables), model.Loadout{Weapon: "starter-staff", Gadgets: []string{"smoke"}}); err == nil {
 		t.Fatal("a Mage was allowed to equip a gadget")
+	}
+}
+
+// The ledger is what narrows the equippable set from "every live row" to what
+// this character owns. Unowned content must be refused on the mutation path,
+// never merely hidden by the menu.
+func TestValidateRefusesContentTheLedgerDoesNotOwn(t *testing.T) {
+	tables := edited(t, map[string]string{"spells.json": grid})
+	owned := progression.New([]string{"starter-staff", "fire-bolt", "fire-2", "fire-3"})
+	built := model.Loadout{Weapon: "starter-staff", Spells: []string{"fire-bolt", "fire-2", "fire-3", "", "", ""}}
+	if err := loadout.Validate(tables, model.Mage, owned, built); err != nil {
+		t.Fatalf("a set built entirely from owned spells was refused: %v", err)
+	}
+	// fire-4 is legal by affinity here — three Fire spells sit beside it — so
+	// only ownership can be what refuses it.
+	unowned := model.Loadout{Weapon: "starter-staff", Spells: []string{"fire-4", "fire-bolt", "fire-2", "fire-3", "", ""}}
+	if err := loadout.Validate(tables, model.Mage, owned, unowned); err == nil {
+		t.Fatal("an unlocked-content check let a character equip a spell it does not own")
+	}
+	if err := loadout.Validate(tables, model.Mage, everything(tables), unowned); err != nil {
+		t.Fatalf("the same set was refused for a character that owns it: %v", err)
+	}
+	if equippable := loadout.Equippable(tables, model.Mage, owned, loadout.KindSpell); len(equippable) != 3 {
+		t.Fatalf("equippable spells = %v, want only the three owned", equippable)
+	}
+}
+
+// A ledger that shrinks under a content withdrawal must repair the set rather
+// than leave a character holding something it no longer owns.
+func TestResolveUnequipsContentTheLedgerLost(t *testing.T) {
+	tables := edited(t, map[string]string{"spells.json": grid})
+	owned := progression.New([]string{"starter-staff", "fire-bolt"})
+	saved := model.Loadout{Weapon: "starter-staff", Spells: []string{"fire-bolt", "fire-2", "", "", "", ""}, Version: tables.Manifest.Version}
+	set, respec := loadout.Resolve(tables, model.Mage, owned, saved)
+	if set.Spells[1] != "" {
+		t.Fatalf("an unowned spell survived resolution as %q", set.Spells[1])
+	}
+	if set.Spells[0] != "fire-bolt" {
+		t.Fatalf("an owned spell was dropped: %q", set.Spells[0])
+	}
+	if !respec {
+		t.Fatal("a repaired set did not grant a respec")
 	}
 }
 
 // grid is a Fire column to tier 4, which is what the affinity rule needs to be
 // testable before Phase 2.5 authors the real twenty rows.
 const grid = `{
-  "fire-bolt": {"name": "Fire bolt", "element": "fire", "tier": 1, "starter": true, "ability": "fire-bolt-cast"},
-  "fire-2":    {"name": "Cinder patch", "element": "fire", "tier": 2, "ability": "fire-bolt-cast"},
-  "fire-3":    {"name": "Flame wave", "element": "fire", "tier": 3, "ability": "fire-bolt-cast"},
-  "fire-4":    {"name": "Firestorm", "element": "fire", "tier": 4, "ability": "fire-bolt-cast"}
+  "fire-bolt": {"name": "Fire bolt", "element": "fire", "tier": 1, "starter": true, "unlock_level": 2, "ability": "fire-bolt-cast"},
+  "fire-2":    {"name": "Cinder patch", "element": "fire", "tier": 2, "unlock_level": 4, "ability": "fire-bolt-cast"},
+  "fire-3":    {"name": "Flame wave", "element": "fire", "tier": 3, "unlock_level": 7, "ability": "fire-bolt-cast"},
+  "fire-4":    {"name": "Firestorm", "element": "fire", "tier": 4, "unlock_level": 11, "ability": "fire-bolt-cast"}
 }`

@@ -12,14 +12,19 @@ import (
 	"spellfire/server/internal/build"
 	"spellfire/server/internal/game"
 	"spellfire/server/internal/model"
+	"spellfire/server/internal/progression"
 	"spellfire/server/internal/store"
+	"spellfire/server/internal/tuning"
 )
 
 var characterName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9 _-]{1,18}[A-Za-z0-9]$`)
 
 type API struct {
-	auth       *auth.Service
-	store      store.Store
+	auth  *auth.Service
+	store store.Store
+	// tables are the versioned tuning tables character creation draws the
+	// starter kit from. The HTTP layer reads them; it never authors a value.
+	tables     *tuning.Tables
 	adminTools AdminController
 }
 
@@ -31,8 +36,8 @@ type AdminController interface {
 	SetAdminAttributes(string, map[string]float64) error
 }
 
-func New(authService *auth.Service, data store.Store, adminTools ...AdminController) *API {
-	api := &API{auth: authService, store: data}
+func New(authService *auth.Service, data store.Store, tables *tuning.Tables, adminTools ...AdminController) *API {
+	api := &API{auth: authService, store: data, tables: tables}
 	if len(adminTools) > 0 {
 		api.adminTools = adminTools[0]
 	}
@@ -238,7 +243,15 @@ func (a *API) createCharacter(w http.ResponseWriter, r *http.Request, principal 
 		writeError(w, http.StatusConflict, "This account already has four characters.")
 		return
 	}
-	character := model.Character{ID: auth.NewID(), AccountID: principal.AccountID, Name: body.Name, Class: body.Class, Level: 1}
+	// The starter kit is rolled here, at creation, so the character owns a
+	// coherent set of tools before it ever enters the world: one weapon drawn
+	// from its class's basic set plus a random low-tier draw of its slot kind.
+	// The draw is seeded from the character's own ID, so it is stable.
+	id := auth.NewID()
+	character := model.Character{
+		ID: id, AccountID: principal.AccountID, Name: body.Name, Class: body.Class,
+		Progress: model.Progress{Level: 1, Unlocks: progression.StarterKit(a.tables, body.Class, id)},
+	}
 	if err = a.store.CreateCharacter(r.Context(), character); errors.Is(err, store.ErrConflict) {
 		writeError(w, http.StatusConflict, "That character name is already in use on this account.")
 		return

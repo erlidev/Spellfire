@@ -1,9 +1,9 @@
 import { API } from "./api";
-import { bar, barSlots, contentName, defaultLoadout, equippable, loadoutProblem, type SlotKind } from "./game/loadout";
+import { bar, barSlots, contentName, defaultLoadout, equippable, ledgerOf, loadoutProblem, type Ledger, type SlotKind } from "./game/loadout";
 import { Predictor } from "./game/prediction";
 import { GameView } from "./game/view";
 import { GameSocket } from "./net/socket";
-import { adminTools, damageBandFor, dangerBandAt, resourceMax, safeRadius, session, weapons, world, type AdminAttribute, type AdminSpawnable, type AdminToolField } from "./tuning";
+import { adminTools, damageBandFor, dangerBandAt, resourceMax, safeRadius, session, weapons, world, xpToNext, type AdminAttribute, type AdminSpawnable, type AdminToolField } from "./tuning";
 import { Buttons, ServerKind, type Character, type CharacterClass, type Entity, type LoadoutSet, type ServerMessage } from "./types";
 
 function element<T extends HTMLElement>(id: string): T {
@@ -33,6 +33,12 @@ class SpellFire {
   // until a Loadout reply confirms it.
   private loadout: LoadoutSet = { weapon: "", gadgets: [], spells: [] };
   private draft?: LoadoutSet;
+  // The permanent axis. The ledger decides what the Loadout section may offer;
+  // the server enforces the same rule, so this only avoids offering a refusal.
+  private ledger: Ledger = ledgerOf([]);
+  private level = 1;
+  private xp = 0;
+  private xpNext = 0;
   private selectedSlot = 0;
   private inSafety = true;
   private respecOwed = false;
@@ -184,7 +190,9 @@ class SpellFire {
     const character = this.selectedCharacter(); if (!character) return;
     // Shown until the welcome arrives with the authoritative set; the server
     // resolves the same default for a character that has never chosen one.
-    this.loadout = defaultLoadout(character.class); this.draft = undefined; this.selectedSlot = 0; this.loadoutStatus = "";
+    this.ledger = ledgerOf(character.unlocks ?? []);
+    this.level = character.level; this.xp = character.xp; this.xpNext = xpToNext(character.level);
+    this.loadout = defaultLoadout(character.class, this.ledger); this.draft = undefined; this.selectedSlot = 0; this.loadoutStatus = "";
     sessionStorage.setItem("spellfire-character", character.id); element("home").hidden = true; element("game").hidden = false;
     element("connection-overlay").hidden = false; element("connection-title").textContent = "Connecting"; element("connection-message").textContent = "Joining the shared world…";
     this.predictor = new Predictor(); this.view = new GameView(); await this.view.init(element("canvas-host")); this.view.bindPredictor(this.predictor);
@@ -195,6 +203,8 @@ class SpellFire {
 
   private receive(message: ServerMessage): void {
     if (message.kind === ServerKind.Pong) { element("latency").textContent = `${Math.max(0, Date.now() - message.echoedClientTimeMS)} ms`; return; }
+    if (message.kind === ServerKind.Welcome || message.kind === ServerKind.Progress) this.applyProgress(message);
+    if (message.kind === ServerKind.Progress) return;
     if (message.loadout) this.applyLoadout(message);
     if (message.kind === ServerKind.Loadout) return;
     this.predictor?.setColliders(message.colliders); this.view?.apply(message);
@@ -228,6 +238,28 @@ class SpellFire {
     this.renderAbilityBar();
     if (this.menuTab === "loadout" && element<HTMLDialogElement>("menu-dialog").open) this.renderMenu("loadout");
     if (this.respecOwed) this.notice("A balance patch re-validated your loadout. Respec is free in any safe zone.");
+  }
+
+  /**
+   * Adopts the permanent axis the server reports. A level-up is announced and
+   * the ledger widens immediately, so the Loadout section offers what was just
+   * unlocked without a reconnect.
+   */
+  private applyProgress(message: ServerMessage): void {
+    const levelled = message.level > this.level && this.level > 0;
+    this.level = message.level; this.xp = message.xp; this.xpNext = message.xpToNext;
+    const before = this.ledger.size;
+    this.ledger = ledgerOf(message.unlocks);
+    const character = this.selectedCharacter();
+    if (character) { character.level = message.level; character.xp = message.xp; character.unlocks = [...message.unlocks]; }
+    if (message.kind === ServerKind.Welcome) return;
+    if (levelled) {
+      const gained = this.ledger.size - before;
+      this.notice(gained > 0
+        ? `Level ${this.level}. ${gained} new option${gained === 1 ? "" : "s"} unlocked — respec is free in any safe zone.`
+        : `Level ${this.level}.`);
+    }
+    if (element<HTMLDialogElement>("menu-dialog").open) this.renderMenu(this.menuTab);
   }
 
   private renderAbilityBar(): void {
@@ -285,7 +317,7 @@ class SpellFire {
     if (tab === "loadout") { this.renderLoadoutSection(content, character); return; }
     const equipped = weapons[this.loadout.weapon];
     const pages: Record<string, string> = {
-      character: `<h3>${escapeHTML(character?.name ?? "Character")}</h3><p>${titleCase(character?.class ?? "gunslinger")} · Level ${character?.level ?? 1}</p><p>Progression unlocks options, never raw combat power.</p>`,
+      character: `<h3>${escapeHTML(character?.name ?? "Character")}</h3><p>${titleCase(character?.class ?? "gunslinger")} · Level ${this.level}</p><p>${this.xpNext ? `${this.xp} / ${this.xpNext} XP to level ${this.level + 1}` : "Level cap reached"} · ${this.ledger.size} unlock${this.ledger.size === 1 ? "" : "s"} owned</p><p>Progression unlocks options, never raw combat power.</p>`,
       inventory: "<h3>Materials</h3><p>No carried materials. Material harvesting and death drops are not available in this foundation.</p>",
       world: `<h3>Known world</h3><p>${world.danger_bands.map((band) => escapeHTML(band.name)).join(" → ")}. The circular world is contiguous; trees are authoritative static cover.</p>`,
       reference: `<h3>Field reference</h3><p>WASD/Arrows move · pointer aims · primary pointer fires · 1–6 or the wheel select an equipped slot · Space dashes · R reloads · E interacts. The hub is safe. Combat is server-authoritative and raw time-to-kill is about ${equipped ? damageBandFor(equipped).target_ttk_seconds : 3} seconds.</p>`,
@@ -369,7 +401,7 @@ class SpellFire {
     const set = this.draft ?? this.loadout;
     const slots = bar(character.class, set);
     const editable = this.inSafety;
-    const problem = loadoutProblem(character.class, set);
+    const problem = loadoutProblem(character.class, this.ledger, set);
     content.replaceChildren();
     content.append(heading("Loadout"));
     const lock = document.createElement("p");
@@ -407,7 +439,7 @@ class SpellFire {
     const row = document.createElement("label"); row.className = "loadout-slot";
     const select = document.createElement("select");
     select.disabled = !editable;
-    const options = equippable(character.class, kind);
+    const options = equippable(character.class, this.ledger, kind);
     if (kind !== "weapon") select.append(new Option("Empty", ""));
     for (const option of options) select.append(new Option(contentName(kind, option), option));
     if (!options.length && kind !== "weapon") select.append(new Option(kind === "gadget" ? "No gadgets unlocked yet" : "No spells unlocked yet", "", true, true));
@@ -438,6 +470,7 @@ class SpellFire {
   private exitGame(): void {
     window.clearInterval(this.inputTimer); this.socket?.close(); this.socket = undefined; this.view?.destroy(); this.view = undefined; this.predictor = undefined; this.pressed.clear(); this.lastBand = "";
     this.draft = undefined; this.selectedSlot = 0; this.inSafety = true; this.respecOwed = false; this.loadoutStatus = "";
+    this.ledger = ledgerOf([]); this.level = 1; this.xp = 0; this.xpNext = 0;
     element("ability-bar").replaceChildren(); element("touch-slots").replaceChildren();
     const menu = element<HTMLDialogElement>("menu-dialog"); if (menu.open) menu.close(); this.activeCharacter = undefined; this.setDeveloperMode(false); element("game").hidden = true; element("home").hidden = false; element("death-overlay").hidden = true; element("connection-overlay").hidden = true;
   }

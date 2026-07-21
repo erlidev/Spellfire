@@ -22,6 +22,7 @@ func (t *Tables) validate() error {
 	t.validateOutposts(problems)
 	t.validateCombat(problems)
 	t.validateLoadout(problems)
+	t.validateProgression(problems)
 	t.validateElements(problems)
 	t.validateComponents(problems)
 	t.validateMaterials(problems)
@@ -31,6 +32,7 @@ func (t *Tables) validate() error {
 	t.validateSpells(problems)
 	t.validateGadgets(problems)
 	t.validateWeapons(problems)
+	t.validateUnlockIDs(problems)
 	t.validateMobs(problems)
 	t.validateRetired(problems)
 	t.validateProjectileKinds(problems)
@@ -249,6 +251,49 @@ func (t *Tables) validateLoadout(r *report) {
 		l.RequiredSameElement(4), l.SpellSlots)
 }
 
+// validateProgression keeps the character axis usable: a curve that actually
+// costs something, every XP source the simulation can award priced, and an
+// opening draw wide enough to fill the action bar — the starter kit's whole
+// purpose is that a zero-material character is combat-capable immediately.
+func (t *Tables) validateProgression(r *report) {
+	p := t.Progression
+	r.require(p.MaxLevel > 1, "progression: max_level must exceed 1")
+	r.require(p.BaseXP > 0, "progression: base_xp must be positive")
+	r.require(p.Growth >= 1, "progression: growth %g must be at least 1, or a later level would cost less than an earlier one", p.Growth)
+	for _, source := range XPSources {
+		award, ok := p.Sources[source]
+		r.require(ok && award > 0, "progression: source %q must declare a positive award", source)
+	}
+	for _, source := range sortedKeys(p.Sources) {
+		r.require(contains(XPSources, source), "progression: source %q is not one the simulation awards; want one of %v", source, XPSources)
+	}
+	r.require(p.StarterKit.Unlocks >= t.Loadout.BarSlots(),
+		"progression: starter_kit.unlocks %d cannot fill the %d-slot action bar", p.StarterKit.Unlocks, t.Loadout.BarSlots())
+}
+
+// validateUnlockIDs keeps the permanent ledger flat. It stores bare IDs, so a
+// weapon and a spell sharing one would make an entry ambiguous, and an entry
+// that no level ever grants would be unreachable for anyone whose starter draw
+// missed it.
+func (t *Tables) validateUnlockIDs(r *report) {
+	owners := map[string]string{}
+	claim := func(kind, id string, level int) {
+		r.require(owners[id] == "", "%s: %q is also a live %s row; unlock IDs are flat and must be unique across tables", kind, id, owners[id])
+		owners[id] = kind
+		r.require(level >= 1, "%s: %q must declare a positive unlock_level; content no level grants can never be earned", kind, id)
+		r.require(level <= t.Progression.MaxLevel, "%s: %q unlocks at level %d, past the level cap of %d", kind, id, level, t.Progression.MaxLevel)
+	}
+	for _, id := range sortedKeys(t.Weapons) {
+		claim("weapons", id, t.Weapons[id].UnlockLevel)
+	}
+	for _, id := range sortedKeys(t.Spells) {
+		claim("spells", id, t.Spells[id].UnlockLevel)
+	}
+	for _, id := range sortedKeys(t.Gadgets) {
+		claim("gadgets", id, t.Gadgets[id].UnlockLevel)
+	}
+}
+
 func (t *Tables) validateElements(r *report) {
 	for _, id := range sortedKeys(t.Elements) {
 		element := t.Elements[id]
@@ -457,16 +502,16 @@ func (t *Tables) validateGadgets(r *report) {
 }
 
 func (t *Tables) validateWeapons(r *report) {
-	starters := map[string]string{}
+	starters := map[string]int{}
 	for _, id := range sortedKeys(t.Weapons) {
 		weapon := t.Weapons[id]
 		r.require(weapon.Name != "", "weapons: %q has no name", id)
 		r.require(weapon.Class == "gunslinger" || weapon.Class == "mage", "weapons: %q has unknown class %q", id, weapon.Class)
 		r.require(weapon.Category != "", "weapons: %q has no category", id)
 		r.require(t.Components.Blueprints[weapon.Blueprint].Name != "", "weapons: %q references unknown blueprint %q", id, weapon.Blueprint)
+		// The basic set is a pool, not one row: a new character draws one of it.
 		if weapon.Starter {
-			r.require(starters[weapon.Class] == "", "weapons: %q and %q are both the starter weapon for %s", starters[weapon.Class], id, weapon.Class)
-			starters[weapon.Class] = id
+			starters[weapon.Class]++
 		}
 		if !r.require((weapon.Ability == "") != (weapon.Spell == ""),
 			"weapons: %q must declare exactly one of ability or spell", id) {
@@ -490,8 +535,8 @@ func (t *Tables) validateWeapons(r *report) {
 		r.require(ability.Cost.Kind == CostAmmo, "weapons: %q holds a magazine but its ability %q spends %q", id, weapon.Ability, ability.Cost.Kind)
 		r.require(ability.Cost.Amount <= float64(weapon.MagazineSize), "weapons: %q holds %d rounds but its ability %q spends %g per use", id, weapon.MagazineSize, weapon.Ability, ability.Cost.Amount)
 	}
-	r.require(starters["gunslinger"] != "", "weapons: no starter weapon for gunslinger; a new character would be unarmed")
-	r.require(starters["mage"] != "", "weapons: no starter weapon for mage; a new character would be unarmed")
+	r.require(starters["gunslinger"] > 0, "weapons: no starter weapon for gunslinger; a new character would be unarmed")
+	r.require(starters["mage"] > 0, "weapons: no starter weapon for mage; a new character would be unarmed")
 }
 
 func (t *Tables) validateMobs(r *report) {

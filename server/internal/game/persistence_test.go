@@ -17,12 +17,32 @@ import (
 // recorder stands in for the store: the engine's contract is what it writes and
 // when, not how SQLite stores it.
 type recorder struct {
-	mu     sync.Mutex
-	writes map[string]model.CharacterState
-	fail   error
+	mu       sync.Mutex
+	writes   map[string]model.CharacterState
+	progress map[string]model.Progress
+	fail     error
 }
 
-func newRecorder() *recorder { return &recorder{writes: map[string]model.CharacterState{}} }
+func newRecorder() *recorder {
+	return &recorder{writes: map[string]model.CharacterState{}, progress: map[string]model.Progress{}}
+}
+
+func (r *recorder) SaveCharacterProgress(_ context.Context, id string, progress model.Progress) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.fail != nil {
+		return r.fail
+	}
+	r.progress[id] = progress
+	return nil
+}
+
+func (r *recorder) savedProgress(id string) (model.Progress, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	progress, ok := r.progress[id]
+	return progress, ok
+}
 
 func (r *recorder) SaveCharacterState(_ context.Context, id string, state model.CharacterState) error {
 	r.mu.Lock()

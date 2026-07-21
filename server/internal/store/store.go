@@ -25,6 +25,10 @@ type Store interface {
 	// SaveCharacterState persists the world state a character keeps across a
 	// disconnect: last position, carried materials, and unlocked outposts.
 	SaveCharacterState(context.Context, string, model.CharacterState) error
+	// SaveCharacterProgress persists the permanent character axis: level, XP,
+	// and the unlock ledger. It is a deliberate commit, separate from the
+	// incidental world state above.
+	SaveCharacterProgress(context.Context, string, model.Progress) error
 	// CraftedItems and CreateCraftedItem store owned items as blueprint and
 	// component references. Nothing here records a computed stat.
 	CraftedItems(context.Context, string) ([]model.CraftedItem, error)

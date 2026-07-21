@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"spellfire/server/internal/model"
+	"spellfire/server/internal/progression"
 	"spellfire/server/internal/tuning"
 )
 
@@ -96,57 +97,67 @@ func spellSlot(tables *tuning.Tables, staff tuning.Weapon, index int, id string)
 	return slot
 }
 
-// Default is the set a character fights with before it has chosen one: the
-// class starter weapon, and the starter content of its slot kind packed from
-// slot zero. Phase 2.2 replaces the flat starter list with a random draw
-// against the unlock ledger without changing this shape.
-func Default(tables *tuning.Tables, class model.Class) model.Loadout {
+// Default is the set a character fights with before it has chosen one: what it
+// owns, packed from slot zero. A character's ledger always contains a weapon of
+// its class — the starter kit draws one — so the result is a fightable set
+// rather than an empty bar, and dropIllegal guarantees it is a legal one.
+func Default(tables *tuning.Tables, class model.Class, ledger progression.Ledger) model.Loadout {
 	table := tables.Loadout
 	set := model.Loadout{
 		Gadgets: make([]string, table.GadgetSlots),
 		Spells:  make([]string, table.SpellSlots),
 		Version: tables.Manifest.Version,
 	}
-	if weapon, ok := tables.StarterWeapon(string(class)); ok {
-		set.Weapon = weapon.ID
-	}
+	set.Weapon = defaultWeapon(tables, class, ledger)
 	if class == model.Gunslinger {
-		fill(set.Gadgets, tables.StarterGadgets(string(class)))
-		return set
+		fill(set.Gadgets, Equippable(tables, class, ledger, KindGadget))
+	} else {
+		fill(set.Spells, Equippable(tables, class, ledger, KindSpell))
 	}
-	fill(set.Spells, tables.StarterSpells())
+	dropIllegal(tables, class, &set)
 	return set
+}
+
+// defaultWeapon is the weapon a character falls back to: the first of its class
+// it owns, or the class starter when a content withdrawal has left it owning
+// none. Being unarmed is not a state any rule allows, so this never answers
+// empty while the tables have a starter.
+func defaultWeapon(tables *tuning.Tables, class model.Class, ledger progression.Ledger) string {
+	if owned := Equippable(tables, class, ledger, KindWeapon); len(owned) > 0 {
+		return owned[0]
+	}
+	if starter, ok := tables.StarterWeapon(string(class)); ok {
+		return starter.ID
+	}
+	return ""
 }
 
 // Resolve carries a saved set onto today's content and guarantees the result is
 // legal. Retired IDs follow the retirement chain; anything that no longer
-// resolves, or that a content change has made illegal, is unequipped rather
-// than dropping the whole set. It reports whether the character is owed a
-// respec: a balance patch bumped the manifest, or the set itself had to change.
-func Resolve(tables *tuning.Tables, class model.Class, saved model.Loadout) (model.Loadout, bool) {
+// resolves, that a content change has made illegal, or that the character does
+// not own is unequipped rather than dropping the whole set. It reports whether
+// the character is owed a respec: a balance patch bumped the manifest, or the
+// set itself had to change.
+func Resolve(tables *tuning.Tables, class model.Class, ledger progression.Ledger, saved model.Loadout) (model.Loadout, bool) {
 	if saved.Empty() {
-		return Default(tables, class), false
+		return Default(tables, class, ledger), false
 	}
 	table := tables.Loadout
 	set := model.Loadout{
-		Weapon:  live(tables, KindWeapon, saved.Weapon),
+		Weapon:  owned(tables, ledger, KindWeapon, saved.Weapon),
 		Gadgets: resize(saved.Gadgets, table.GadgetSlots),
 		Spells:  resize(saved.Spells, table.SpellSlots),
 		Version: tables.Manifest.Version,
 	}
 	if weapon, ok := tables.Weapons[set.Weapon]; !ok || weapon.Class != string(class) {
-		// A withdrawn weapon leaves the character unarmed, which no rule
-		// allows. The class starter is the guaranteed-available replacement.
-		set.Weapon = ""
-		if starter, ok := tables.StarterWeapon(string(class)); ok {
-			set.Weapon = starter.ID
-		}
+		// A withdrawn weapon leaves the character unarmed, which no rule allows.
+		set.Weapon = defaultWeapon(tables, class, ledger)
 	}
 	for index, id := range set.Gadgets {
-		set.Gadgets[index] = live(tables, KindGadget, id)
+		set.Gadgets[index] = owned(tables, ledger, KindGadget, id)
 	}
 	for index, id := range set.Spells {
-		set.Spells[index] = live(tables, KindSpell, id)
+		set.Spells[index] = owned(tables, ledger, KindSpell, id)
 	}
 	dropIllegal(tables, class, &set)
 	changed := saved.Version != tables.Manifest.Version || !equal(saved, set)
@@ -213,7 +224,7 @@ func affinityShortfall(tables *tuning.Tables, spells []string, index int) int {
 // Validate reports why a requested set may not be equipped, in language a
 // player can act on. It is the authority the mutation path runs before it
 // commits, and it never consults the world: legality is a property of the set.
-func Validate(tables *tuning.Tables, class model.Class, set model.Loadout) error {
+func Validate(tables *tuning.Tables, class model.Class, ledger progression.Ledger, set model.Loadout) error {
 	table := tables.Loadout
 	weapon, ok := tables.Weapons[set.Weapon]
 	if !ok {
@@ -221,6 +232,9 @@ func Validate(tables *tuning.Tables, class model.Class, set model.Loadout) error
 	}
 	if weapon.Class != string(class) {
 		return fmt.Errorf("%s is a %s weapon", weapon.Name, weapon.Class)
+	}
+	if !ledger.Has(set.Weapon) {
+		return fmt.Errorf("you have not unlocked %s", weapon.Name)
 	}
 	if len(set.Gadgets) > table.GadgetSlots {
 		return fmt.Errorf("a loadout holds %d gadget slots, not %d", table.GadgetSlots, len(set.Gadgets))
@@ -234,13 +248,13 @@ func Validate(tables *tuning.Tables, class model.Class, set model.Loadout) error
 	if class == model.Gunslinger && filled(set.Spells) > 0 {
 		return fmt.Errorf("a Gunslinger equips gadgets, not spells")
 	}
-	if err := checkSlots(set.Gadgets, "gadget", func(id string) (string, bool) {
+	if err := checkSlots(ledger, set.Gadgets, "gadget", func(id string) (string, bool) {
 		gadget, ok := tables.Gadgets[id]
 		return gadget.Name, ok && gadget.Class == string(class)
 	}); err != nil {
 		return err
 	}
-	if err := checkSlots(set.Spells, "spell", func(id string) (string, bool) {
+	if err := checkSlots(ledger, set.Spells, "spell", func(id string) (string, bool) {
 		spell, ok := tables.Spells[id]
 		return spell.Name, ok
 	}); err != nil {
@@ -260,8 +274,9 @@ func Validate(tables *tuning.Tables, class model.Class, set model.Loadout) error
 	return nil
 }
 
-// checkSlots rejects unknown or duplicated content in one kind of slot.
-func checkSlots(ids []string, kind string, lookup func(string) (string, bool)) error {
+// checkSlots rejects unknown, unowned, or duplicated content in one kind of
+// slot.
+func checkSlots(ledger progression.Ledger, ids []string, kind string, lookup func(string) (string, bool)) error {
 	seen := map[string]bool{}
 	for _, id := range ids {
 		if id == "" {
@@ -270,6 +285,9 @@ func checkSlots(ids []string, kind string, lookup func(string) (string, bool)) e
 		name, ok := lookup(id)
 		if !ok {
 			return fmt.Errorf("%q is not a %s you can equip", id, kind)
+		}
+		if !ledger.Has(id) {
+			return fmt.Errorf("you have not unlocked %s", name)
 		}
 		if seen[id] {
 			return fmt.Errorf("%s is already equipped in another slot", name)
@@ -280,20 +298,21 @@ func checkSlots(ids []string, kind string, lookup func(string) (string, bool)) e
 }
 
 // Equippable lists the content of a slot kind a character may choose from, in
-// stable order. Phase 2.2 intersects it with the unlock ledger; today every
-// live row of the right class is available.
-func Equippable(tables *tuning.Tables, class model.Class, kind string) []string {
+// stable order: the live rows of the right class that its ledger owns. Owning
+// more options improves preparation, never the power carried into one fight, so
+// this is the only place the ledger narrows.
+func Equippable(tables *tuning.Tables, class model.Class, ledger progression.Ledger, kind string) []string {
 	var ids []string
 	switch kind {
 	case KindWeapon:
 		for id, weapon := range tables.Weapons {
-			if weapon.Class == string(class) {
+			if weapon.Class == string(class) && ledger.Has(id) {
 				ids = append(ids, id)
 			}
 		}
 	case KindGadget:
 		for id, gadget := range tables.Gadgets {
-			if gadget.Class == string(class) {
+			if gadget.Class == string(class) && ledger.Has(id) {
 				ids = append(ids, id)
 			}
 		}
@@ -302,23 +321,29 @@ func Equippable(tables *tuning.Tables, class model.Class, kind string) []string 
 			return nil
 		}
 		for id := range tables.Spells {
-			ids = append(ids, id)
+			if ledger.Has(id) {
+				ids = append(ids, id)
+			}
 		}
 	}
 	sort.Strings(ids)
 	return ids
 }
 
-func live(tables *tuning.Tables, kind, id string) string {
+// owned carries one saved slot onto today's content: the retirement chain is
+// followed, and the result is kept only if the character actually owns it. A
+// slot holding something the ledger does not have empties rather than granting
+// it — the ledger is the authority on ownership, not the saved set.
+func owned(tables *tuning.Tables, ledger progression.Ledger, kind, id string) string {
 	if id == "" {
 		return ""
 	}
 	resolved, ok := tables.Resolve(kind, id)
-	if !ok {
-		return ""
-	}
 	// A refunded retirement has no live replacement, so the slot empties. The
 	// refund itself is owed against the material ledger, not the slot.
+	if !ok || !ledger.Has(resolved.ID) {
+		return ""
+	}
 	return resolved.ID
 }
 

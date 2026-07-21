@@ -50,7 +50,7 @@ func TestSQLiteAccountSessionAndCharacterLifecycle(t *testing.T) {
 	if _, err := s.AccountBySession(ctx, "expired", time.Now()); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("expired account error = %v", err)
 	}
-	c := model.Character{ID: "c1", AccountID: a.ID, Name: "Ember Fox", Class: model.Mage, Level: 1}
+	c := model.Character{ID: "c1", AccountID: a.ID, Name: "Ember Fox", Class: model.Mage, Progress: model.Progress{Level: 1}}
 	if err := s.CreateCharacter(ctx, c); err != nil {
 		t.Fatal(err)
 	}
@@ -79,7 +79,7 @@ func TestSQLiteEnforcesCharacterClass(t *testing.T) {
 	if err := s.CreateAccount(ctx, model.Account{ID: "a", Email: "a@example.com", PasswordHash: []byte("hash")}); err != nil {
 		t.Fatal(err)
 	}
-	err = s.CreateCharacter(ctx, model.Character{ID: "c", AccountID: "a", Name: "Broken One", Class: model.Class("paladin"), Level: 1})
+	err = s.CreateCharacter(ctx, model.Character{ID: "c", AccountID: "a", Name: "Broken One", Class: model.Class("paladin"), Progress: model.Progress{Level: 1}})
 	if err == nil {
 		t.Fatal("invalid class was accepted")
 	}
@@ -132,6 +132,62 @@ INSERT INTO characters(id,account_id,name,class,level,xp) VALUES('c','a','Vance'
 	if !c.State.LastSeen.IsZero() {
 		t.Fatalf("last seen = %v, want the unstamped zero that expires", c.State.LastSeen)
 	}
+	// A record that predates the unlock ledger migrates to an empty one, which
+	// is rolled into a starter kit the first time the character is used rather
+	// than leaving it unable to equip anything.
+	if len(c.Unlocks) != 0 {
+		t.Fatalf("migrated ledger = %#v, want the empty one", c.Unlocks)
+	}
+}
+
+// The permanent axis is written through its own statement, so a world-state
+// save from a body that entered before a grant cannot roll the grant back.
+func TestSQLitePersistsProgressIndependentlyOfWorldState(t *testing.T) {
+	s, err := OpenSQLite(filepath.Join(t.TempDir(), "progress.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+	ctx := context.Background()
+	if err := s.CreateAccount(ctx, model.Account{ID: "a", Email: "a@example.com", PasswordHash: []byte("hash")}); err != nil {
+		t.Fatal(err)
+	}
+	created := model.Character{
+		ID: "c", AccountID: "a", Name: "Ilse", Class: model.Mage,
+		Progress: model.Progress{Level: 1, Unlocks: []string{"starter-staff", "fire-bolt", "starter-staff"}},
+	}
+	if err := s.CreateCharacter(ctx, created); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := s.Character(ctx, "a", "c")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The stored ledger is a sorted set regardless of the order it was granted.
+	if !reflect.DeepEqual(loaded.Unlocks, []string{"fire-bolt", "starter-staff"}) {
+		t.Fatalf("created ledger = %#v", loaded.Unlocks)
+	}
+
+	if err := s.SaveCharacterProgress(ctx, "c", model.Progress{Level: 4, XP: 37, Unlocks: []string{"fire-bolt", "starter-staff", "fire-2"}}); err != nil {
+		t.Fatal(err)
+	}
+	// A world-state save written afterwards touches no progression column.
+	if err := s.SaveCharacterState(ctx, "c", model.CharacterState{Placed: true, LastSeen: time.Now()}); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err = s.Character(ctx, "a", "c")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.Level != 4 || loaded.XP != 37 {
+		t.Fatalf("progression = level %d, xp %d", loaded.Level, loaded.XP)
+	}
+	if !reflect.DeepEqual(loaded.Unlocks, []string{"fire-2", "fire-bolt", "starter-staff"}) {
+		t.Fatalf("saved ledger = %#v", loaded.Unlocks)
+	}
+	if err := s.SaveCharacterProgress(ctx, "missing", model.Progress{Level: 1}); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("saving progress for an unknown character = %v", err)
+	}
 }
 
 func TestSQLiteRefusesADatabaseFromANewerBuild(t *testing.T) {
@@ -161,7 +217,7 @@ func TestSQLitePersistsCharacterStateAndCraftedItems(t *testing.T) {
 	if err := s.CreateAccount(ctx, model.Account{ID: "a", Email: "a@example.com", PasswordHash: []byte("hash")}); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.CreateCharacter(ctx, model.Character{ID: "c", AccountID: "a", Name: "Ilse", Class: model.Mage, Level: 1}); err != nil {
+	if err := s.CreateCharacter(ctx, model.Character{ID: "c", AccountID: "a", Name: "Ilse", Class: model.Mage, Progress: model.Progress{Level: 1}}); err != nil {
 		t.Fatal(err)
 	}
 	fresh, err := s.Character(ctx, "a", "c")

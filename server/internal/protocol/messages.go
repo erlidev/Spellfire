@@ -22,6 +22,10 @@ const (
 	// terminal: it carries the authoritative equipped set, and Error when the
 	// request was refused, so a rejection never drops the connection.
 	ServerLoadout uint64 = 5
+	// ServerProgress reports the permanent character axis — level, XP, and the
+	// unlock ledger — when it changes. It is pushed, not polled: a level-up has
+	// to reach the loadout menu without the player reconnecting to see it.
+	ServerProgress uint64 = 6
 )
 
 const (
@@ -132,6 +136,14 @@ type ServerEnvelope struct {
 	// respec a balance patch entitled the character to.
 	LoadoutEditable bool
 	RespecOwed      bool
+	// Level, XP, XPToNext, and Unlocks travel on the welcome and on every
+	// progress message, never on a snapshot: the permanent axis changes on a
+	// kill, not twenty times a second. XPToNext is derived rather than stored,
+	// and is sent so the menu reads one curve instead of re-deriving it.
+	Level    uint32
+	XP       uint64
+	XPToNext uint64
+	Unlocks  []string
 }
 
 func DecodeClient(data []byte) (ClientEnvelope, error) {
@@ -321,6 +333,12 @@ func EncodeServer(message ServerEnvelope) []byte {
 	}
 	if message.RespecOwed {
 		out = appendVarint(out, 11, 1)
+	}
+	out = appendVarint(out, 12, uint64(message.Level))
+	out = appendVarint(out, 13, message.XP)
+	out = appendVarint(out, 14, message.XPToNext)
+	for _, unlock := range message.Unlocks {
+		out = appendString(out, 15, unlock)
 	}
 	return out
 }

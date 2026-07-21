@@ -61,9 +61,14 @@ CREATE INDEX IF NOT EXISTS crafted_items_character_idx ON crafted_items(characte
 	// 4 — the equipped loadout, as content IDs by slot. An empty object is a
 	// character that has never chosen one and resolves to the class default.
 	`ALTER TABLE characters ADD COLUMN loadout TEXT NOT NULL DEFAULT '{}';`,
+
+	// 5 — the permanent unlock ledger, as a flat array of content IDs. An empty
+	// array is a character that predates the ledger and is given a starter kit
+	// the first time it is used.
+	`ALTER TABLE characters ADD COLUMN unlocks TEXT NOT NULL DEFAULT '[]';`,
 }
 
-const characterColumns = `id,account_id,name,class,level,xp,schema_version,pos_x,pos_y,materials,outposts,last_seen_at,loadout`
+const characterColumns = `id,account_id,name,class,level,xp,unlocks,schema_version,pos_x,pos_y,materials,outposts,last_seen_at,loadout`
 
 func OpenSQLite(path string) (*SQLite, error) {
 	db, err := sql.Open("sqlite", path)
@@ -183,10 +188,36 @@ func (s *SQLite) Characters(ctx context.Context, accountID string) ([]model.Char
 }
 
 func (s *SQLite) CreateCharacter(ctx context.Context, c model.Character) error {
-	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO characters(id,account_id,name,class,level,xp,schema_version,materials,outposts,loadout) VALUES(?,?,?,?,?,?,?,'{}','[]','{}')`,
-		c.ID, c.AccountID, c.Name, c.Class, c.Level, c.XP, model.CharacterSchemaVersion)
+	unlocks, err := json.Marshal(sortedSet(c.Unlocks))
+	if err != nil {
+		return fmt.Errorf("store: encode unlock ledger: %w", err)
+	}
+	_, err = s.db.ExecContext(ctx,
+		`INSERT INTO characters(id,account_id,name,class,level,xp,unlocks,schema_version,materials,outposts,loadout) VALUES(?,?,?,?,?,?,?,?,'{}','[]','{}')`,
+		c.ID, c.AccountID, c.Name, c.Class, c.Level, c.XP, string(unlocks), model.CharacterSchemaVersion)
 	return classify(err)
+}
+
+// SaveCharacterProgress persists the permanent character axis. It is separate
+// from SaveCharacterState because progression is a deliberate, rare commit —
+// levelling up or being granted content — rather than incidental world state
+// swept up by the autosave, and because it must never be rolled back by a save
+// written from a body that entered the world before the grant.
+func (s *SQLite) SaveCharacterProgress(ctx context.Context, id string, progress model.Progress) error {
+	unlocks, err := json.Marshal(sortedSet(progress.Unlocks))
+	if err != nil {
+		return fmt.Errorf("store: encode unlock ledger: %w", err)
+	}
+	result, err := s.db.ExecContext(ctx,
+		`UPDATE characters SET level=?,xp=?,unlocks=?,schema_version=? WHERE id=?`,
+		progress.Level, progress.XP, string(unlocks), model.CharacterSchemaVersion, id)
+	if err != nil {
+		return classify(err)
+	}
+	if affected, err := result.RowsAffected(); err == nil && affected == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 func (s *SQLite) Character(ctx context.Context, accountID, id string) (model.Character, error) {
@@ -203,7 +234,7 @@ func (s *SQLite) SaveCharacterState(ctx context.Context, id string, state model.
 	if err != nil {
 		return fmt.Errorf("store: encode carried materials: %w", err)
 	}
-	outposts, err := json.Marshal(unlockedOutposts(state.Outposts))
+	outposts, err := json.Marshal(sortedSet(state.Outposts))
 	if err != nil {
 		return fmt.Errorf("store: encode unlocked outposts: %w", err)
 	}
@@ -272,9 +303,12 @@ func scanCharacter(scan func(...any) error) (model.Character, error) {
 	var c model.Character
 	var x, y sql.NullFloat64
 	var lastSeen sql.NullInt64
-	var materials, outposts, loadout string
-	if err := scan(&c.ID, &c.AccountID, &c.Name, &c.Class, &c.Level, &c.XP, &c.SchemaVersion, &x, &y, &materials, &outposts, &lastSeen, &loadout); err != nil {
+	var materials, outposts, loadout, unlocks string
+	if err := scan(&c.ID, &c.AccountID, &c.Name, &c.Class, &c.Level, &c.XP, &unlocks, &c.SchemaVersion, &x, &y, &materials, &outposts, &lastSeen, &loadout); err != nil {
 		return c, err
+	}
+	if err := json.Unmarshal([]byte(unlocks), &c.Unlocks); err != nil {
+		return c, fmt.Errorf("store: character %s: decode unlock ledger: %w", c.ID, err)
 	}
 	c.State.Placed = x.Valid && y.Valid
 	c.State.Position = model.Point{X: x.Float64, Y: y.Float64}
@@ -305,20 +339,21 @@ func carriedMaterials(materials map[string]int) map[string]int {
 	return carried
 }
 
-// unlockedOutposts normalises the unlock list to a sorted, deduplicated set so
-// the stored blob is stable regardless of discovery order.
-func unlockedOutposts(outposts []string) []string {
+// sortedSet normalises a list of IDs to a sorted, deduplicated set so the
+// stored blob is stable regardless of the order entries were added in — the
+// order outposts were discovered, or unlocks granted.
+func sortedSet(ids []string) []string {
 	seen := map[string]bool{}
-	unlocked := make([]string, 0, len(outposts))
-	for _, id := range outposts {
+	unique := make([]string, 0, len(ids))
+	for _, id := range ids {
 		if id == "" || seen[id] {
 			continue
 		}
 		seen[id] = true
-		unlocked = append(unlocked, id)
+		unique = append(unique, id)
 	}
-	sort.Strings(unlocked)
-	return unlocked
+	sort.Strings(unique)
+	return unique
 }
 
 func nonEmpty(components map[string]string) map[string]string {

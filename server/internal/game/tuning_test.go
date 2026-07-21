@@ -90,8 +90,8 @@ func damageDealt(t *testing.T, tables *tuning.Tables, shooter, target model.Char
 // classes move together, and nothing about the stored characters changes —
 // there is no migration step because they hold references, not stats.
 func TestOneTableRowRebalancesBothClassesWithoutCharacterMigration(t *testing.T) {
-	gunslinger := model.Character{ID: "stored-gunslinger", Name: "Vance", Class: model.Gunslinger, Level: 1}
-	mage := model.Character{ID: "stored-mage", Name: "Ilse", Class: model.Mage, Level: 1}
+	gunslinger := model.Character{ID: "stored-gunslinger", Name: "Vance", Class: model.Gunslinger, Progress: model.Progress{Level: 1}}
+	mage := model.Character{ID: "stored-mage", Name: "Ilse", Class: model.Mage, Progress: model.Progress{Level: 1}}
 	stored := []model.Character{gunslinger, mage}
 
 	shippedTables := tuning.MustLoad()

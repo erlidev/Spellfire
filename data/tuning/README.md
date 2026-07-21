@@ -9,6 +9,11 @@ administrator list is embedded but intentionally not imported by the client.
 Rules, from [`invariants.md`](../../docs/game/design/invariants.md) and
 [`progression-and-crafting.md`](../../docs/game/design/progression-and-crafting.md#persistence-and-versioning):
 
+- **Content declares its own unlock level.** Every weapon, spell, and gadget row
+  carries an `unlock_level`, and `starter: true` marks membership of the basic
+  set a new character draws its opening kit from. There is no separate
+  level → content mapping to keep in step, and because the unlock ledger stores
+  bare IDs, an ID must be unique across those three tables.
 - **Saves store references; tables derive values.** A character row holds item
   and unlock IDs, never damage, health, or DPS. Editing a row here therefore
   changes every dependent item with no character migration.
@@ -50,12 +55,13 @@ Rules, from [`invariants.md`](../../docs/game/design/invariants.md) and
 | `world.json` | World radius, spawn radius, danger bands, procedural tree parameters |
 | `combat.json` | Role and dodge-vector vocabularies, player body, universal dash, damage bands |
 | `loadout.json` | Slot counts per kind and the Mage affinity multiplier |
+| `progression.json` | XP curve, the XP each source awards, and the starter-kit draw size |
 | `elements.json` | The five Mage elements and their roles |
 | `abilities.json` | What every action costs, how often it may be used, how it is dodged, what it delivers, and what it applies |
 | `effects.json` | Status effects: burn, slow, root, stun, knockback, shield |
-| `weapons.json` | Craftable weapons: class, blueprint, magazine, and the ability they fire or the spell they cast |
-| `spells.json` | Spells: element, tier, and the ability they cast |
-| `gadgets.json` | Gadgets: the Gunslinger's slot content, and the ability each performs |
+| `weapons.json` | Craftable weapons: class, blueprint, magazine, unlock level, and the ability they fire or the spell they cast |
+| `spells.json` | Spells: element, tier, unlock level, and the ability they cast |
+| `gadgets.json` | Gadgets: the Gunslinger's slot content, its unlock level, and the ability each performs |
 | `components.json` | Blueprint slot layouts and the components that fill them |
 | `materials.json` | Material grades, kinds, and rows |
 | `mobs.json` | Mob contracts |
@@ -92,7 +98,17 @@ Rows are populated only where a design document has settled them.
 - `gadgets` is empty. The slot model, its validation, and the Gunslinger's five
   gadget bindings all run against it; Phase 2.4 authors smoke, flashbangs, and
   the rest as rows. Until then a Gunslinger's bar is its weapon plus five empty
-  slots, and an empty slot performs nothing rather than erroring.
+  slots, and an empty slot performs nothing rather than erroring, and its
+  starter draw is one weapon and nothing else.
+- `progression.sources` prices all four settled XP sources, but only
+  `player_kill` has a trigger today. Mob kills (Phase 4.3), harvesting (Phase
+  4.1), and outpost discovery (Phase 3) award their row when those systems land;
+  the vocabulary is fixed in code, so the table cannot introduce a fifth source
+  nothing reads. The curve itself is a placeholder shape — Phase 4.4 tunes it
+  against the pacing targets.
+- The basic sets are one weapon per class and one spell, so today's draw is not
+  yet much of a draw. `unlock_level: 2` on those rows keeps the level-1 kit a
+  genuine subset once Phase 2.4 and 2.5 widen the pools.
 - `components.components` and `materials.materials` are empty. Slotted-blueprint
   crafting (Phase 2.3) and harvesting (Phase 4.1) fill them; the schemas and
   their validation exist now so those phases add data, not structure.
@@ -135,8 +151,13 @@ caller may drop is an ID no build ever shipped.
 `server/internal/tuning` re-validates on every load: unknown JSON fields are
 rejected, every cross-table reference is resolved, danger bands must run
 outward from the hub to the rim with contiguous PvP protection, projectile
-kinds must be unique across tables, and each class must have exactly one starter
-weapon. The loadout table must lay both classes out over one action bar —
+kinds must be unique across tables, and each class must have at least one starter
+weapon — the basic set is a pool a new character draws one of. Unlock IDs must
+be unique across the weapon, spell, and gadget tables and must unlock at a level
+between 1 and the progression cap, or a ledger entry would be ambiguous or a row
+unreachable. The progression curve may not shrink between levels, every XP
+source the simulation awards must be priced and no other may be declared, and
+the starter-kit draw must be wide enough to fill the action bar. The loadout table must lay both classes out over one action bar —
 `weapon_slots + gadget_slots` has to equal `spell_slots` — and its affinity
 multiplier must leave a tier-4 spell equippable inside those slots, or the
 spell grid's own 4 + 2 build would be unbuildable. Abilities add their own: the cost kind must be one the simulation can

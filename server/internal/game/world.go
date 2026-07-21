@@ -9,6 +9,7 @@ import (
 
 	"spellfire/server/internal/loadout"
 	"spellfire/server/internal/model"
+	"spellfire/server/internal/progression"
 	"spellfire/server/internal/protocol"
 	"spellfire/server/internal/tuning"
 )
@@ -86,6 +87,12 @@ type Player struct {
 	// re-validated the loadout at join. It stays set until the player next
 	// commits a loadout, which is the free respec the patch entitles them to.
 	RespecOwed bool
+	// Level, XP, and Unlocks are the permanent character axis, carried on the
+	// body so what it earns is credited where it is earned. ProgressDirty marks
+	// a change the engine has not persisted and pushed to the client yet.
+	Level, XP     int
+	Unlocks       progression.Ledger
+	ProgressDirty bool
 	// SquadID is empty until Phase 5 forms squads. It lives on the actor now so
 	// snapshots and future attribution code do not need a protocol migration.
 	SquadID                         string
@@ -214,12 +221,17 @@ func (w *World) AddPlayer(character model.Character, now time.Time) *Player {
 		w.RemovePlayer(character.ID)
 		character.State.Placed = false
 	}
-	// The saved set is carried onto today's content before the body exists:
+	// The ledger is carried onto today's content first, because what a character
+	// owns decides what it may equip: retired unlocks follow their retirement,
+	// an empty ledger is rolled into a starter kit, and anything the level has
+	// since come to grant is added.
+	ledger, granted := progression.Sync(w.tuning.Tables, character.Class, character.ID, character.Level, character.Unlocks)
+	// The saved set is then carried onto today's content before the body exists:
 	// retired IDs follow their retirement, an arrangement a balance patch
-	// invalidated is re-validated, and an empty record resolves to the class
-	// default. A character therefore never enters the world holding a set the
-	// rules would refuse.
-	equipped, respec := loadout.Resolve(w.tuning.Tables, character.Class, character.State.Loadout)
+	// invalidated is re-validated, content the ledger does not own is unequipped,
+	// and an empty record resolves to the class default. A character therefore
+	// never enters the world holding a set the rules would refuse.
+	equipped, respec := loadout.Resolve(w.tuning.Tables, character.Class, ledger, character.State.Loadout)
 	p := &Player{
 		ID: character.ID, AccountID: character.AccountID, Name: character.Name, Class: character.Class,
 		Position: w.entryPosition(character, now), Aim: Vec{1, 0},
@@ -230,6 +242,13 @@ func (w *World) AddPlayer(character model.Character, now time.Time) *Player {
 		SpeedMultiplier: 1,
 		Loadout:         equipped,
 		RespecOwed:      respec,
+		Level:           max(1, character.Level),
+		XP:              character.XP,
+		Unlocks:         ledger,
+		// A ledger that changed at join — a fresh starter kit, a retirement, or
+		// content added at a level this character is already past — is a grant
+		// the record does not yet hold, so it is written back on the next drain.
+		ProgressDirty: granted,
 	}
 	if weapon, ok := w.weapon(p); ok {
 		p.Ammo = weapon.MagazineSize
@@ -450,7 +469,7 @@ func (w *World) SetLoadout(id string, requested model.Loadout, now time.Time) (m
 		return p.Loadout.Clone(), ErrLoadoutLocked
 	}
 	requested.Version = w.tuning.Tables.Manifest.Version
-	if err := loadout.Validate(w.tuning.Tables, p.Class, requested); err != nil {
+	if err := loadout.Validate(w.tuning.Tables, p.Class, p.Unlocks, requested); err != nil {
 		return p.Loadout.Clone(), err
 	}
 	p.Loadout = requested.Clone()
@@ -675,7 +694,70 @@ func (w *World) damage(target *Player, amount float64, sourceID string, at time.
 	if target.Health == 0 {
 		target.Alive, target.Velocity, target.Effects, target.DashTicksLeft = false, Vec{}, nil, 0
 		w.cancelTelegraphs(target.ID, at)
+		w.creditKill(target)
 	}
+}
+
+// creditKill awards the kill's XP to whoever the combat log credits — most
+// damage dealt, not the last hit — so a squad's finisher does not take the
+// progression its damage dealer earned. Developer fixtures are excluded on both
+// sides: an admin-spawned body is a test target, not an economy.
+func (w *World) creditKill(target *Player) {
+	if target.AdminSpawned {
+		return
+	}
+	kill, ok := w.combat.lastKill(target.ID)
+	if !ok || kill.CreditID == "" || kill.CreditID == target.ID {
+		return
+	}
+	killer := w.players[kill.CreditID]
+	if killer == nil || killer.AdminSpawned {
+		return
+	}
+	w.awardXP(killer, tuning.SourcePlayerKill)
+}
+
+// awardXP credits one occurrence of a source and grants whatever the levels it
+// crossed unlock. Nothing here touches combat power: a level buys access to more
+// options, never a bigger number, which is what keeps the band compressed.
+func (w *World) awardXP(p *Player, source string) {
+	award := w.tuning.Tables.Progression.Award(source)
+	if award <= 0 || p.AdminSpawned {
+		return
+	}
+	level, xp, granted := progression.Advance(w.tuning.Tables, p.Level, p.XP, award)
+	p.Level, p.XP = level, xp
+	if len(granted) > 0 {
+		p.Unlocks, _ = p.Unlocks.With(granted...)
+	}
+	p.ProgressDirty = true
+}
+
+// Progress is the character's permanent axis as it stands on the body.
+func (w *World) Progress(id string) (model.Progress, bool) {
+	p := w.players[id]
+	if p == nil || p.AdminSpawned {
+		return model.Progress{}, false
+	}
+	return progression.Progress(p.Level, p.XP, p.Unlocks), true
+}
+
+// DrainProgress reports every body whose permanent progression has changed since
+// the last drain and clears the marks, in deterministic order. The engine
+// persists each and tells its owner; the world never writes or sends.
+func (w *World) DrainProgress() map[string]model.Progress {
+	changed := make(map[string]model.Progress)
+	for _, id := range sortedPlayerIDs(w.players) {
+		p := w.players[id]
+		if !p.ProgressDirty {
+			continue
+		}
+		p.ProgressDirty = false
+		if progress, ok := w.Progress(id); ok {
+			changed[id] = progress
+		}
+	}
+	return changed
 }
 
 func (w *World) moveCircle(from, delta Vec, radius float64) Vec {
@@ -794,10 +876,14 @@ func hash(value string) uint64 {
 }
 
 func sortedPlayerIDs(players map[string]*Player) []string {
-	ids := make([]string, 0, len(players))
-	for id := range players {
-		ids = append(ids, id)
+	return sortedKeys(players)
+}
+
+func sortedKeys[V any](values map[string]V) []string {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
 	}
-	sort.Strings(ids)
-	return ids
+	sort.Strings(keys)
+	return keys
 }

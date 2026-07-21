@@ -22,10 +22,12 @@ const (
 	saveQueue = 256
 )
 
-// Persister receives the world state that must survive a disconnect. The engine
+// Persister receives the world state that must survive a disconnect, and the
+// permanent progression a body earns while it is in the world. The engine
 // decides when to write; the store decides how.
 type Persister interface {
 	SaveCharacterState(ctx context.Context, characterID string, state model.CharacterState) error
+	SaveCharacterProgress(ctx context.Context, characterID string, progress model.Progress) error
 }
 
 type Client struct {
@@ -34,9 +36,13 @@ type Client struct {
 	Kick     chan struct{}
 }
 
+// characterSave is one pending write. Exactly one of state and progress is set:
+// world state and permanent progression are written through separate statements
+// so a save from a body that entered before a grant cannot roll the grant back.
 type characterSave struct {
-	id    string
-	state model.CharacterState
+	id       string
+	state    *model.CharacterState
+	progress *model.Progress
 }
 
 type Engine struct {
@@ -80,6 +86,10 @@ func (e *Engine) Run(ctx context.Context) {
 				lastSend = now
 			}
 			pending := e.reapLingeringLocked(now)
+			// Progression is drained every tick rather than on the autosave
+			// clock: a level-up is a deliberate grant, and it is announced to its
+			// owner on the same pass that persists it.
+			pending = append(pending, e.drainProgressLocked()...)
 			if e.persist != nil && now.Sub(lastSave) >= e.saveEvery {
 				pending, lastSave = append(pending, e.statesLocked(now)...), now
 			}
@@ -105,11 +115,39 @@ func (e *Engine) reapLingeringLocked(now time.Time) []characterSave {
 	var pending []characterSave
 	for _, id := range e.world.ExpiredLingering(now) {
 		if state, ok := e.world.StateOf(id, now); ok {
-			pending = append(pending, characterSave{id: id, state: state})
+			pending = append(pending, characterSave{id: id, state: &state})
 		}
 		e.world.RemovePlayer(id)
 	}
 	return pending
+}
+
+// drainProgressLocked persists and announces every progression change the last
+// tick produced. The client is told on the same pass, so the loadout menu learns
+// what a level just unlocked without polling for it.
+func (e *Engine) drainProgressLocked() []characterSave {
+	changed := e.world.DrainProgress()
+	pending := make([]characterSave, 0, len(changed))
+	for _, id := range sortedKeys(changed) {
+		progress := changed[id]
+		pending = append(pending, characterSave{id: id, progress: &progress})
+		if client := e.clients[id]; client != nil {
+			e.queue(client, protocol.EncodeServer(e.progressMessageLocked(id, progress)))
+		}
+	}
+	return pending
+}
+
+// progressMessageLocked reports the permanent character axis. The caller holds
+// the engine lock.
+func (e *Engine) progressMessageLocked(playerID string, progress model.Progress) protocol.ServerEnvelope {
+	return protocol.ServerEnvelope{
+		Kind: protocol.ServerProgress, ServerTick: e.world.tick,
+		ServerTimeMS: uint64(time.Now().UnixMilli()), PlayerID: playerID,
+		Level: uint32(progress.Level), XP: uint64(progress.XP),
+		XPToNext: uint64(e.world.tuning.Tables.Progression.XPToNext(progress.Level)),
+		Unlocks:  progress.Unlocks,
+	}
 }
 
 func (e *Engine) statesLocked(now time.Time) []characterSave {
@@ -119,7 +157,7 @@ func (e *Engine) statesLocked(now time.Time) []characterSave {
 	states := e.world.States(now)
 	pending := make([]characterSave, 0, len(states))
 	for id, state := range states {
-		pending = append(pending, characterSave{id: id, state: state})
+		pending = append(pending, characterSave{id: id, state: &state})
 	}
 	return pending
 }
@@ -169,8 +207,15 @@ func (e *Engine) writeLoop(stop <-chan struct{}, done chan<- struct{}) {
 func (e *Engine) write(save characterSave) {
 	ctx, cancel := context.WithTimeout(context.Background(), saveTimeout)
 	defer cancel()
-	if err := e.persist.SaveCharacterState(ctx, save.id, save.state); err != nil {
-		slog.Warn("persist character state", "character", save.id, "error", err)
+	if save.state != nil {
+		if err := e.persist.SaveCharacterState(ctx, save.id, *save.state); err != nil {
+			slog.Warn("persist character state", "character", save.id, "error", err)
+		}
+	}
+	if save.progress != nil {
+		if err := e.persist.SaveCharacterProgress(ctx, save.id, *save.progress); err != nil {
+			slog.Warn("persist character progress", "character", save.id, "error", err)
+		}
 	}
 }
 
@@ -194,12 +239,16 @@ func (e *Engine) Join(character model.Character, now time.Time) (*Client, error)
 	client := &Client{PlayerID: character.ID, Send: make(chan []byte, 2), Kick: make(chan struct{})}
 	e.clients[character.ID] = client
 	welcome := e.world.SnapshotFor(character.ID, now, protocol.ServerWelcome)
-	// The equipped set rides the welcome so the menu can show it without a
-	// second round trip, and so a respec a balance patch granted is announced
-	// the moment the character enters.
+	// The equipped set and the permanent axis ride the welcome so the menu can
+	// show both without a second round trip, and so a respec a balance patch
+	// granted is announced the moment the character enters.
 	if p := e.world.players[character.ID]; p != nil {
 		reply := e.loadoutMessageLocked(character.ID, p.Loadout, nil)
 		welcome.Loadout, welcome.LoadoutEditable, welcome.RespecOwed = reply.Loadout, reply.LoadoutEditable, reply.RespecOwed
+		if progress, ok := e.world.Progress(character.ID); ok {
+			axis := e.progressMessageLocked(character.ID, progress)
+			welcome.Level, welcome.XP, welcome.XPToNext, welcome.Unlocks = axis.Level, axis.XP, axis.XPToNext, axis.Unlocks
+		}
 	}
 	client.Send <- protocol.EncodeServer(welcome)
 	return client, nil
@@ -269,7 +318,7 @@ func (e *Engine) SetLoadout(playerID string, requested model.Loadout, now time.T
 	var pending []characterSave
 	if err == nil {
 		if state, ok := e.world.StateOf(playerID, now); ok {
-			pending = append(pending, characterSave{id: playerID, state: state})
+			pending = append(pending, characterSave{id: playerID, state: &state})
 		}
 	}
 	reply := e.loadoutMessageLocked(playerID, committed, err)

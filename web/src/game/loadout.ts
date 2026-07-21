@@ -40,26 +40,38 @@ export function bar(characterClass: CharacterClass, set: LoadoutSet): Slot[] {
   return slots;
 }
 
-/** The set a character fights with before it has chosen one. */
-export function defaultLoadout(characterClass: CharacterClass): LoadoutSet {
+/**
+ * The set a character fights with before the server's authoritative one
+ * arrives: what its ledger owns, packed from slot zero. The server resolves the
+ * same shape, so the menu is not showing content the world would refuse.
+ */
+export function defaultLoadout(characterClass: CharacterClass, ledger: Ledger): LoadoutSet {
   const set: LoadoutSet = {
-    weapon: Object.keys(weapons).find((id) => weapons[id]!.starter && weapons[id]!.class === characterClass) ?? "",
+    weapon: equippable(characterClass, ledger, "weapon")[0] ?? "",
     gadgets: new Array<string>(loadoutTable.gadget_slots).fill(""),
     spells: new Array<string>(loadoutTable.spell_slots).fill(""),
   };
-  const starters = characterClass === "gunslinger"
-    ? Object.keys(gadgets).filter((id) => gadgets[id]!.starter && gadgets[id]!.class === characterClass).sort()
-    : Object.keys(spells).filter((id) => spells[id]!.starter).sort();
+  const kind: SlotKind = characterClass === "gunslinger" ? "gadget" : "spell";
   const target = characterClass === "gunslinger" ? set.gadgets : set.spells;
-  starters.slice(0, target.length).forEach((id, index) => { target[index] = id; });
+  equippable(characterClass, ledger, kind).slice(0, target.length).forEach((id, index) => { target[index] = id; });
   return set;
 }
 
-/** Content of a slot kind the character may choose from, in stable order. */
-export function equippable(characterClass: CharacterClass, kind: SlotKind): string[] {
-  if (kind === "weapon") return Object.keys(weapons).filter((id) => weapons[id]!.class === characterClass).sort();
-  if (kind === "gadget") return Object.keys(gadgets).filter((id) => gadgets[id]!.class === characterClass).sort();
-  return characterClass === "mage" ? Object.keys(spells).sort() : [];
+/** The flat permanent unlock ledger, as the client holds it. */
+export type Ledger = ReadonlySet<string>;
+
+export function ledgerOf(unlocks: readonly string[]): Ledger { return new Set(unlocks); }
+
+/**
+ * Content of a slot kind the character may choose from, in stable order: the
+ * live rows of its class that its ledger owns. The server enforces the same
+ * intersection — hiding an option is never what stops it being equipped.
+ */
+export function equippable(characterClass: CharacterClass, ledger: Ledger, kind: SlotKind): string[] {
+  const owns = (id: string) => ledger.has(id);
+  if (kind === "weapon") return Object.keys(weapons).filter((id) => weapons[id]!.class === characterClass && owns(id)).sort();
+  if (kind === "gadget") return Object.keys(gadgets).filter((id) => gadgets[id]!.class === characterClass && owns(id)).sort();
+  return characterClass === "mage" ? Object.keys(spells).filter(owns).sort() : [];
 }
 
 /** Display name of equippable content, whatever kind it is. */
@@ -82,15 +94,17 @@ export function affinityShortfall(equipped: string[], index: number): number {
  * the server's rules so the menu can refuse before spending a round trip; the
  * server still validates and its answer wins.
  */
-export function loadoutProblem(characterClass: CharacterClass, set: LoadoutSet): string | undefined {
+export function loadoutProblem(characterClass: CharacterClass, ledger: Ledger, set: LoadoutSet): string | undefined {
   const weapon = weapons[set.weapon];
   if (!weapon) return "Choose a weapon.";
   if (weapon.class !== characterClass) return `${weapon.name} is a ${weapon.class} weapon.`;
+  if (!ledger.has(set.weapon)) return `You have not unlocked ${weapon.name}.`;
   const equipped = characterClass === "gunslinger" ? set.gadgets : set.spells;
   const kind: SlotKind = characterClass === "gunslinger" ? "gadget" : "spell";
   const seen = new Set<string>();
   for (const id of equipped) {
     if (!id) continue;
+    if (!ledger.has(id)) return `You have not unlocked ${contentName(kind, id)}.`;
     if (seen.has(id)) return `${contentName(kind, id)} is already equipped in another slot.`;
     seen.add(id);
   }

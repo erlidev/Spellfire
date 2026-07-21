@@ -146,7 +146,7 @@ function decodeCollider(bytes: Uint8Array): Collider {
 }
 
 export function decodeServer(data: ArrayBuffer): ServerMessage {
-  const value: ServerMessage = { kind: 0, serverTick: 0, serverTimeMS: 0, playerID: "", entities: [], colliders: [], error: "", echoedClientTimeMS: 0, loadoutEditable: false, respecOwed: false };
+  const value: ServerMessage = { kind: 0, serverTick: 0, serverTimeMS: 0, playerID: "", entities: [], colliders: [], error: "", echoedClientTimeMS: 0, loadoutEditable: false, respecOwed: false, level: 0, xp: 0, xpToNext: 0, unlocks: [] };
   const reader = new Reader(new Uint8Array(data));
   while (!reader.done) {
     const tag = reader.varint(), field = tag >>> 3, wire = tag & 7;
@@ -157,6 +157,8 @@ export function decodeServer(data: ArrayBuffer): ServerMessage {
       case 7: value.error = reader.string(); break; case 8: value.echoedClientTimeMS = reader.varint(); break;
       case 9: value.loadout = decodeLoadout(reader.data()); break;
       case 10: value.loadoutEditable = reader.varint() !== 0; break; case 11: value.respecOwed = reader.varint() !== 0; break;
+      case 12: value.level = reader.varint(); break; case 13: value.xp = reader.varint(); break;
+      case 14: value.xpToNext = reader.varint(); break; case 15: value.unlocks.push(reader.string()); break;
       default: reader.skip(wire);
     }
   }

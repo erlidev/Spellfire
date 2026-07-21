@@ -32,7 +32,7 @@ message Loadout {
 }
 
 message ServerEnvelope {
-  enum Kind { UNKNOWN = 0; WELCOME = 1; SNAPSHOT = 2; ERROR = 3; PONG = 4; LOADOUT = 5; }
+  enum Kind { UNKNOWN = 0; WELCOME = 1; SNAPSHOT = 2; ERROR = 3; PONG = 4; LOADOUT = 5; PROGRESS = 6; }
   Kind kind = 1;
   uint64 server_tick = 2;
   uint64 server_time_ms = 3;
@@ -44,6 +44,12 @@ message ServerEnvelope {
   Loadout loadout = 9;        // WELCOME and LOADOUT only, never on a snapshot
   bool loadout_editable = 10; // whether the set may be changed from where the body stands
   bool respec_owed = 11;      // a balance patch granted a free respec
+  // The permanent character axis, on WELCOME and PROGRESS only. xp_to_next is
+  // derived from the progression curve, not stored on the character.
+  uint32 level = 12;
+  uint64 xp = 13;
+  uint64 xp_to_next = 14;
+  repeated string unlocks = 15;
 }
 
 message Entity {

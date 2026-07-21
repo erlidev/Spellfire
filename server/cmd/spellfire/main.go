@@ -41,7 +41,7 @@ func main() {
 	defer stop()
 	go engine.Run(ctx)
 	mux := http.NewServeMux()
-	api.New(authService, data, engine).RegisterRoutes(mux)
+	api.New(authService, data, tables, engine).RegisterRoutes(mux)
 	mux.Handle("/ws", transport.NewWebSocket(authService, data, engine))
 	mux.Handle("/", spaHandler(cfg.WebRoot))
 	server := &http.Server{Addr: cfg.Address, Handler: securityHeaders(mux), ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 60 * time.Second}

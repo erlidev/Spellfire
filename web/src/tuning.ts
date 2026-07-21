@@ -14,6 +14,7 @@ import loadoutData from "../../data/tuning/loadout.json";
 import manifestData from "../../data/tuning/manifest.json";
 import materialsData from "../../data/tuning/materials.json";
 import mobsData from "../../data/tuning/mobs.json";
+import progressionData from "../../data/tuning/progression.json";
 import sessionData from "../../data/tuning/session.json";
 import simulationData from "../../data/tuning/simulation.json";
 import spellsData from "../../data/tuning/spells.json";
@@ -37,9 +38,10 @@ export interface Cost { kind: "none" | "ammo" | "mana"; amount: number }
 export interface Telegraph { shape: "circle" | "cone" | "line" | "ring"; radius?: number; length?: number; width?: number; angle_degrees?: number; active_ms: number; resolved_ms: number }
 export interface Ability { name: string; cost: Cost; interval_ms: number; cooldown_ms: number; windup_ms?: number; telegraph?: Telegraph; dodge_vector?: string; damage_band?: string; projectile?: Projectile; effects?: string[] }
 export interface Effect { name: string; kind: string; stacking: string; duration_ms: number; tick_ms?: number; damage_band?: string; damage_fraction?: number; speed_multiplier?: number; speed?: number; absorb_hits?: number }
-export interface Weapon { name: string; class: CharacterClass; blueprint: string; category: string; starter?: boolean; magazine_size?: number; reload_ms?: number; ability?: string; spell?: string }
-export interface Spell { name: string; element: string; tier: number; starter?: boolean; ability: string }
-export interface Gadget { name: string; class: CharacterClass; starter?: boolean; ability: string }
+export interface Weapon { name: string; class: CharacterClass; blueprint: string; category: string; starter?: boolean; unlock_level: number; magazine_size?: number; reload_ms?: number; ability?: string; spell?: string }
+export interface Spell { name: string; element: string; tier: number; starter?: boolean; unlock_level: number; ability: string }
+export interface Gadget { name: string; class: CharacterClass; starter?: boolean; unlock_level: number; ability: string }
+export interface ProgressionTable { max_level: number; base_xp: number; growth: number; sources: Record<string, number>; starter_kit: { unlocks: number } }
 export interface LoadoutTable { weapon_slots: number; gadget_slots: number; spell_slots: number; affinity: { same_element_per_tier: number } }
 export interface Blueprint { name: string; slots: string[] }
 export interface Component { name: string; blueprint: string; slot: string; effect?: string }
@@ -68,6 +70,7 @@ export const weapons = weaponsData as Record<string, Weapon>;
 export const spells = spellsData as Record<string, Spell>;
 export const gadgets = gadgetsData as Record<string, Gadget>;
 export const loadoutTable = loadoutData as LoadoutTable;
+export const progression = progressionData as ProgressionTable;
 export const components = componentsData as ComponentsTable;
 export const materials = materialsData as MaterialsTable;
 export const mobs = mobsData as Record<string, Mob>;
@@ -92,11 +95,17 @@ export function dangerBandAt(distance: number): DangerBand {
   return world.danger_bands.find((band) => distance <= band.outer_radius) ?? last;
 }
 
-/** The weapon a freshly created character of the class carries. */
+/** The deterministic first row of a class's basic weapon set. */
 export function starterWeapon(characterClass: CharacterClass): Weapon {
-  const found = Object.values(weapons).find((weapon) => weapon.starter && weapon.class === characterClass);
+  const found = Object.keys(weapons).sort().map((id) => weapons[id]!).find((weapon) => weapon.starter && weapon.class === characterClass);
   if (!found) throw new Error(`No starter weapon for ${characterClass}`);
   return found;
+}
+
+/** What the level costs to leave, and zero at the cap — the server's curve. */
+export function xpToNext(level: number): number {
+  if (level < 1 || level >= progression.max_level) return 0;
+  return Math.round(progression.base_xp * progression.growth ** (level - 1));
 }
 
 /** What a weapon does when used: its own ability, or its spell's. */

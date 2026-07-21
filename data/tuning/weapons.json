@@ -5,6 +5,7 @@
     "blueprint": "gun",
     "category": "rifle",
     "starter": true,
+    "unlock_level": 2,
     "magazine_size": 10,
     "reload_ms": 1400,
     "ability": "rifle-shot"
@@ -15,6 +16,7 @@
     "blueprint": "staff",
     "category": "staff",
     "starter": true,
+    "unlock_level": 2,
     "spell": "fire-bolt"
   }
 }

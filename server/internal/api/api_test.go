@@ -6,13 +6,18 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 
 	"spellfire/server/internal/auth"
 	"spellfire/server/internal/game"
+	"spellfire/server/internal/loadout"
+	"spellfire/server/internal/model"
+	"spellfire/server/internal/progression"
 	"spellfire/server/internal/store"
+	"spellfire/server/internal/tuning"
 )
 
 type recordingAdminTools struct {
@@ -38,7 +43,7 @@ func testAPI(t *testing.T, adminEmails ...string) http.Handler {
 	}
 	t.Cleanup(func() { _ = data.Close() })
 	mux := http.NewServeMux()
-	application := New(auth.New(data, time.Hour, adminEmails...), data)
+	application := New(auth.New(data, time.Hour, adminEmails...), data, tuning.MustLoad())
 	application.RegisterRoutes(mux)
 	mux.HandleFunc("GET /api/admin-test", application.withAdmin(func(w http.ResponseWriter, _ *http.Request, _ auth.Principal, _ string) {
 		w.WriteHeader(http.StatusNoContent)
@@ -119,6 +124,47 @@ func TestAccountAndCharacterHTTPFlow(t *testing.T) {
 	}
 }
 
+// A character is created with its starter kit already in the ledger, so it can
+// fill a coherent loadout before it has earned or harvested anything.
+func TestCharacterCreationRollsTheStarterKit(t *testing.T) {
+	handler := testAPI(t)
+	registered := request(t, handler, http.MethodPost, "/api/auth/register", "", map[string]string{"email": "kit@example.com", "password": "long password"})
+	token := tokenFrom(t, registered)
+	created := request(t, handler, http.MethodPost, "/api/characters", token, map[string]string{"name": "Ember Fox", "class": "mage"})
+	if created.Code != http.StatusCreated {
+		t.Fatalf("create = %d %s", created.Code, created.Body.String())
+	}
+	var character struct {
+		Level   int      `json:"level"`
+		XP      int      `json:"xp"`
+		Unlocks []string `json:"unlocks"`
+	}
+	if err := json.Unmarshal(created.Body.Bytes(), &character); err != nil {
+		t.Fatal(err)
+	}
+	if character.Level != 1 || character.XP != 0 {
+		t.Fatalf("new character = level %d, xp %d", character.Level, character.XP)
+	}
+	tables := tuning.MustLoad()
+	ledger := progression.New(character.Unlocks)
+	if len(loadout.Equippable(tables, model.Mage, ledger, loadout.KindWeapon)) == 0 {
+		t.Fatalf("a new character owns no weapon of its class: %v", character.Unlocks)
+	}
+	// The kit is persisted, not recomputed: the listing carries the same ledger.
+	listed := request(t, handler, http.MethodGet, "/api/characters", token, nil)
+	var list struct {
+		Characters []struct {
+			Unlocks []string `json:"unlocks"`
+		} `json:"characters"`
+	}
+	if err := json.Unmarshal(listed.Body.Bytes(), &list); err != nil {
+		t.Fatal(err)
+	}
+	if len(list.Characters) != 1 || !reflect.DeepEqual(list.Characters[0].Unlocks, ledger.IDs()) {
+		t.Fatalf("stored ledger = %#v, want %v", list.Characters, ledger.IDs())
+	}
+}
+
 func TestAuthenticationErrorsDoNotLeakAccountExistence(t *testing.T) {
 	handler := testAPI(t)
 	request(t, handler, http.MethodPost, "/api/auth/register", "", map[string]string{"email": "hero@example.com", "password": "long password"})
@@ -190,7 +236,7 @@ func TestAdminWorldControlsRequireAdminAndCharacterOwnership(t *testing.T) {
 	t.Cleanup(func() { _ = data.Close() })
 	tools := &recordingAdminTools{}
 	mux := http.NewServeMux()
-	New(auth.New(data, time.Hour, "admin@example.com"), data, tools).RegisterRoutes(mux)
+	New(auth.New(data, time.Hour, "admin@example.com"), data, tuning.MustLoad(), tools).RegisterRoutes(mux)
 	admin := request(t, mux, http.MethodPost, "/api/auth/register", "", map[string]string{"email": "admin@example.com", "password": "long password"})
 	adminToken := tokenFrom(t, admin)
 	character := request(t, mux, http.MethodPost, "/api/characters", adminToken, map[string]string{"name": "Admin Hero", "class": "mage"})

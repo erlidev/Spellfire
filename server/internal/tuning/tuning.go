@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/fs"
+	"math"
 	"sort"
 	"strings"
 	"sync"
@@ -20,7 +21,7 @@ import (
 // SchemaVersion is the table shape this build understands. Bump it only when a
 // table changes shape, and add the matching forward migration; a plain balance
 // edit bumps Manifest.Version instead and needs no code change.
-const SchemaVersion = 8
+const SchemaVersion = 9
 
 type Manifest struct {
 	// Version is the content revision. Bump it on any balance edit; a change
@@ -339,12 +340,17 @@ func (e Effect) Tick() time.Duration     { return time.Duration(e.TickMS) * time
 // fires and owns its magazine; a staff owns neither and delegates to the spell
 // it casts, which points at an ability of its own.
 type Weapon struct {
-	ID           string `json:"-"`
-	Name         string `json:"name"`
-	Class        string `json:"class"`
-	Blueprint    string `json:"blueprint"`
-	Category     string `json:"category"`
+	ID        string `json:"-"`
+	Name      string `json:"name"`
+	Class     string `json:"class"`
+	Blueprint string `json:"blueprint"`
+	Category  string `json:"category"`
+	// Starter marks membership of the basic set a new character draws its one
+	// opening weapon from, and UnlockLevel is the level at which every character
+	// receives the row outright. Basic rows sit above level 1 so the opening
+	// draw stays a draw and the rest of the set arrives shortly after.
 	Starter      bool   `json:"starter"`
+	UnlockLevel  int    `json:"unlock_level"`
 	MagazineSize int    `json:"magazine_size"`
 	ReloadMS     int    `json:"reload_ms"`
 	Ability      string `json:"ability"`
@@ -356,12 +362,13 @@ func (w Weapon) ReloadDuration() time.Duration {
 }
 
 type Spell struct {
-	ID      string `json:"-"`
-	Name    string `json:"name"`
-	Element string `json:"element"`
-	Tier    int    `json:"tier"`
-	Starter bool   `json:"starter"`
-	Ability string `json:"ability"`
+	ID          string `json:"-"`
+	Name        string `json:"name"`
+	Element     string `json:"element"`
+	Tier        int    `json:"tier"`
+	Starter     bool   `json:"starter"`
+	UnlockLevel int    `json:"unlock_level"`
+	Ability     string `json:"ability"`
 }
 
 // Gadget is the Gunslinger's equivalent of a spell: identity over one ability,
@@ -369,12 +376,60 @@ type Spell struct {
 // flashbangs, and the rest — so today a Gunslinger's bar holds its weapon and
 // five empty slots.
 type Gadget struct {
-	ID      string `json:"-"`
-	Name    string `json:"name"`
-	Class   string `json:"class"`
-	Starter bool   `json:"starter"`
-	Ability string `json:"ability"`
+	ID          string `json:"-"`
+	Name        string `json:"name"`
+	Class       string `json:"class"`
+	Starter     bool   `json:"starter"`
+	UnlockLevel int    `json:"unlock_level"`
+	Ability     string `json:"ability"`
 }
+
+// XP sources the simulation knows how to award. A row of any other name would
+// be a value nothing ever reads, so the loader rejects it, and a missing row
+// would leave an award silently worth nothing, so the loader requires them all.
+// Only PlayerKill has a trigger today: mobs are Phase 4.3, harvesting Phase 4.1,
+// and outpost discovery Phase 3.
+const (
+	SourcePlayerKill = "player_kill"
+	SourceMobKill    = "mob_kill"
+	SourceHarvest    = "harvest"
+	SourceDiscovery  = "discovery"
+)
+
+var XPSources = []string{SourcePlayerKill, SourceMobKill, SourceHarvest, SourceDiscovery}
+
+// StarterKit is how much a character is given at creation beyond its one drawn
+// weapon: Unlocks is how many rows are drawn from the basic set of its slot
+// kind, sized to fill the action bar so a zero-material character is never a
+// spectator.
+type StarterKit struct {
+	Unlocks int `json:"unlocks"`
+}
+
+// Progression is the character axis: what XP is worth, how much of it a level
+// costs, and how large the opening draw is. Which content a level grants is not
+// here — each weapon, spell, and gadget row declares its own unlock_level, so
+// adding content never means editing a second table.
+type Progression struct {
+	MaxLevel   int            `json:"max_level"`
+	BaseXP     int            `json:"base_xp"`
+	Growth     float64        `json:"growth"`
+	Sources    map[string]int `json:"sources"`
+	StarterKit StarterKit     `json:"starter_kit"`
+}
+
+// XPToNext is what the level costs to leave. It is zero at the cap, which is
+// how Award knows to stop accumulating.
+func (p Progression) XPToNext(level int) int {
+	if level < 1 || level >= p.MaxLevel {
+		return 0
+	}
+	return int(math.Round(float64(p.BaseXP) * math.Pow(p.Growth, float64(level-1))))
+}
+
+// Award is what one occurrence of a source is worth, and zero for a source this
+// build does not recognise.
+func (p Progression) Award(source string) int { return p.Sources[source] }
 
 // Affinity is the Mage's specialisation rule. Its shape is locked by
 // mage.md#element-affinity — a tier-N spell needs N−1 other spells of its
@@ -495,26 +550,27 @@ type Retirement struct {
 }
 
 type Tables struct {
-	Manifest   Manifest
-	Admins     Admins
-	AdminTools AdminTools
-	Simulation Simulation
-	Session    Session
-	World      World
-	Outposts   map[string]Outpost
-	Combat     Combat
-	Loadout    Loadout
-	Elements   map[string]Element
-	Abilities  map[string]Ability
-	Effects    map[string]Effect
-	Weapons    map[string]Weapon
-	Spells     map[string]Spell
-	Gadgets    map[string]Gadget
-	Components Components
-	Materials  Materials
-	Mobs       map[string]Mob
-	Biomes     map[string]Biome
-	Retired    map[string]Retirement
+	Manifest    Manifest
+	Admins      Admins
+	AdminTools  AdminTools
+	Simulation  Simulation
+	Session     Session
+	World       World
+	Outposts    map[string]Outpost
+	Combat      Combat
+	Loadout     Loadout
+	Progression Progression
+	Elements    map[string]Element
+	Abilities   map[string]Ability
+	Effects     map[string]Effect
+	Weapons     map[string]Weapon
+	Spells      map[string]Spell
+	Gadgets     map[string]Gadget
+	Components  Components
+	Materials   Materials
+	Mobs        map[string]Mob
+	Biomes      map[string]Biome
+	Retired     map[string]Retirement
 }
 
 // Resolution is what a persisted reference resolves to against today's tables:
@@ -599,20 +655,37 @@ func (t *Tables) BandDamage(band string) float64 {
 	return t.Combat.DamageBands[band].DamagePerHit
 }
 
-// StarterWeapon returns the weapon a freshly created character of the class
-// carries. Validation guarantees exactly one per class.
-func (t *Tables) StarterWeapon(class string) (Weapon, bool) {
+// UnlockKinds are the tables a permanent unlock ID may name. The ledger is
+// flat, so an ID is unique across all of them — validation enforces it — and a
+// saved entry can be resolved without also storing which table it came from.
+// Keystones join the list when Phase 2.7 settles them.
+var UnlockKinds = []string{"weapon", "spell", "gadget"}
+
+// StarterWeapons is the basic set of the class: the pool a new character draws
+// its one opening weapon from. Validation guarantees at least one per class.
+func (t *Tables) StarterWeapons(class string) []string {
+	starters := make([]string, 0, len(t.Weapons))
 	for _, id := range sortedKeys(t.Weapons) {
 		if weapon := t.Weapons[id]; weapon.Starter && weapon.Class == class {
-			return weapon, true
+			starters = append(starters, id)
 		}
 	}
-	return Weapon{}, false
+	return starters
 }
 
-// StarterSpells lists the spells a new Mage starts able to slot, in a stable
-// order. Phase 2.2 replaces the flat list with a random draw against the unlock
-// ledger; the loadout only needs to know which rows are open at zero progress.
+// StarterWeapon is the deterministic first row of that pool. It is the
+// guaranteed-available replacement for a weapon a content change withdrew, not
+// the weapon a new character is given — that one is drawn.
+func (t *Tables) StarterWeapon(class string) (Weapon, bool) {
+	starters := t.StarterWeapons(class)
+	if len(starters) == 0 {
+		return Weapon{}, false
+	}
+	return t.Weapons[starters[0]], true
+}
+
+// StarterSpells lists the basic set a new Mage draws its opening spells from,
+// in a stable order.
 func (t *Tables) StarterSpells() []string {
 	starters := make([]string, 0, len(t.Spells))
 	for _, id := range sortedKeys(t.Spells) {
@@ -632,6 +705,57 @@ func (t *Tables) StarterGadgets(class string) []string {
 		}
 	}
 	return starters
+}
+
+// UnlocksThrough lists every content ID a character of the level has been
+// granted outright, in stable order. It is a scan of the content tables rather
+// than a mapping table of its own: a new row declares the level it arrives at,
+// and nothing else has to be edited to match.
+func (t *Tables) UnlocksThrough(level int) []string {
+	granted := make([]string, 0)
+	if level < 1 {
+		return granted
+	}
+	for _, id := range sortedKeys(t.Weapons) {
+		if t.Weapons[id].UnlockLevel <= level {
+			granted = append(granted, id)
+		}
+	}
+	for _, id := range sortedKeys(t.Spells) {
+		if t.Spells[id].UnlockLevel <= level {
+			granted = append(granted, id)
+		}
+	}
+	for _, id := range sortedKeys(t.Gadgets) {
+		if t.Gadgets[id].UnlockLevel <= level {
+			granted = append(granted, id)
+		}
+	}
+	sort.Strings(granted)
+	return granted
+}
+
+// UnlockKind names the table a live unlock ID belongs to.
+func (t *Tables) UnlockKind(id string) (string, bool) {
+	for _, kind := range UnlockKinds {
+		if t.Live(kind, id) {
+			return kind, true
+		}
+	}
+	return "", false
+}
+
+// ResolveUnlock maps a persisted ledger entry onto live content without the
+// caller having to know which table it came from. A retired entry follows its
+// retirement chain like any other reference.
+func (t *Tables) ResolveUnlock(id string) (Resolution, bool) {
+	if kind, ok := t.UnlockKind(id); ok {
+		return t.Resolve(kind, id)
+	}
+	if retirement, ok := t.Retired[id]; ok && contains(UnlockKinds, retirement.Kind) {
+		return t.Resolve(retirement.Kind, id)
+	}
+	return Resolution{}, false
 }
 
 var load = sync.OnceValues(func() (*Tables, error) { return Parse(data.Tuning) })
@@ -666,6 +790,7 @@ func Parse(fsys fs.FS) (*Tables, error) {
 		{"outposts.json", &tables.Outposts},
 		{"combat.json", &tables.Combat},
 		{"loadout.json", &tables.Loadout},
+		{"progression.json", &tables.Progression},
 		{"elements.json", &tables.Elements},
 		{"abilities.json", &tables.Abilities},
 		{"effects.json", &tables.Effects},

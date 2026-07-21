@@ -500,6 +500,58 @@ func TestLoadoutRejectsAnUnsatisfiableAffinityRule(t *testing.T) {
 	}
 }
 
+// The unlock ledger stores bare IDs, so an ID shared across content tables
+// would make an entry ambiguous, and content no level grants would be
+// unreachable for anyone whose starter draw missed it.
+func TestUnlockIDsMustBeUniqueAndReachable(t *testing.T) {
+	files := shipped(t)
+	files["tuning/gadgets.json"] = &fstest.MapFile{Data: []byte(`{"fire-bolt": {"name": "Bolt gadget", "class": "gunslinger", "unlock_level": 2, "ability": "rifle-shot"}}`)}
+	if _, err := Parse(files); err == nil || !strings.Contains(err.Error(), "unlock IDs are flat") {
+		t.Fatalf("an ID claimed by two content tables was accepted: %v", err)
+	}
+	unreachable := edit(t, shipped(t), "spells.json", func(document map[string]any) {
+		document["fire-bolt"].(map[string]any)["unlock_level"] = 0.0
+	})
+	if _, err := Parse(unreachable); err == nil || !strings.Contains(err.Error(), "can never be earned") {
+		t.Fatalf("content no level grants was accepted: %v", err)
+	}
+	past := edit(t, shipped(t), "spells.json", func(document map[string]any) {
+		document["fire-bolt"].(map[string]any)["unlock_level"] = 9999.0
+	})
+	if _, err := Parse(past); err == nil || !strings.Contains(err.Error(), "past the level cap") {
+		t.Fatalf("content unlocking past the cap was accepted: %v", err)
+	}
+}
+
+// The starter kit exists so a zero-material character is combat-capable
+// immediately. A draw too small to fill the bar would leave it with holes.
+func TestProgressionRejectsACurveOrKitThatCannotWork(t *testing.T) {
+	small := edit(t, shipped(t), "progression.json", func(document map[string]any) {
+		document["starter_kit"] = map[string]any{"unlocks": 1.0}
+	})
+	if _, err := Parse(small); err == nil || !strings.Contains(err.Error(), "cannot fill the") {
+		t.Fatalf("a starter kit too small for the bar was accepted: %v", err)
+	}
+	unpriced := edit(t, shipped(t), "progression.json", func(document map[string]any) {
+		delete(document["sources"].(map[string]any), "harvest")
+	})
+	if _, err := Parse(unpriced); err == nil || !strings.Contains(err.Error(), `source "harvest"`) {
+		t.Fatalf("an unpriced XP source was accepted: %v", err)
+	}
+	unknown := edit(t, shipped(t), "progression.json", func(document map[string]any) {
+		document["sources"].(map[string]any)["duelling"] = 5.0
+	})
+	if _, err := Parse(unknown); err == nil || !strings.Contains(err.Error(), "not one the simulation awards") {
+		t.Fatalf("an XP source nothing awards was accepted: %v", err)
+	}
+	shrinking := edit(t, shipped(t), "progression.json", func(document map[string]any) {
+		document["growth"] = 0.5
+	})
+	if _, err := Parse(shrinking); err == nil || !strings.Contains(err.Error(), "at least 1") {
+		t.Fatalf("a curve where a later level costs less was accepted: %v", err)
+	}
+}
+
 // A gadget is identity over one ability, exactly like a spell, and it is the
 // Gunslinger's slot kind alone.
 func TestGadgetRowsAreValidatedLikeSpells(t *testing.T) {

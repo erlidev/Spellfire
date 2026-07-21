@@ -116,14 +116,18 @@ through the authorization wrapper; client visibility alone never grants access.
 authors the rows; an empty slot performs nothing rather than erroring. A Mage's slot one falls back to
 its staff's declared spell, so a set emptied by a content withdrawal can still fight. Loadouts cannot
 be edited outside the world at all — there is no HTTP mutation path — so logging out in the Deadlands
-is not a way to respec. Keystone slots wait on Phase 2.7, and the unlock ledger that will narrow the
-equippable set from "every live row" to "what this character owns" is Phase 2.2.
+is not a way to respec. Keystone slots wait on Phase 2.7. The equippable set is narrowed from "every
+live row" to "what this character owns" by the Phase 2.2 unlock ledger.
 
 ### 2.2 Unlock ledger & starter kit
-- [ ] Flat permanent unlock ledger for gun parts, spells, and keystone IDs ([model.go:18-25](server/internal/model/model.go#L18-L25) holds only level/XP)
-- [ ] XP sources and a level → unlock mapping; level currently drives nothing
-- [ ] Starter kit on creation: one random basic class weapon + a random set of low-tier unlocks ([progression-and-crafting.md](docs/game/design/progression-and-crafting.md#starter-kit))
-- [ ] Test: a zero-material character can fill a coherent loadout immediately
+- [x] Flat permanent unlock ledger for gun parts, spells, and keystone IDs — sorted content IDs on the character record, never shortened ([model.go](server/internal/model/model.go), [progression.go](server/internal/progression/progression.go), [architecture.md](docs/architecture.md#progression-and-unlocks))
+- [x] XP sources and a level → unlock mapping: [progression.json](data/tuning/progression.json) prices the sources and holds the curve, while each weapon/spell/gadget row declares its own `unlock_level`, so `Tables.UnlocksThrough` derives the mapping with no second table to keep in step
+- [x] Starter kit on creation: one random basic class weapon + a random draw of low-tier unlocks, seeded from the character ID ([progression-and-crafting.md](docs/game/design/progression-and-crafting.md#starter-kit), `progression.StarterKit`, [api.go](server/internal/api/api.go))
+- [x] Level now drives something: `World.creditKill` awards `player_kill` XP to the [damage-credited](docs/architecture.md#damage-attribution-and-combat-log) killer, `progression.Advance` grants what the levels crossed unlock, and the engine persists and pushes the change as `SERVER_PROGRESS`
+- [x] `loadout.Equippable`/`Validate`/`Resolve` intersect with the ledger, so unowned content is refused on the mutation path rather than merely hidden by the menu
+- [x] Test: a zero-material character can fill a coherent loadout immediately ([progression_test.go](server/internal/progression/progression_test.go)), plus starter-kit stability/randomness, level grants, ledger-gated validation, and the separate progression save path
+
+Only `player_kill` has a trigger: mob kills, harvesting, and outpost discovery are priced in the table and awarded by Phases 4.3, 4.1, and 3, and Phase 4.4 tunes the curve against the pacing targets. Keystone IDs share the ledger's shape but have no rows until Phase 2.7. The basic sets are one weapon per class and one spell, so today's draw is nearly deterministic; the pools widen with Phases 2.4 and 2.5 without touching the draw.
 
 ### 2.3 Slotted-blueprint crafting
 - [ ] Blueprint + slot + component definitions with material costs and **behavioural** (not power) effects ([progression-and-crafting.md](docs/game/design/progression-and-crafting.md#slotted-blueprint-crafting))

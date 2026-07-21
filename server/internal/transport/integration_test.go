@@ -35,7 +35,7 @@ func TestWebSocketAuthenticatedJoinReceivesWelcome(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	character := model.Character{ID: auth.NewID(), AccountID: accountID, Name: "Socket Hero", Class: model.Gunslinger, Level: 1}
+	character := model.Character{ID: auth.NewID(), AccountID: accountID, Name: "Socket Hero", Class: model.Gunslinger, Progress: model.Progress{Level: 1}}
 	if err := data.CreateCharacter(context.Background(), character); err != nil {
 		t.Fatal(err)
 	}
@@ -134,7 +134,7 @@ func TestWebSocketDisconnectPersistsWorldPosition(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	character := model.Character{ID: auth.NewID(), AccountID: accountID, Name: "Field Hand", Class: model.Gunslinger, Level: 1}
+	character := model.Character{ID: auth.NewID(), AccountID: accountID, Name: "Field Hand", Class: model.Gunslinger, Progress: model.Progress{Level: 1}}
 	if err := data.CreateCharacter(ctx, character); err != nil {
 		t.Fatal(err)
 	}
@@ -230,7 +230,7 @@ func TestWebSocketDisconnectLeavesTheBodyBehindBriefly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	character := model.Character{ID: auth.NewID(), AccountID: accountID, Name: "Combat Logger", Class: model.Gunslinger, Level: 1}
+	character := model.Character{ID: auth.NewID(), AccountID: accountID, Name: "Combat Logger", Class: model.Gunslinger, Progress: model.Progress{Level: 1}}
 	if err := data.CreateCharacter(ctx, character); err != nil {
 		t.Fatal(err)
 	}
@@ -296,8 +296,8 @@ func TestWebSocketRefusesASecondCharacterOnTheSameAccount(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	first := model.Character{ID: auth.NewID(), AccountID: accountID, Name: "First Hero", Class: model.Gunslinger, Level: 1}
-	second := model.Character{ID: auth.NewID(), AccountID: accountID, Name: "Second Hero", Class: model.Mage, Level: 1}
+	first := model.Character{ID: auth.NewID(), AccountID: accountID, Name: "First Hero", Class: model.Gunslinger, Progress: model.Progress{Level: 1}}
+	second := model.Character{ID: auth.NewID(), AccountID: accountID, Name: "Second Hero", Class: model.Mage, Progress: model.Progress{Level: 1}}
 	for _, character := range []model.Character{first, second} {
 		if err := data.CreateCharacter(ctx, character); err != nil {
 			t.Fatal(err)
@@ -459,7 +459,7 @@ func mage(t *testing.T, ctx context.Context, data store.Store, authService *auth
 	if err != nil {
 		t.Fatal(err)
 	}
-	character := model.Character{ID: auth.NewID(), AccountID: accountID, Name: "Kit " + email[:4], Class: model.Mage, Level: 1}
+	character := model.Character{ID: auth.NewID(), AccountID: accountID, Name: "Kit " + email[:4], Class: model.Mage, Progress: model.Progress{Level: 1}}
 	if err := data.CreateCharacter(ctx, character); err != nil {
 		t.Fatal(err)
 	}

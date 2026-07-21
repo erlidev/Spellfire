@@ -22,7 +22,8 @@ func (c Class) Valid() bool { return c == Gunslinger || c == Mage }
 //	2  adds saved world position, carried materials, and unlocked outposts
 //	3  adds the last-seen stamp that decides whether the position still holds
 //	4  adds the equipped loadout: weapon, gadget slots, and spell slots
-const CharacterSchemaVersion = 4
+//	5  adds the permanent unlock ledger
+const CharacterSchemaVersion = 5
 
 type Account struct {
 	ID           string
@@ -80,13 +81,32 @@ type CharacterState struct {
 	Loadout Loadout
 }
 
+// Progress is the permanent character axis: the level reached, the XP banked
+// toward the next one, and the flat unlock ledger. It stores IDs and counts
+// only, so a balance patch retunes what a character owns without touching the
+// record. It is embedded in Character, and its fields marshal flat.
+type Progress struct {
+	Level int `json:"level"`
+	XP    int `json:"xp"`
+	// Unlocks is every permanently owned weapon, spell, and gadget ID, sorted.
+	// It is never shortened: content is retired onto a replacement or a refund,
+	// never confiscated.
+	Unlocks []string `json:"unlocks"`
+}
+
+// Clone copies the ledger so a stored progression cannot be mutated through a
+// reference the world handed out.
+func (p Progress) Clone() Progress {
+	p.Unlocks = append([]string(nil), p.Unlocks...)
+	return p
+}
+
 type Character struct {
-	ID            string         `json:"id"`
-	AccountID     string         `json:"-"`
-	Name          string         `json:"name"`
-	Class         Class          `json:"class"`
-	Level         int            `json:"level"`
-	XP            int            `json:"xp"`
+	ID        string `json:"id"`
+	AccountID string `json:"-"`
+	Name      string `json:"name"`
+	Class     Class  `json:"class"`
+	Progress
 	SchemaVersion int            `json:"-"`
 	State         CharacterState `json:"-"`
 }
@@ -115,6 +135,12 @@ func (c Character) Migrate() (Character, error) {
 			// class default on the next join, which is exactly what the
 			// character was already fighting with.
 			c.State.Loadout = Loadout{}
+		case 4:
+			// v4 predates the unlock ledger. An empty ledger is rolled into a
+			// starter kit and topped up with everything the level already
+			// grants, which needs the tuning tables and so happens where the
+			// character is used rather than here.
+			c.Unlocks = nil
 		}
 		c.SchemaVersion++
 	}

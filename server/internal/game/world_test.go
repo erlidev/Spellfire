@@ -43,7 +43,7 @@ func starterDamage(w *World, class model.Class) float64 {
 }
 
 func addTestPlayer(world *World, id string, class model.Class, position Vec, now time.Time) *Player {
-	p := world.AddPlayer(model.Character{ID: id, Name: id, Class: class, Level: 1}, now)
+	p := world.AddPlayer(model.Character{ID: id, Name: id, Class: class, Progress: model.Progress{Level: 1}}, now)
 	p.Position = position
 	world.recordHistory(p, now)
 	return p

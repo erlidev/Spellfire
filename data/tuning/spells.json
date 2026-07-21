@@ -4,6 +4,7 @@
     "element": "fire",
     "tier": 1,
     "starter": true,
+    "unlock_level": 2,
     "ability": "fire-bolt-cast"
   }
 }

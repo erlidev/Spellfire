@@ -1,0 +1,14 @@
+{
+  "max_level": 30,
+  "base_xp": 120,
+  "growth": 1.18,
+  "sources": {
+    "player_kill": 45,
+    "mob_kill": 15,
+    "harvest": 8,
+    "discovery": 150
+  },
+  "starter_kit": {
+    "unlocks": 6
+  }
+}
