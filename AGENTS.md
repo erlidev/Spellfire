@@ -1,6 +1,6 @@
 # Project: SpellFire
 
-See @README.md for a project overview. Use `/docs/architecture.md` for the codebase details, and `/docs/gdd.md` for the game design document.
+See @README.md for a project overview. Use `/docs/architecture.md` for codebase details, `/docs/game/design/` for game design, and `/docs/game/ui/` for the user-facing specification.
 
 ## Project-Specific Instructions
 - Update the `/docs` with the appropriate information every time a feature or refactor is implemented.

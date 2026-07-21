@@ -2,7 +2,7 @@
 
 SpellFire is a playable browser-based multiplayer foundation: a Pixi.js/TypeScript client connects to a server-authoritative Go simulation over binary WebSockets. Account and character metadata is persisted in SQLite. All in-world visuals are built at runtime with Pixi geometry primitives; there are no bitmap assets in the play space.
 
-This document describes what is implemented in version 0.1. The GDD remains authoritative for game rules and `user-facing-specification.md` remains authoritative for presentation.
+This document describes what is implemented in version 0.1. [`game/design/`](game/design/README.md) is authoritative for game rules, and [`game/ui/`](game/ui/README.md) is authoritative for player-facing presentation.
 
 ## Repository layout
 
@@ -66,7 +66,7 @@ Implemented authoritative rules include:
 - no PvP damage inside the protected hub/fringe, while projectiles may still resolve visibly;
 - deterministic ordering for player and projectile processing and deterministic tree generation.
 
-Balance values live in `game.Tuning`; process-level rates and AOI/rewind values can be overridden through configuration. Persistent records store references and progression fields, not computed combat values, matching GDD §6.3.
+Balance values live in `game.Tuning`; process-level rates and AOI/rewind values can be overridden through configuration. Persistent records store references and progression fields, not computed combat values, matching the [progression persistence contract](game/design/progression-and-crafting.md#persistence-and-versioning).
 
 ## Network model
 
@@ -103,7 +103,7 @@ The world retains a short timestamped position history for every player. When fi
 4. fast-forwards it in fixed substeps, testing against interpolated historical target positions and current static cover;
 5. inserts a surviving projectile into the live simulation.
 
-This preserves the GDD’s projectile dodge vector while compensating for reasonable network delay. It does not turn ordinary weapons into hitscan. Equal-timestamp history samples prefer the latest state, which is important for respawns and authoritative repositioning.
+This preserves the [projectile dodge requirement](game/design/invariants.md) while compensating for reasonable network delay. It does not turn ordinary weapons into hitscan. Equal-timestamp history samples prefer the latest state, which is important for respawns and authoritative repositioning.
 
 ### Backpressure and connection lifecycle
 
@@ -149,4 +149,4 @@ Run `make test` for Go tests, frontend tests, and strict TypeScript checking. Ru
 
 The foundation implements the requested accounts, multiplayer transport, authoritative combat/netcode, both player classes, procedural world, and static collidable trees. The following GDD systems are represented in UI/reference language but are not falsely presented as functional: crafting recipes and safe-zone loadout mutation, harvesting/material persistence and death drops, squads and squad loot, Sentry mobs, outposts/travel, marketplace, and world bosses. Their rules or values remain open in the source specifications, and each should be added as a separate authoritative module rather than embedded in `World`.
 
-Other known limits are one world process, no spatial index beyond AOI distance checks, no database-backed character position, no combat-log grace period, and no distributed session cache. The current O(players + projectiles + colliders) per-client snapshot path is appropriate for development and modest concurrency; reaching the GDD’s 100+ player target under battle density requires load testing, a spatial hash/quadtree, snapshot deltas, and bandwidth budgets before production claims are made.
+Other known limits are one world process, no spatial index beyond AOI distance checks, no database-backed character position, no combat-log grace period, and no distributed session cache. The current O(players + projectiles + colliders) per-client snapshot path is appropriate for development and modest concurrency; reaching the [100+ player design target](game/design/world.md) under battle density requires load testing, a spatial hash/quadtree, snapshot deltas, and bandwidth budgets before production claims are made.
