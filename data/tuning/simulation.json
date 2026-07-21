@@ -1,0 +1,7 @@
+{
+  "tick_rate": 60,
+  "send_rate": 20,
+  "aoi_radius": 1200,
+  "max_rewind_ms": 200,
+  "interpolation_delay_ms": 100
+}

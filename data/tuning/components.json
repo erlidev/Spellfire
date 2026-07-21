@@ -1,0 +1,13 @@
+{
+  "blueprints": {
+    "gun": {
+      "name": "Gun",
+      "slots": ["muzzle", "barrel", "scope", "trigger", "magazine"]
+    },
+    "staff": {
+      "name": "Staff",
+      "slots": ["core", "focus", "conduit"]
+    }
+  },
+  "components": {}
+}

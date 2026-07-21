@@ -8,6 +8,8 @@ This document describes what is implemented in version 0.1. [`game/design/`](gam
 
 ```text
 proto/game.proto                    Canonical WebSocket schema
+data/tuning/                        Versioned balance tables, read by both server and client
+data/data.go                        Embeds the tables into the Go binary
 server/cmd/spellfire/               Process entry point and static-client hosting
 server/internal/api/                JSON account and character HTTP API
 server/internal/auth/               Password hashing, opaque sessions, authentication
@@ -17,7 +19,9 @@ server/internal/model/              Persistent domain types
 server/internal/protocol/           Protobuf wire codec
 server/internal/store/              Persistence interface and SQLite implementation
 server/internal/transport/          WebSocket lifecycle and origin enforcement
+server/internal/tuning/             Tuning-table schema, loader, and validation
 web/src/api.ts                      Typed account/character API client
+web/src/tuning.ts                   Client-side view of the same tuning tables
 web/src/net/                        Protobuf codec and reconnecting socket
 web/src/game/prediction.ts          Local prediction and server reconciliation
 web/src/game/view.ts                Procedural Pixi renderer and interpolation
@@ -67,7 +71,19 @@ Implemented authoritative rules include:
 - no PvP damage inside the protected hub/fringe, while projectiles may still resolve visibly;
 - deterministic ordering for player and projectile processing and deterministic tree generation.
 
-Balance values live in `game.Tuning`; process-level rates and AOI/rewind values can be overridden through configuration. Persistent records store references and progression fields, not computed combat values, matching the [progression persistence contract](game/design/progression-and-crafting.md#persistence-and-versioning).
+Balance values live in the [tuning tables](#tuning-tables), never in the simulation source. `game.Tuning` is a derived runtime view of them: `game.FromTables` fills it, and only the process-level rates (tick, send, AOI, rewind) are overridden afterwards from configuration. Persistent records store references and progression fields, not computed combat values, matching the [progression persistence contract](game/design/progression-and-crafting.md#persistence-and-versioning).
+
+## Tuning tables
+
+`data/tuning/*.json` holds every balance number as versioned data. The Go server embeds the directory through `data/data.go` and parses it in `server/internal/tuning`; the Vite client imports the same files from `web/src/tuning.ts`. One directory, two consumers, no duplicated literal — a balance edit moves the authoritative simulation, client prediction, and the renderer together. `data/tuning/README.md` documents the file-by-file schema and the editing rules.
+
+The tables cover simulation rates, world geometry and danger bands, the player body and universal dash, damage bands, elements, weapons, spells, blueprint/component layouts, material grades, mobs, and biomes. Rows exist only where a design document has settled the content: the two starter items are live, while component, material, and biome-placement rows arrive with the phases that consume them.
+
+Damage is the clearest expression of the contract. No weapon or spell carries a damage number; each points at a `combat.damage_bands` row, and a staff carries no combat numbers at all — it delegates cadence, cost, damage band, and projectile to the spell it casts. Editing `damage_bands.standard.damage_per_hit` therefore retunes both classes at once, and a persisted character — which stores only IDs — needs no migration. `server/internal/game` has a test that replays stored character records against an edited copy of the tables to hold that invariant.
+
+Loading validates rather than trusts. Unknown JSON fields are rejected, every cross-table reference is resolved, danger bands must run outward from the hub to the rim with contiguous PvP protection, projectile kinds must be unique across tables so the renderer can resolve a silhouette from a snapshot alone, and every damaging row must declare both a shared damage band and a recognised dodge vector — a projectile with zero travel speed is rejected as instant point-and-click damage. All problems are reported at once. `manifest.json` carries a content `version`, bumped on any balance edit and intended to drive the global respec/refund, and a `schema_version` that must match `tuning.SchemaVersion`; a mismatch fails the load with a request for the forward migration.
+
+Because the tables are bundled into the client at build time, the server and the client must ship from the same build — which `make build` and the Dockerfile both do. Delivering tables to an already-running client, so that simulation constants can move without redeploying, is the separate versioned welcome/tuning message tracked in [`TODO.md`](../TODO.md) Phase 8.
 
 ## Network model
 
@@ -125,12 +141,12 @@ Desktop controls are WASD/arrows, pointer aim/fire, Space dash, and R reload. To
 | `SPELLFIRE_ADDRESS` | `:8080` | HTTP/WebSocket listen address |
 | `SPELLFIRE_DATABASE` | `spellfire.db` | SQLite path; use `:memory:` only for one-connection tests |
 | `SPELLFIRE_WEB_ROOT` | `dist` | Built frontend directory |
-| `SPELLFIRE_TICK_RATE` | `60` | Authoritative ticks per second |
-| `SPELLFIRE_SEND_RATE` | `20` | Snapshots per second |
-| `SPELLFIRE_AOI_RADIUS` | `1200` | Per-player interest radius |
-| `SPELLFIRE_MAX_REWIND_MS` | `200` | Maximum accepted lag-compensation age |
+| `SPELLFIRE_TICK_RATE` | `tick_rate` | Authoritative ticks per second |
+| `SPELLFIRE_SEND_RATE` | `send_rate` | Snapshots per second |
+| `SPELLFIRE_AOI_RADIUS` | `aoi_radius` | Per-player interest radius |
+| `SPELLFIRE_MAX_REWIND_MS` | `max_rewind_ms` | Maximum accepted lag-compensation age |
 
-Tick and send rates must remain evenly compatible for predictable snapshot pacing. Changing simulation speed requires coordinating the client prediction constants; production should expose those values through a versioned welcome/tuning message before making them live-configurable.
+The last four default to the matching field in `data/tuning/simulation.json` (60, 20, 1200, and 200 as shipped), so an unset environment reproduces exactly what the client bundled. Tick and send rates must remain evenly compatible for predictable snapshot pacing; the loader rejects a table whose tick rate is not a whole multiple of its send rate. Overriding either through the environment moves the server away from the client's compiled-in prediction constants, so production should expose those values through a versioned welcome/tuning message before making them live-configurable.
 
 ## Container deployment
 
@@ -144,7 +160,7 @@ The service publishes no host port. It attaches to an external Docker network na
 
 ## Testing and verification
 
-Backend tests cover SQLite constraints and account isolation, password/session lifecycle, HTTP validation and non-disclosing credential errors, Protobuf parsing and unknown/truncated fields, fixed-step movement, normalized diagonals, tree/world collision, dash edges/cooldowns, PvP protection, projectile damage, rewind, death/respawn, resources/reload, AOI, engine replacement/backpressure behavior, and WebSocket origin rules. Frontend tests cover wire compatibility, malformed frames, movement/dash prediction, reconciliation replay, and predicted tree collision.
+Backend tests cover SQLite constraints and account isolation, password/session lifecycle, HTTP validation and non-disclosing credential errors, Protobuf parsing and unknown/truncated fields, fixed-step movement, normalized diagonals, tree/world collision, dash edges/cooldowns, PvP protection, projectile damage, rewind, death/respawn, resources/reload, AOI, engine replacement/backpressure behavior, WebSocket origin rules, tuning-table validation and rejection cases, the starter kit's raw time-to-kill against its declared band, and the one-row-rebalances-everything invariant. Frontend tests cover wire compatibility, malformed frames, movement/dash prediction, reconciliation replay, predicted tree collision, and the client's derivation of radii, starter items, resources, and projectile silhouettes from the shared tables.
 
 Run `make test` for Go tests, frontend tests, and strict TypeScript checking. Run `make build` to produce `dist/` and compile the Go server.
 

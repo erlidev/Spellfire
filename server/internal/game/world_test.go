@@ -7,6 +7,7 @@ import (
 
 	"spellfire/server/internal/model"
 	"spellfire/server/internal/protocol"
+	"spellfire/server/internal/tuning"
 )
 
 func testWorld() (*World, time.Time) {
@@ -15,6 +16,25 @@ func testWorld() (*World, time.Time) {
 	world := NewWorld(tuning)
 	world.colliders = nil
 	return world, time.Unix(1_700_000_000, 0)
+}
+
+// starterWeapon and starterShot resolve what a fresh character of the class
+// actually carries, so the tests assert against the tuning tables rather than
+// against numbers copied out of them.
+func starterWeapon(w *World, class model.Class) tuning.Weapon {
+	weapon, ok := w.tuning.Tables.StarterWeapon(string(class))
+	if !ok {
+		panic("no starter weapon for " + class)
+	}
+	return weapon
+}
+
+func starterShot(w *World, class model.Class) tuning.Shot {
+	shot, ok := w.tuning.Tables.Shot(starterWeapon(w, class))
+	if !ok {
+		panic("unresolvable starter shot for " + class)
+	}
+	return shot
 }
 
 func addTestPlayer(world *World, id string, class model.Class, position Vec, now time.Time) *Player {
@@ -132,10 +152,10 @@ func TestProjectileCombatOutsidePvPProtection(t *testing.T) {
 	for i := 1; i <= 30 && target.Health == w.tuning.MaxHealth; i++ {
 		w.Step(now.Add(time.Duration(i) * time.Second / 60))
 	}
-	if target.Health != w.tuning.MaxHealth-w.tuning.ProjectileDamage {
+	if target.Health != w.tuning.MaxHealth-starterShot(w, model.Gunslinger).Damage {
 		t.Fatalf("target health = %f", target.Health)
 	}
-	if shooter.Ammo >= 10 {
+	if shooter.Ammo >= starterWeapon(w, model.Gunslinger).MagazineSize {
 		t.Fatalf("firing did not consume ammo: %d", shooter.Ammo)
 	}
 }
@@ -165,7 +185,7 @@ func TestServerRewindHitsHistoricalPosition(t *testing.T) {
 	w.SetPlayerPosition(target.ID, Vec{1300, 200}, now)
 	w.ApplyInput(shooter.ID, protocol.Input{Sequence: 1, Buttons: ButtonFire, AimX: 1, ClientTimeMS: uint64(shotAt.UnixMilli())})
 	w.Step(now)
-	if target.Health != w.tuning.MaxHealth-w.tuning.ProjectileDamage {
+	if target.Health != w.tuning.MaxHealth-starterShot(w, model.Gunslinger).Damage {
 		t.Fatalf("rewound shot missed, health = %f", target.Health)
 	}
 }
@@ -174,7 +194,7 @@ func TestDeathAndRespawnResetAuthoritativeState(t *testing.T) {
 	w, now := testWorld()
 	shooter := addTestPlayer(w, "shooter", model.Gunslinger, Vec{1200, 0}, now)
 	target := addTestPlayer(w, "target", model.Mage, Vec{1280, 0}, now)
-	target.Health = w.tuning.ProjectileDamage
+	target.Health = starterShot(w, model.Gunslinger).Damage
 	w.ApplyInput(shooter.ID, protocol.Input{Sequence: 1, Buttons: ButtonFire, AimX: 1, ClientTimeMS: uint64(now.UnixMilli())})
 	w.Step(now)
 	for i := 1; i <= 10 && target.Alive; i++ {
@@ -196,31 +216,34 @@ func TestDeathAndRespawnResetAuthoritativeState(t *testing.T) {
 
 func TestResourcesEnforceReloadAndManaCosts(t *testing.T) {
 	w, now := testWorld()
+	rifle := starterWeapon(w, model.Gunslinger)
+	cadence := starterShot(w, model.Gunslinger).Interval + time.Millisecond
 	gunner := addTestPlayer(w, "gunner", model.Gunslinger, Vec{1500, 0}, now)
-	for i := 0; i < 10; i++ {
-		at := now.Add(time.Duration(i) * 301 * time.Millisecond)
+	for i := 0; i < rifle.MagazineSize; i++ {
+		at := now.Add(time.Duration(i) * cadence)
 		w.ApplyInput(gunner.ID, protocol.Input{Sequence: uint32(i + 1), Buttons: ButtonFire, AimX: 1, ClientTimeMS: uint64(at.UnixMilli())})
 		w.Step(at)
 	}
 	if gunner.Ammo != 0 {
 		t.Fatalf("ammo after magazine = %d", gunner.Ammo)
 	}
-	at := now.Add(3100 * time.Millisecond)
-	w.ApplyInput(gunner.ID, protocol.Input{Sequence: 11, Buttons: ButtonFire, AimX: 1, ClientTimeMS: uint64(at.UnixMilli())})
+	at := now.Add(time.Duration(rifle.MagazineSize+1) * cadence)
+	w.ApplyInput(gunner.ID, protocol.Input{Sequence: uint32(rifle.MagazineSize + 1), Buttons: ButtonFire, AimX: 1, ClientTimeMS: uint64(at.UnixMilli())})
 	w.Step(at)
 	if gunner.ReloadEnds.IsZero() {
 		t.Fatal("empty gun did not begin reload")
 	}
-	w.ApplyInput(gunner.ID, protocol.Input{Sequence: 12, AimX: 1})
-	w.Step(at.Add(w.tuning.ReloadDuration))
-	if gunner.Ammo != 10 {
+	w.ApplyInput(gunner.ID, protocol.Input{Sequence: uint32(rifle.MagazineSize + 2), AimX: 1})
+	w.Step(at.Add(rifle.ReloadDuration()))
+	if gunner.Ammo != rifle.MagazineSize {
 		t.Fatalf("reloaded ammo = %d", gunner.Ammo)
 	}
+	cost := starterShot(w, model.Mage).ManaCost
 	mage := addTestPlayer(w, "mage", model.Mage, Vec{1800, 0}, now)
-	mage.Mana = 12
+	mage.Mana = cost
 	w.ApplyInput(mage.ID, protocol.Input{Sequence: 1, Buttons: ButtonFire, AimX: 1, ClientTimeMS: uint64(now.UnixMilli())})
 	w.Step(now.Add(5 * time.Second))
-	if mage.Mana >= 12 {
+	if mage.Mana >= cost {
 		t.Fatalf("spell did not consume mana: %f", mage.Mana)
 	}
 }

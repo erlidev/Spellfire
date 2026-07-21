@@ -4,6 +4,8 @@ import (
 	"os"
 	"strconv"
 	"time"
+
+	"spellfire/server/internal/tuning"
 )
 
 type Config struct {
@@ -18,15 +20,18 @@ type Config struct {
 	ShutdownTimeout time.Duration
 }
 
-func Load() Config {
+// Load reads deployment configuration. The netcode defaults come from the
+// simulation tuning table, so an unset environment reproduces exactly what the
+// tables — and therefore the client bundle — declare.
+func Load(simulation tuning.Simulation) Config {
 	return Config{
 		Address:         env("SPELLFIRE_ADDRESS", ":8080"),
 		DatabasePath:    env("SPELLFIRE_DATABASE", "spellfire.db"),
 		WebRoot:         env("SPELLFIRE_WEB_ROOT", "dist"),
-		TickRate:        envInt("SPELLFIRE_TICK_RATE", 60),
-		SendRate:        envInt("SPELLFIRE_SEND_RATE", 20),
-		AOIRadius:       float64(envInt("SPELLFIRE_AOI_RADIUS", 1200)),
-		MaxRewind:       time.Duration(envInt("SPELLFIRE_MAX_REWIND_MS", 200)) * time.Millisecond,
+		TickRate:        envInt("SPELLFIRE_TICK_RATE", simulation.TickRate),
+		SendRate:        envInt("SPELLFIRE_SEND_RATE", simulation.SendRate),
+		AOIRadius:       float64(envInt("SPELLFIRE_AOI_RADIUS", int(simulation.AOIRadius))),
+		MaxRewind:       time.Duration(envInt("SPELLFIRE_MAX_REWIND_MS", simulation.MaxRewindMS)) * time.Millisecond,
 		SessionLifetime: 7 * 24 * time.Hour,
 		ShutdownTimeout: 5 * time.Second,
 	}

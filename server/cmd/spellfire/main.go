@@ -17,10 +17,16 @@ import (
 	"spellfire/server/internal/game"
 	"spellfire/server/internal/store"
 	"spellfire/server/internal/transport"
+	"spellfire/server/internal/tuning"
 )
 
 func main() {
-	cfg := config.Load()
+	tables, err := tuning.Load()
+	if err != nil {
+		slog.Error("load tuning tables", "error", err)
+		os.Exit(1)
+	}
+	cfg := config.Load(tables.Simulation)
 	data, err := store.OpenSQLite(cfg.DatabasePath)
 	if err != nil {
 		slog.Error("open database", "error", err)
@@ -28,9 +34,9 @@ func main() {
 	}
 	defer data.Close()
 	authService := auth.New(data, cfg.SessionLifetime)
-	tuning := game.DefaultTuning()
-	tuning.TickRate, tuning.SendRate, tuning.AOIRadius, tuning.MaxRewind = cfg.TickRate, cfg.SendRate, cfg.AOIRadius, cfg.MaxRewind
-	engine := game.NewEngine(tuning)
+	balance := game.FromTables(tables)
+	balance.TickRate, balance.SendRate, balance.AOIRadius, balance.MaxRewind = cfg.TickRate, cfg.SendRate, cfg.AOIRadius, cfg.MaxRewind
+	engine := game.NewEngine(balance)
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	go engine.Run(ctx)
@@ -40,7 +46,8 @@ func main() {
 	mux.Handle("/", spaHandler(cfg.WebRoot))
 	server := &http.Server{Addr: cfg.Address, Handler: securityHeaders(mux), ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 60 * time.Second}
 	go func() {
-		slog.Info("SpellFire server listening", "address", cfg.Address, "tick_rate", cfg.TickRate, "send_rate", cfg.SendRate)
+		slog.Info("SpellFire server listening", "address", cfg.Address, "tick_rate", cfg.TickRate, "send_rate", cfg.SendRate,
+			"tuning_version", tables.Manifest.Version, "tuning_schema", tables.Manifest.SchemaVersion)
 		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			slog.Error("serve", "error", err)
 			stop()

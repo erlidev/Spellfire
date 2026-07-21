@@ -1,0 +1,7 @@
+{
+  "emberlands": { "name": "Emberlands", "element": "fire" },
+  "rimeshelf": { "name": "Rimeshelf", "element": "frost" },
+  "stormflats": { "name": "Stormflats", "element": "storm" },
+  "arcane-hollow": { "name": "Arcane Hollow", "element": "arcane" },
+  "stonereach": { "name": "Stonereach", "element": "earth" }
+}

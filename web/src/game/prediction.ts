@@ -1,13 +1,15 @@
+import { combat, simulation, world } from "../tuning";
 import { Buttons, type Collider, type Entity, type InputFrame } from "../types";
 
-const speed = 260;
-const radius = 20;
-const dashDistance = 105;
-const dashCooldownMS = 2200;
+// Every constant below is derived from the shared tuning tables, so prediction
+// cannot drift from the authoritative simulation through an edited literal.
+const tickRate = simulation.tick_rate;
+const { radius, speed } = combat.player;
+const { distance: dashDistance, duration_ms: dashDurationMS, cooldown_ms: dashCooldownMS } = combat.dash;
 // Mirrors the server: the dash covers dashDistance over a whole number of ticks.
-const dashTicks = 8;
-const dashSpeed = dashDistance / (dashTicks / 60);
-const worldRadius = 3000;
+const dashTicks = Math.max(1, Math.round((dashDurationMS / 1000) * tickRate));
+const dashSpeed = dashDistance / (dashTicks / tickRate);
+const worldRadius = world.radius;
 
 interface Motion { x: number; y: number }
 interface Pending { input: InputFrame; motion: Motion }
@@ -40,10 +42,10 @@ export class Predictor {
     }
     let motion: Motion;
     if (this.dashTicksLeft > 0) {
-      motion = { x: this.dashDirX * dashSpeed / 60, y: this.dashDirY * dashSpeed / 60 };
+      motion = { x: this.dashDirX * dashSpeed / tickRate, y: this.dashDirY * dashSpeed / tickRate };
       this.dashTicksLeft--;
     } else {
-      motion = { x: dx * speed / 60, y: dy * speed / 60 };
+      motion = { x: dx * speed / tickRate, y: dy * speed / tickRate };
     }
     this.applyMotion(motion);
     this.previousButtons = buttons;

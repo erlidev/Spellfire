@@ -1,0 +1,22 @@
+{
+  "grades": {
+    "common": { "name": "Common", "tier": 1 },
+    "uncommon": { "name": "Uncommon", "tier": 2 },
+    "rare": { "name": "Rare", "tier": 3 }
+  },
+  "kinds": {
+    "structural": {
+      "name": "Structural",
+      "universal": true,
+      "source": "node",
+      "summary": "Common frame and casing stock; available in every biome so geography never hard-locks a build."
+    },
+    "aligned": {
+      "name": "Element-aligned",
+      "universal": false,
+      "source": "mob",
+      "summary": "Biome-gated, element-typed stock for element-specific recipes."
+    }
+  },
+  "materials": {}
+}

@@ -8,6 +8,7 @@ import (
 
 	"spellfire/server/internal/model"
 	"spellfire/server/internal/protocol"
+	"spellfire/server/internal/tuning"
 )
 
 const (
@@ -20,29 +21,39 @@ const (
 	ButtonReload uint32 = 64
 )
 
+// Tuning is the simulation's runtime view of the versioned tables. No balance
+// value is authored here: FromTables derives every field from a table row, so
+// editing a row changes the simulation without any code or character change.
+// Only the process-level rates are meant to be overridden after construction,
+// and only from deployment configuration.
 type Tuning struct {
-	TickRate, SendRate                  int
-	AOIRadius, WorldRadius              float64
-	SafeRadius, PvPRadius, PlayerRadius float64
-	PlayerSpeed, DashDistance           float64
-	DashDuration, DashCooldown          time.Duration
-	FireInterval                        time.Duration
-	ReloadDuration, MaxRewind           time.Duration
-	ProjectileSpeed, ProjectileLife     float64
-	ProjectileDamage, MaxHealth         float64
-	MaxMana, ManaRegen                  float64
+	Tables *tuning.Tables
+
+	TickRate, SendRate int
+	AOIRadius          float64
+	MaxRewind          time.Duration
+
+	WorldRadius, SafeRadius, PvPRadius float64
+	PlayerRadius, PlayerSpeed          float64
+	DashDistance                       float64
+	DashDuration, DashCooldown         time.Duration
+	MaxHealth, MaxMana, ManaRegen      float64
 }
 
-func DefaultTuning() Tuning {
+func FromTables(tables *tuning.Tables) Tuning {
+	body, dash := tables.Combat.Player, tables.Combat.Dash
 	return Tuning{
-		TickRate: 60, SendRate: 20, AOIRadius: 1200, WorldRadius: 3000, SafeRadius: 430, PvPRadius: 1000,
-		PlayerRadius: 20, PlayerSpeed: 260, DashDistance: 105,
-		DashDuration: 133 * time.Millisecond, DashCooldown: 2200 * time.Millisecond,
-		FireInterval: 300 * time.Millisecond, ReloadDuration: 1400 * time.Millisecond,
-		MaxRewind: 200 * time.Millisecond, ProjectileSpeed: 760, ProjectileLife: 1.5,
-		ProjectileDamage: 10, MaxHealth: 100, MaxMana: 100, ManaRegen: 13,
+		Tables:   tables,
+		TickRate: tables.Simulation.TickRate, SendRate: tables.Simulation.SendRate,
+		AOIRadius: tables.Simulation.AOIRadius, MaxRewind: tables.Simulation.MaxRewind(),
+		WorldRadius: tables.World.Radius, SafeRadius: tables.World.SafeRadius(), PvPRadius: tables.World.PvPRadius(),
+		PlayerRadius: body.Radius, PlayerSpeed: body.Speed,
+		DashDistance: dash.Distance, DashDuration: dash.Duration(), DashCooldown: dash.Cooldown(),
+		MaxHealth: body.MaxHealth, MaxMana: body.MaxMana, ManaRegen: body.ManaRegen,
 	}
 }
+
+func DefaultTuning() Tuning { return FromTables(tuning.MustLoad()) }
 
 type Vec struct{ X, Y float64 }
 
@@ -61,6 +72,7 @@ func (v Vec) Normalized() Vec {
 type Player struct {
 	ID, Name                        string
 	Class                           model.Class
+	WeaponID                        string
 	Position, Velocity, Aim         Vec
 	Health, Mana                    float64
 	Alive                           bool
@@ -115,12 +127,12 @@ type World struct {
 }
 
 func NewWorld(t Tuning) *World {
-	if t.TickRate <= 0 {
+	if t.Tables == nil || t.TickRate <= 0 {
 		t = DefaultTuning()
 	}
 	return &World{
 		tuning: t, players: make(map[string]*Player), projectiles: make(map[string]*Projectile),
-		colliders: generateTrees(t.WorldRadius, t.SafeRadius), history: make(map[string][]historySample),
+		colliders: generateTrees(t.Tables.World), history: make(map[string][]historySample),
 	}
 }
 
@@ -129,10 +141,27 @@ func (w *World) AddPlayer(character model.Character, now time.Time) *Player {
 		return existing
 	}
 	angle := float64(hash(character.ID)%628) / 100
-	p := &Player{ID: character.ID, Name: character.Name, Class: character.Class, Position: Vec{math.Cos(angle) * 170, math.Sin(angle) * 170}, Aim: Vec{1, 0}, Health: w.tuning.MaxHealth, Mana: w.tuning.MaxMana, Alive: true, Ammo: 10}
+	spawn := w.tuning.Tables.World.SpawnRadius
+	p := &Player{
+		ID: character.ID, Name: character.Name, Class: character.Class,
+		Position: Vec{math.Cos(angle) * spawn, math.Sin(angle) * spawn}, Aim: Vec{1, 0},
+		Health: w.tuning.MaxHealth, Mana: w.tuning.MaxMana, Alive: true,
+	}
+	// Until the Phase 2 loadout lands, the equipped weapon is the class starter
+	// row. It is a table reference, never a copy of its stats.
+	if weapon, ok := w.tuning.Tables.StarterWeapon(string(character.Class)); ok {
+		p.WeaponID, p.Ammo = weapon.ID, weapon.MagazineSize
+	}
 	w.players[p.ID] = p
 	w.recordHistory(p, now)
 	return p
+}
+
+// weapon resolves the player's equipped row from the tables each time it is
+// needed, so nothing caches a stat snapshot.
+func (w *World) weapon(p *Player) (tuning.Weapon, bool) {
+	weapon, ok := w.tuning.Tables.Weapons[p.WeaponID]
+	return weapon, ok
 }
 
 func (w *World) RemovePlayer(id string) { delete(w.players, id); delete(w.history, id) }
@@ -155,7 +184,10 @@ func (w *World) Respawn(id string, now time.Time) bool {
 		return false
 	}
 	p.Position, p.Velocity, p.DashDirection, p.DashTicksLeft = Vec{}, Vec{}, Vec{}, 0
-	p.Health, p.Mana, p.Alive, p.Ammo = w.tuning.MaxHealth, w.tuning.MaxMana, true, 10
+	p.Health, p.Mana, p.Alive = w.tuning.MaxHealth, w.tuning.MaxMana, true
+	if weapon, ok := w.weapon(p); ok {
+		p.Ammo = weapon.MagazineSize
+	}
 	p.NextFire, p.ReloadEnds, p.DashReady = now, now, now
 	w.recordHistory(p, now)
 	return true
@@ -218,12 +250,15 @@ func (w *World) stepPlayer(p *Player, now time.Time, dt float64) {
 	if p.Class == model.Mage {
 		p.Mana = math.Min(w.tuning.MaxMana, p.Mana+w.tuning.ManaRegen*dt)
 	}
-	if p.Class == model.Gunslinger && !p.ReloadEnds.IsZero() && !now.Before(p.ReloadEnds) {
-		p.Ammo = 10
-		p.ReloadEnds = time.Time{}
-	}
-	if p.Class == model.Gunslinger && p.Input.Buttons&ButtonReload != 0 && p.ReloadEnds.IsZero() && p.Ammo < 10 {
-		p.ReloadEnds = now.Add(w.tuning.ReloadDuration)
+	// Magazine size and reload time are weapon properties; a weapon without a
+	// magazine (a staff) never enters the reload path.
+	if weapon, ok := w.weapon(p); ok && weapon.MagazineSize > 0 {
+		if !p.ReloadEnds.IsZero() && !now.Before(p.ReloadEnds) {
+			p.Ammo, p.ReloadEnds = weapon.MagazineSize, time.Time{}
+		}
+		if p.Input.Buttons&ButtonReload != 0 && p.ReloadEnds.IsZero() && p.Ammo < weapon.MagazineSize {
+			p.ReloadEnds = now.Add(weapon.ReloadDuration())
+		}
 	}
 	if p.Input.Buttons&ButtonFire != 0 {
 		w.tryFire(p, now)
@@ -232,30 +267,41 @@ func (w *World) stepPlayer(p *Player, now time.Time, dt float64) {
 	p.Acknowledged = p.Input.Sequence
 }
 
+// tryFire spends the cost the equipped row declares. A weapon with a magazine
+// spends ammunition and reloads; one that casts a spell spends the spell's
+// mana. The branch is data, not class.
 func (w *World) tryFire(p *Player, now time.Time) {
 	if now.Before(p.NextFire) {
 		return
 	}
-	if p.Class == model.Gunslinger {
+	weapon, ok := w.weapon(p)
+	if !ok {
+		return
+	}
+	shot, ok := w.tuning.Tables.Shot(weapon)
+	if !ok {
+		return
+	}
+	if weapon.MagazineSize > 0 {
 		if !p.ReloadEnds.IsZero() {
 			return
 		}
 		if p.Ammo <= 0 {
-			p.ReloadEnds = now.Add(w.tuning.ReloadDuration)
+			p.ReloadEnds = now.Add(weapon.ReloadDuration())
 			return
 		}
 		p.Ammo--
-	} else {
-		if p.Mana < 12 {
+	} else if shot.ManaCost > 0 {
+		if p.Mana < shot.ManaCost {
 			return
 		}
-		p.Mana -= 12
+		p.Mana -= shot.ManaCost
 	}
-	p.NextFire = now.Add(w.tuning.FireInterval)
-	w.spawnRewoundProjectile(p, now)
+	p.NextFire = now.Add(shot.Interval)
+	w.spawnRewoundProjectile(p, shot, now)
 }
 
-func (w *World) spawnRewoundProjectile(p *Player, now time.Time) {
+func (w *World) spawnRewoundProjectile(p *Player, shot tuning.Shot, now time.Time) {
 	shotAt := time.UnixMilli(int64(p.Input.ClientTimeMS))
 	oldest := now.Add(-w.tuning.MaxRewind)
 	if shotAt.Before(oldest) {
@@ -265,13 +311,13 @@ func (w *World) spawnRewoundProjectile(p *Player, now time.Time) {
 		shotAt = now
 	}
 	origin := w.positionAt(p.ID, shotAt)
-	radius, speed, kind := 5.0, w.tuning.ProjectileSpeed, "bullet"
-	if p.Class == model.Mage {
-		radius, speed, kind = 9, speed*0.78, "fireball"
+	projectile := &Projectile{
+		ID: fmt.Sprintf("p-%d", w.nextProjectile), OwnerID: p.ID, Kind: shot.Projectile.Kind,
+		Radius: shot.Projectile.Radius, Damage: shot.Damage, Remaining: shot.Projectile.LifeSeconds,
+		Velocity: p.Aim.Mul(shot.Projectile.Speed),
 	}
-	projectile := &Projectile{ID: fmt.Sprintf("p-%d", w.nextProjectile), OwnerID: p.ID, Kind: kind, Radius: radius, Damage: w.tuning.ProjectileDamage, Remaining: w.tuning.ProjectileLife, Velocity: p.Aim.Mul(speed)}
 	w.nextProjectile++
-	projectile.Position = origin.Add(p.Aim.Mul(w.tuning.PlayerRadius + radius + 2))
+	projectile.Position = origin.Add(p.Aim.Mul(w.tuning.PlayerRadius + shot.Projectile.Radius + 2))
 	step := time.Second / time.Duration(w.tuning.TickRate)
 	for at := shotAt; at.Before(now); at = at.Add(step) {
 		duration := step
@@ -393,19 +439,28 @@ func (w *World) positionAt(id string, at time.Time) Vec {
 	return samples[len(samples)-1].position
 }
 
-func generateTrees(worldRadius, safeRadius float64) []Collider {
-	result := make([]Collider, 0, 72)
-	state := uint64(0x5eed5eed)
-	for len(result) < 72 {
+// generateTrees lays out deterministic static cover from the world table. The
+// same seed and margins produce the same forest on every process start.
+func generateTrees(world tuning.World) []Collider {
+	trees, safeRadius := world.Trees, world.SafeRadius()
+	// Trees start InnerMargin outside the safe radius and stop OuterMargin
+	// short of the rim, so neither the hub nor the world edge is walled in.
+	reach := world.Radius - safeRadius - trees.OuterMargin
+	if trees.Count <= 0 || reach <= trees.InnerMargin || trees.RadiusSpread < 1 {
+		return nil
+	}
+	result := make([]Collider, 0, trees.Count)
+	state := trees.Seed
+	for len(result) < trees.Count {
 		state = state*6364136223846793005 + 1442695040888963407
 		a := float64(state%62832) / 10000
 		state = state*6364136223846793005 + 1442695040888963407
-		r := safeRadius + 130 + float64(state%uint64(worldRadius-safeRadius-260))
+		r := safeRadius + trees.InnerMargin + float64(state%uint64(reach))
 		position := Vec{math.Cos(a) * r, math.Sin(a) * r}
-		radius := 27 + float64(state%17)
+		radius := trees.MinRadius + float64(state%uint64(trees.RadiusSpread))
 		clear := true
 		for _, other := range result {
-			if position.Sub(other.Position).LengthSq() < math.Pow(radius+other.Radius+55, 2) {
+			if position.Sub(other.Position).LengthSq() < math.Pow(radius+other.Radius+trees.Spacing, 2) {
 				clear = false
 				break
 			}

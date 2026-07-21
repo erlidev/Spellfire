@@ -1,0 +1,55 @@
+{
+  "radius": 3000,
+  "spawn_radius": 170,
+  "danger_bands": [
+    {
+      "id": "hub",
+      "name": "Central hub",
+      "tier": 0,
+      "outer_radius": 430,
+      "material_grade": "",
+      "pvp": "off",
+      "shape": "◆",
+      "summary": "Safe · loadout unlocked"
+    },
+    {
+      "id": "fringe",
+      "name": "Fringe",
+      "tier": 1,
+      "outer_radius": 1000,
+      "material_grade": "common",
+      "pvp": "restricted",
+      "shape": "○",
+      "summary": "T1 · PvP restricted"
+    },
+    {
+      "id": "frontier",
+      "name": "Frontier",
+      "tier": 2,
+      "outer_radius": 2100,
+      "material_grade": "uncommon",
+      "pvp": "on",
+      "shape": "△",
+      "summary": "T2 · PvP enabled"
+    },
+    {
+      "id": "deadlands",
+      "name": "Deadlands",
+      "tier": 3,
+      "outer_radius": 3000,
+      "material_grade": "rare",
+      "pvp": "full",
+      "shape": "▲",
+      "summary": "T3 · Full PvP · high insurance"
+    }
+  ],
+  "trees": {
+    "count": 72,
+    "seed": 1592614637,
+    "min_radius": 27,
+    "radius_spread": 17,
+    "inner_margin": 130,
+    "outer_margin": 260,
+    "spacing": 55
+  }
+}

@@ -1,6 +1,7 @@
 import { Application, Container, Graphics, Text } from "pixi.js";
 // Install eval-free polyfills so WebGL works under a CSP without 'unsafe-eval'. Side-effect import; must run before the renderer is created.
 import "pixi.js/unsafe-eval";
+import { projectileByKind, safeRadius, simulation, world } from "../tuning";
 import type { Collider, Entity, ServerMessage } from "../types";
 import type { Predictor } from "./prediction";
 
@@ -8,8 +9,8 @@ interface Sample { at: number; entity: Entity }
 interface ActorView { root: Container; weapon: Graphics; health: Graphics; label: Text; type: number }
 
 const colors = {
-  ground: 0x16233a, grid: 0x2c405e, safe: 0x7ee1bb, self: 0xffffff, hostile: 0xff6f69,
-  gunner: 0x9cabbf, mage: 0xff754d, tree: 0x46795a, trunk: 0x795b43, outline: 0x0b1220,
+  ground: 0x16233a, grid: 0x2c405e, safe: 0x7ee1bb, rim: 0x8d5260, self: 0xffffff, hostile: 0xff6f69,
+  gunner: 0x9cabbf, mage: 0xff754d, bullet: 0xffd166, tree: 0x46795a, trunk: 0x795b43, outline: 0x0b1220,
 };
 
 export class GameView {
@@ -75,7 +76,7 @@ export class GameView {
     this.drawGround(predictor.x, predictor.y, width, height);
     const local = this.latestEntities.get(this.localID);
     if (local) this.drawEntity({ ...local, x: predictor.x, y: predictor.y, aimX: predictor.aimX, aimY: predictor.aimY }, true);
-    const renderAt = performance.now() - 100;
+    const renderAt = performance.now() - simulation.interpolation_delay_ms;
     for (const [id, samples] of this.samples) {
       const entity = interpolate(samples, renderAt);
       if (entity) this.drawEntity(entity, false);
@@ -89,8 +90,8 @@ export class GameView {
     for (let x = Math.floor(left / cell) * cell; x <= right; x += cell) this.ground.moveTo(x, top).lineTo(x, bottom);
     for (let y = Math.floor(top / cell) * cell; y <= bottom; y += cell) this.ground.moveTo(left, y).lineTo(right, y);
     this.ground.stroke({ color: colors.grid, width: 1, alpha: .62 });
-    this.ground.circle(0, 0, 430).stroke({ color: colors.safe, width: 5, alpha: .7 });
-    this.ground.circle(0, 0, 3000).stroke({ color: 0x8d5260, width: 8, alpha: .8 });
+    this.ground.circle(0, 0, safeRadius).stroke({ color: colors.safe, width: 5, alpha: .7 });
+    this.ground.circle(0, 0, world.radius).stroke({ color: colors.rim, width: 8, alpha: .8 });
   }
 
   private createTree(collider: Collider): Container {
@@ -114,8 +115,12 @@ export class GameView {
   private createActor(entity: Entity, self: boolean): ActorView {
     const root = new Container(), body = new Graphics(), weapon = new Graphics(), health = new Graphics();
     if (entity.type === 2) {
-      if (entity.className === "fireball") body.circle(0, 0, 9).fill(0xff754d).stroke({ color: colors.outline, width: 3 });
-      else body.rect(-7, -3, 14, 6).fill(0xffd166).stroke({ color: colors.outline, width: 2 });
+      // A snapshot carries only the projectile kind; size and silhouette come
+      // from the table row that launched it.
+      const projectile = projectileByKind(entity.className);
+      const radius = projectile?.radius ?? 6;
+      if (projectile?.silhouette === "bolt") body.circle(0, 0, radius).fill(colors.mage).stroke({ color: colors.outline, width: 3 });
+      else body.rect(-radius * 1.4, -radius * .6, radius * 2.8, radius * 1.2).fill(colors.bullet).stroke({ color: colors.outline, width: 2 });
     } else if (entity.className === "mage") {
       body.circle(0, 0, 20).fill(colors.mage).stroke({ color: self ? colors.self : colors.hostile, width: 4 });
       body.moveTo(-15, 14).lineTo(0, -23).lineTo(15, 14).closePath().fill(0xd54e64).stroke({ color: colors.outline, width: 3 });

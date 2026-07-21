@@ -2,6 +2,7 @@ import { API } from "./api";
 import { Predictor } from "./game/prediction";
 import { GameView } from "./game/view";
 import { GameSocket } from "./net/socket";
+import { damageBandFor, dangerBandAt, resourceMax, spells, starterWeapon, world } from "./tuning";
 import { Buttons, ServerKind, type Character, type CharacterClass, type Entity, type ServerMessage } from "./types";
 
 function element<T extends HTMLElement>(id: string): T {
@@ -177,13 +178,10 @@ class SpellFire {
 
   private updateHUD(entity: Entity, character: Character): void {
     const health = Math.max(0, entity.health / Math.max(1, entity.maxHealth)); element("health-bar").style.width = `${health * 100}%`; element("health-label").textContent = `${Math.ceil(entity.health)} / ${Math.ceil(entity.maxHealth)}`;
-    const mage = character.class === "mage", resourceMax = mage ? 100 : 10, resource = entity.mana; element("resource-label").innerHTML = `${mage ? "Mana" : "Ammo"} <span>${Math.floor(resource)} / ${resourceMax}</span>`; element("resource-bar").style.width = `${Math.max(0, resource / resourceMax) * 100}%`;
-    const distance = Math.hypot(entity.x, entity.y); let band = "Central hub", detail = "Safe · loadout unlocked", shape = "◆";
-    if (distance > 2100) { band = "Deadlands"; detail = "T3 · Full PvP · high insurance"; shape = "▲"; }
-    else if (distance > 1000) { band = "Frontier"; detail = "T2 · PvP enabled"; shape = "△"; }
-    else if (distance > 430) { band = "Fringe"; detail = "T1 · PvP restricted"; shape = "○"; }
-    element("danger-text").textContent = `${band} · ${detail}`; element("danger-shape").textContent = shape;
-    if (band !== this.lastBand && this.lastBand) this.notice(`${band}: ${detail}`); this.lastBand = band;
+    const { label, max } = resourceMax(character.class), resource = entity.mana; element("resource-label").innerHTML = `${label} <span>${Math.floor(resource)} / ${max}</span>`; element("resource-bar").style.width = `${Math.max(0, resource / max) * 100}%`;
+    const band = dangerBandAt(Math.hypot(entity.x, entity.y));
+    element("danger-text").textContent = `${band.name} · ${band.summary}`; element("danger-shape").textContent = band.shape;
+    if (band.name !== this.lastBand && this.lastBand) this.notice(`${band.name}: ${band.summary}`); this.lastBand = band.name;
   }
 
   private notice(message: string): void { const notice = element("world-notice"); notice.textContent = message; notice.classList.add("visible"); window.clearTimeout(this.noticeTimer); this.noticeTimer = window.setTimeout(() => notice.classList.remove("visible"), 2600); }
@@ -193,10 +191,10 @@ class SpellFire {
     const character = this.selectedCharacter(); const content = element("menu-content");
     const pages: Record<string, string> = {
       character: `<h3>${escapeHTML(character?.name ?? "Character")}</h3><p>${titleCase(character?.class ?? "gunslinger")} · Level ${character?.level ?? 1}</p><p>Progression unlocks options, never raw combat power.</p>`,
-      loadout: `<h3>Starter loadout</h3><p>${character?.class === "mage" ? "Fire staff · Fire bolt · Universal dash" : "Field rifle · 10-round magazine · Universal dash"}</p><p>Loadouts are editable only inside the central safe zone. Expanded crafting and affinity validation are not available in this foundation.</p>`,
+      loadout: `<h3>Starter loadout</h3><p>${escapeHTML(describeLoadout(character?.class ?? "gunslinger"))}</p><p>Loadouts are editable only inside the central safe zone. Expanded crafting and affinity validation are not available in this foundation.</p>`,
       inventory: "<h3>Materials</h3><p>No carried materials. Material harvesting and death drops are not available in this foundation.</p>",
-      world: "<h3>Known world</h3><p>Central hub → Fringe → Frontier → Deadlands. The circular world is contiguous; trees are authoritative static cover.</p>",
-      reference: "<h3>Field reference</h3><p>WASD/Arrows move · pointer aims · primary pointer fires · Space dashes · R reloads. The hub is safe. Combat is server-authoritative and raw time-to-kill is about three seconds.</p>",
+      world: `<h3>Known world</h3><p>${world.danger_bands.map((band) => escapeHTML(band.name)).join(" → ")}. The circular world is contiguous; trees are authoritative static cover.</p>`,
+      reference: `<h3>Field reference</h3><p>WASD/Arrows move · pointer aims · primary pointer fires · Space dashes · R reloads. The hub is safe. Combat is server-authoritative and raw time-to-kill is about ${damageBandFor(starterWeapon(character?.class ?? "gunslinger")).target_ttk_seconds} seconds.</p>`,
       settings: "<h3>Settings</h3><p>Accessibility and interface-scale controls remain available on Home. Opening this menu does not pause the shared world.</p>",
     };
     content.innerHTML = pages[tab] ?? pages.character!;
@@ -208,6 +206,18 @@ class SpellFire {
     window.clearInterval(this.inputTimer); this.socket?.close(); this.socket = undefined; this.view?.destroy(); this.view = undefined; this.predictor = undefined; this.pressed.clear(); this.lastBand = "";
     const menu = element<HTMLDialogElement>("menu-dialog"); if (menu.open) menu.close(); element("game").hidden = true; element("home").hidden = false; element("death-overlay").hidden = true; element("connection-overlay").hidden = true;
   }
+}
+
+// The menu names what the character actually carries, read from the same
+// tuning tables the simulation fires with.
+function describeLoadout(characterClass: CharacterClass): string {
+  const weapon = starterWeapon(characterClass);
+  const parts = [weapon.name];
+  const spell = weapon.spell ? spells[weapon.spell] : undefined;
+  if (spell) parts.push(spell.name);
+  if (weapon.magazine_size) parts.push(`${weapon.magazine_size}-round magazine`);
+  parts.push("Universal dash");
+  return parts.join(" · ");
 }
 
 function isFormField(target: EventTarget | null): boolean { return target instanceof HTMLInputElement || target instanceof HTMLSelectElement || target instanceof HTMLTextAreaElement; }

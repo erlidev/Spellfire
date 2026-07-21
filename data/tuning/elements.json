@@ -1,0 +1,32 @@
+{
+  "fire": {
+    "name": "Fire",
+    "primary_role": "zone",
+    "secondary": "Burn/DoT denial",
+    "character": "Attrition and space control"
+  },
+  "frost": {
+    "name": "Frost",
+    "primary_role": "control",
+    "secondary": "Light mitigation",
+    "character": "Lockdown and peel"
+  },
+  "storm": {
+    "name": "Storm",
+    "primary_role": "burst",
+    "secondary": "Short mobility",
+    "character": "Assassination and repositioning"
+  },
+  "arcane": {
+    "name": "Arcane",
+    "primary_role": "sustain",
+    "secondary": "Shields, dispel, teleport, mana",
+    "character": "Support and enablement"
+  },
+  "earth": {
+    "name": "Earth",
+    "primary_role": "zone",
+    "secondary": "Walls, knockback, armor",
+    "character": "Anchoring and denial"
+  }
+}

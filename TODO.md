@@ -34,10 +34,12 @@ explicit note in [`docs/architecture.md`](docs/architecture.md). Update the docs
 Nothing else in this file can be built cleanly without these. Land them first.
 
 ### 1.1 Versioned tuning tables
-- [ ] Move balance out of the `game.Tuning` struct literal ([world.go:35-43](server/internal/game/world.go#L35-L43)) into versioned data files
-- [ ] Define the table schema for weapons, spells, components, materials, mobs, biomes ([progression-and-crafting.md](docs/game/design/progression-and-crafting.md#persistence-and-versioning))
-- [ ] Load the same tables in the client so the renderer derives from balance data, not TS literals
-- [ ] Verify the invariant in a test: editing one row changes every dependent item with no character migration
+- [x] Move balance out of the `game.Tuning` struct literal into versioned data files ([data/tuning/](data/tuning/README.md); `game.FromTables` now derives `Tuning`)
+- [x] Define the table schema for weapons, spells, components, materials, mobs, biomes ([progression-and-crafting.md](docs/game/design/progression-and-crafting.md#persistence-and-versioning), [tuning.go](server/internal/tuning/tuning.go), [validate.go](server/internal/tuning/validate.go))
+- [x] Load the same tables in the client so the renderer derives from balance data, not TS literals ([tuning.ts](web/src/tuning.ts))
+- [x] Verify the invariant in a test: editing one row changes every dependent item with no character migration ([game/tuning_test.go](server/internal/game/tuning_test.go), [tuning/tuning_test.go](server/internal/tuning/tuning_test.go))
+
+Component, material, and biome-placement rows are intentionally empty until the phases that consume them; the Sentry row carries its settled contract without the values [economy-death-and-pve.md](docs/game/design/economy-death-and-pve.md#sentry) defers to implementation. Runtime table delivery to a live client stays in Phase 8.
 
 ### 1.2 Persistence & migration
 - [ ] Read `schema_version` and run sequential forward migrations (currently written and never read, [sqlite.go:45-50](server/internal/store/sqlite.go#L45-L50))

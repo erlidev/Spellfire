@@ -7,6 +7,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY tsconfig.json ./
+COPY data ./data
 COPY web ./web
 RUN npm run build
 
@@ -17,6 +18,8 @@ COPY go.mod go.sum ./
 RUN go mod download
 COPY server ./server
 COPY proto ./proto
+# The same tuning tables the client stage bundled; the server embeds them.
+COPY data ./data
 # Stamp the build time (from the build host's clock) and, if provided, the git
 # commit; the .git dir is not in the build context, so the commit comes via arg.
 ARG BUILD_COMMIT=""
