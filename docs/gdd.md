@@ -184,7 +184,7 @@ Five elements, each owning a primary combat role plus a secondary tool so no sin
 | Arcane            | Sustain / utility       | Shields, dispel, teleport, mana economy | Support, enable          |
 | Earth / Stone     | Zone + heavy mitigation | Walls, knockback, armor                 | Anchor, deny             |
 
-**OPEN —** No element currently owns a pure ranged-poke identity. Decide whether that is a genuine gap to fill (a sixth element, or a poke sub-branch) or an intentional absence.
+**Intentional absence (resolved).** No element owns a pure ranged-poke identity, and none needs to for now — the 5-element set ships as-is. If playtesting shows the role gap flattens element differentiation, the lever is a poke sub-branch or a sixth element, added later (§12.3).
 
 ### 5.3 Element affinity — specialisation without forcing it
 
@@ -257,6 +257,8 @@ All of ‘skill tree’, ‘learned spells’, ‘unlocked abilities’, and ‘
 </tr>
 </tbody>
 </table>
+
+**Starter kit (resolved).** A brand-new character spawns with a small randomised kit: a couple of basic (lowest-tier) weapons for their class and a handful of randomly-chosen low-tier skills/spells already unlocked. Randomisation is deliberate — it seeds different early identities without letting anyone start ahead, since every entry is at the bottom of the compressed power band and all of it is trivially replaceable. The kit exists to make the first minutes playable, not to be a build; it is the floor the pacing targets in §12.2 measure from.
 
 **Loadout-lock outside safe zones is the keystone rule of the whole economy.** It converts ‘breadth’ from in-fight dominance into *preparation and prediction*: you commit to a build on leaving the safe zone and can be hard-countered for it. Owning more options never means bringing more power into a fight — only that you chose better beforehand. Both classes unlock everything eventually; identity lives entirely in the fluid loadout layer.
 
@@ -338,9 +340,17 @@ Biomes are a second axis, completely independent of the danger rings. Under Mode
 
 - **Travel:** choose any unlocked outpost to spawn at; thereafter travel is on foot. Mounts/vehicles are available (and imply a speed/chase build axis). No fast-travel while carrying raw materials — the haul risk must not be teleportable.
 
-**OPEN —** Outpost blockading. A safe zone whose only exit can be camped is a soft spawn-camp. Mitigations to specify: brief exit-invulnerability and/or multiple exits per outpost.
+**Anti-blockade rules (resolved).** A safe zone whose exit can be camped is a soft spawn-camp, so two stacked mitigations apply at every outpost, wherever it sits on the danger gradient:
 
-**OPEN —** Outposts are currently contestable-but-not-destroyable. Whether deep outposts can be blockaded, captured, or upgraded is deferred (see §12, social/territory).
+- **PvP-free radius.** PvP is disabled inside a radius around each outpost that is comfortably larger than the outpost footprint — far enough that a camper cannot sit on the boundary and hit anyone still inside it. This overrides the band's PvP rule (§7.1) wherever an outpost exists. PvE is unaffected outside the outpost proper; mobs do not spawn inside the bubble but may wander to its edge.
+
+  **UNRESOLVED —** §7.1 states the Deadlands rim has *no safe outposts*, while discover-to-unlock above assumes rim outposts exist to unlock. Pick one: either the rim genuinely has none (respawn from a rim death routes to the nearest Frontier outpost, and the walk-back *is* the rim's extra cost), or it has sparse ones that project the same bubble as everywhere else (softer rim, but consistent rules). Everything above holds either way.
+
+- **Brief exit-invulnerability.** Leaving the PvP-free radius (or spawning/respawning) grants a short damage-immunity window so a player crossing the boundary cannot be burst down before they can react. The window ends early on any offensive action by the player — it is a disengagement grace, not a free opener. Exact duration is a balance-pass value; the intent is 'long enough to read the situation and turn back', not long enough to cross ground.
+
+Together these mean the camping line is pushed out to a radius that is expensive to hold and cannot be maintained by a single player, and the retreat back into the bubble is always available.
+
+**Outposts are non-affectable.** Outposts cannot be damaged, captured, upgraded, or contested by players. They are fixed world infrastructure. Making them player-affectable is deferred, not rejected — it is a territory-system question (§12.3, social/territory), and reopening it means revisiting the anti-blockade rules above.
 
 ## 8. Economy, death & PvP loop
 
@@ -376,7 +386,13 @@ Crafting and spending happen only in safe zones, so raw materials must be hauled
 
 - **Respawn cost is the walk back.** A geared player who has already spent their materials loses little on death except position — respawning at a safe outpost and walking back is their primary penalty.
 
-**OPEN —** Respawn timer length, and whether a rim death returns you to a far safe outpost (long walk = meaningful cost), are to specify.
+- **Respawn (resolved).** The timer is short — roughly 5 seconds. On death the player chooses between two destinations:
+
+  1. **Nearest outpost to the death location** (default) — minimises the walk back, so a rim death does *not* send you across the map unless you want it to.
+
+  2. **Central hub** — always available, for players who want to bank, re-craft, or reset rather than re-contest the spot.
+
+  The nearest-outpost option deliberately keeps the death penalty small for geared players; the material loss in §8.2 is the real cost, not the travel. Rim outposts are still discover-to-unlock (§7.3), but the nearest-outpost respawn is not gated on having unlocked it — dying near an outpost you never reached still routes you there.
 
 ### 8.3 Dropped-material rules
 
@@ -422,7 +438,7 @@ Killable mobs (§8.4) are not a single generic enemy — they come in distinct *
 
 - **Visual identity.** A Sentry's body-plus-turret is element/biome-tinted per §10.4 like any other mob (§10.5), and carries the same outline/threat-ring hostility read as a player (§10.6) — a Sentry is read as *hostile mob* by silhouette, and as *dangerous-in-what-way* by its turret count and tint.
 
-**OPEN —** Exact aggro radius, leash range and reset behaviour, movement/turn speed, shot cadence per tier, and turret-count progression are unset; the *behaviour shape* above is locked, values are to tune (§12.1).
+**No stats yet, by design.** Aggro radius, leash range and reset behaviour, movement/turn speed, shot cadence, and turret-count progression are all unset. They get fixed when Sentries are implemented and playtested, not before. Expect **many Sentry types**, each with its own values and its own tuning of the behaviour shape above — this section describes the archetype, not a single stat block. The same applies to other mob classes: aggro/leash/kite behaviour is a per-mob property, not a global rule (§12.1).
 
 ## 9. Squads & world bosses
 
@@ -591,7 +607,7 @@ Per V1/V3, the look is a formal legibility layer. The following mappings are **l
 
 - **Hitbox honesty.** A primitive's drawn shape should match its collision/hitbox closely; the abstract style makes this easy and it is required for fair dodging (P1/V1).
 
-**Renderer-agnostic note.** This section assumes only "fast 2D primitive drawing with per-frame redraw" — satisfiable by immediate-mode canvas or a retained/GPU 2D layer alike. The engine choice (perf at 100 players, batching, effect ceilings) is deferred to the architecture doc (`/docs/architecture.md`) and does not change any decision above. Effect density and glow use are the two knobs most likely to be renderer-bound; treat them as tunable to the chosen backend.
+**Renderer.** This section assumes only "fast 2D primitive drawing with per-frame redraw", and stays written that way — no decision above depends on the backend. **The chosen renderer is Pixi.js** (already in use, see `/docs/architecture.md`): a retained GPU 2D layer with batching, which comfortably covers the procedural draw load at 100 players. Effect density and glow use remain the two knobs most likely to be renderer-bound; tune them against Pixi's batching behaviour (minimise per-frame geometry churn and blend-mode/filter switches, which break batches).
 
 ### 10.9 What this section deliberately does not fix
 
@@ -606,6 +622,8 @@ Rules that recur across systems and must hold everywhere. A change that breaks o
 - **Access is gated; power is not.** Element affinity, part unlocks, and material rarity gate which tools you can reach, never how strong they are.
 
 - **Specific mats are gated; common mats are universal.** Applies to both loadout requirements and geography — no build is locked to one biome.
+
+- **Safety is absolute where it exists, and leaving it is never free but is never a death sentence either.** Every outpost projects a PvP-free radius regardless of danger band, and crossing out of it grants brief exit-invulnerability (§7.3). A player can always retreat into safety; a camper can never convert the boundary into a kill (§7.3).
 
 - **Breadth is a safe-zone advantage only.** Loadout-lock outside safe zones means owning more options is preparation, never in-fight power.
 
@@ -629,34 +647,43 @@ Collected known-unresolved items. None block the current design; each is either 
 
 ### 12.1 Open design decisions
 
-| **Area**           | **Question**                                           | **Recommendation / note**                                |
+| **Area**           | **Question**                                           | **Status / resolution**                                  |
 |--------------------|--------------------------------------------------------|----------------------------------------------------------|
-| Ranged-poke role   | No element owns pure ranged poke — gap or intentional? | Decide before finalising the 5-element set               |
-| Outpost blockading | How to prevent camping an outpost’s only exit          | Exit-invulnerability and/or multiple exits               |
-| Respawn cost       | Respawn timer; does a rim death send you far back?     | Long walk-back = primary geared-player penalty           |
-| Mob behaviour      | Leash, aggro range, kiteable onto other players?       | Shape set by the Sentry (patrol/chase/leash/reset, §8.5); exact values open, and future mob classes may need different shapes |
-| Sentry values      | Aggro radius, leash range/reset, move speed, shot cadence and turret count per tier | Behaviour shape locked (§8.5); numbers are a balance-pass item |
-| Starter kit        | What a zero-material new player spawns with            | Defines the floor of the compressed power band           |
-| Palette validation | Exact element hues + a colorblind-safe palette pass    | Validate for value/shape separation, not hue alone (§10.6) |
-| Renderer choice    | 2D engine/backend for procedural draw at 100 players   | Deferred to architecture doc; bounds effect/glow density (§10.8) |
+| Ranged-poke role   | No element owns pure ranged poke — gap or intentional? | **Resolved (deferred).** Not needed now; the 5-element set ships without a dedicated ranged-poke owner. Can be added later as a new element or a keystone if playtesting shows the gap |
+| Outpost blockading | How to prevent camping an outpost’s only exit          | **Resolved.** PvP-free radius around every outpost + brief exit-invulnerability on leaving it or respawning (§7.3) |
+| Outpost ownership  | Contestable, capturable, destroyable?                  | **Resolved (for now).** Outposts are non-affectable fixed infrastructure (§7.3). Revisit only with the territory system (§12.3) |
+| Respawn cost       | Respawn timer; does a rim death send you far back?     | **Resolved.** ~5s timer; respawn at the nearest outpost to the death location, or opt into the central hub (§8.2) |
+| Mob behaviour      | Leash, aggro range, kiteable onto other players?       | **Resolved as per-mob.** There is no global answer — each mob class defines its own patrol/aggro/leash/reset shape. The Sentry (§8.5) is the first such definition, not a template all mobs inherit |
+| Sentry values      | Aggro radius, leash range/reset, move speed, shot cadence and turret count per tier | Open by design. Sentries have no fixed stats yet; numbers get set when they are implemented and playtested. Expect many Sentry *types*, each with its own values, rather than one tuned block |
+| Starter kit        | What a zero-material new player spawns with            | **Resolved.** Randomised basic starting weapons + a few random low-tier skills unlocked (§6.1) |
+| Palette validation | Exact element hues + a colorblind-safe palette pass    | Open, in progress. Hues are being worked on and the overall design style may still change; the constraint that holds regardless is value/shape separation, not hue alone (§10.6) |
+| Renderer choice    | 2D engine/backend for procedural draw at 100 players   | **Resolved.** Pixi.js. Sufficient for the procedural draw load; effect/glow density budgets (§10.8) are tuned against it |
 
 ### 12.2 Critical tuning problem — progression pacing
 
 With the handling gate removed, *material grind is the only thing between a new player and every weapon*, so Gunslinger (and to a lesser extent Mage) progression pace is entirely a drop-rate/economy problem with no other lever. The document sets the *form*; values are to tune.
 
-**OPEN —** Set target pacing: rough time to a first real crafted build, and to rim-viability (e.g. ‘first real build in ~X hours, rim-capable in ~Y’). Even coarse targets shape every drop rate.
+**Target pacing (resolved, coarse).** These are the anchors every drop rate, XP curve, and recipe cost is tuned against:
+
+| **Milestone**                                    | **Target**        |
+|--------------------------------------------------|-------------------|
+| From the starter kit (§6.1) to a decent build     | ~1 hour           |
+| To rim-capable (T3 Deadlands viable)              | ~10 hours         |
+| To approaching the skill/build ceiling            | Much longer — open-ended |
+
+The shape matters more than the exact numbers: the first hour must produce a real, chosen build so the game becomes itself quickly; the first ten hours must open the whole map so no one is fenced out of the content the economy is built around; everything past that is mastery and marginal optimisation, not access. If tuning pushes rim-capability much past ~10 hours, the mid-tier bands stop being a pass-through (§7.1) and become a grind wall — that is the failure mode to watch for.
 
 ### 12.3 Deferred by choice
 
 Categories intentionally out of scope for this draft. Each will get its own section later; none affects the systems above.
 
-- **Netcode & server architecture.** A persistent 100+ player shared world is a serious interest-management / tick-rate / area-of-interest problem. Note: the concentric danger structure is a natural partitioning structure — rim (few high-skill players) can afford higher fidelity; fringe (many low-stakes players) can be culled aggressively. Design the map’s danger structure and its server partitioning together when this is picked up.
-
 - **Monetisation & cosmetics.** Must stay non-vertical to preserve P1/P2 (cosmetic and convenience only).
 
 - **Marketplace & player trading.** Interacts heavily with the economy and material grades; a major system in its own right.
 
-- **Social systems / guilds / territory.** Includes whether outposts become capturable — connects to §7.3 open items.
+- **Social systems / guilds / territory.** Includes whether outposts ever become player-affectable. §7.3 currently fixes them as non-affectable infrastructure; that is the deliberate placeholder, and any capture/upgrade/destruction system arrives with this category — along with a re-examination of the PvP-free radius and exit-invulnerability rules, which a contested outpost would invalidate.
+
+- **Visual style revision.** The palette/style pass (§10.4, §10.6) is live work, not a settled spec. The invariants — reserved element hues, redundant non-hue cues, identity-vs-allegiance channel separation — are what must survive a restyle; the specific hues and primitive treatments may not.
 
 - **Onboarding & tutorial.** Especially important given the Gunslinger’s high mechanical floor and the mage-feels-strong perception (§3).
 
@@ -664,4 +691,4 @@ Categories intentionally out of scope for this draft. Each will get its own sect
 
 - **Full numeric balance pass.** HP/damage bands, mana pools, cooldowns, drop rates, insurance %, harvest times, threshold %, XP curves — the spreadsheet that follows this document.
 
-*End of draft — SpellFire GDD v0.1*
+*End of draft — SpellFire GDD v0.2*
