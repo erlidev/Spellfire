@@ -76,14 +76,14 @@ class SpellFire {
   }
 
   private bindControls(): void {
-    const keyMap: Record<string, number> = { KeyW: Buttons.Up, ArrowUp: Buttons.Up, KeyS: Buttons.Down, ArrowDown: Buttons.Down, KeyA: Buttons.Left, ArrowLeft: Buttons.Left, KeyD: Buttons.Right, ArrowRight: Buttons.Right, Space: Buttons.Dash, KeyR: Buttons.Reload };
+    const keyMap: Record<string, number> = { KeyW: Buttons.Up, ArrowUp: Buttons.Up, KeyS: Buttons.Down, ArrowDown: Buttons.Down, KeyA: Buttons.Left, ArrowLeft: Buttons.Left, KeyD: Buttons.Right, ArrowRight: Buttons.Right, Space: Buttons.Dash, KeyR: Buttons.Reload, KeyE: Buttons.Interact };
     window.addEventListener("keydown", (event) => { const button = keyMap[event.code]; if (button && !isFormField(event.target)) { event.preventDefault(); this.pressed.add(button); } });
     window.addEventListener("keyup", (event) => { const button = keyMap[event.code]; if (button) this.pressed.delete(button); });
     window.addEventListener("pointermove", (event) => { if (!this.view) return; this.aim = this.view.pointerWorld(event.clientX, event.clientY); });
     element("canvas-host").addEventListener("pointerdown", (event) => { if ((event as PointerEvent).button === 0) this.pressed.add(Buttons.Fire); });
     window.addEventListener("pointerup", (event) => { if ((event as PointerEvent).button === 0) this.pressed.delete(Buttons.Fire); });
     element("canvas-host").addEventListener("contextmenu", (event) => event.preventDefault());
-    const touchMap: Record<string, number> = { up: Buttons.Up, down: Buttons.Down, left: Buttons.Left, right: Buttons.Right, fire: Buttons.Fire, dash: Buttons.Dash };
+    const touchMap: Record<string, number> = { up: Buttons.Up, down: Buttons.Down, left: Buttons.Left, right: Buttons.Right, fire: Buttons.Fire, dash: Buttons.Dash, interact: Buttons.Interact };
     for (const button of document.querySelectorAll<HTMLButtonElement>("#touch-controls button")) {
       const bit = touchMap[button.dataset.button ?? ""];
       if (!bit) continue;
@@ -194,7 +194,7 @@ class SpellFire {
       loadout: `<h3>Starter loadout</h3><p>${escapeHTML(describeLoadout(character?.class ?? "gunslinger"))}</p><p>Loadouts are editable only inside the central safe zone. Expanded crafting and affinity validation are not available in this foundation.</p>`,
       inventory: "<h3>Materials</h3><p>No carried materials. Material harvesting and death drops are not available in this foundation.</p>",
       world: `<h3>Known world</h3><p>${world.danger_bands.map((band) => escapeHTML(band.name)).join(" → ")}. The circular world is contiguous; trees are authoritative static cover.</p>`,
-      reference: `<h3>Field reference</h3><p>WASD/Arrows move · pointer aims · primary pointer fires · Space dashes · R reloads. The hub is safe. Combat is server-authoritative and raw time-to-kill is about ${damageBandFor(starterWeapon(character?.class ?? "gunslinger")).target_ttk_seconds} seconds.</p>`,
+      reference: `<h3>Field reference</h3><p>WASD/Arrows move · pointer aims · primary pointer fires · Space dashes · R reloads · E interacts. The hub is safe. Combat is server-authoritative and raw time-to-kill is about ${damageBandFor(starterWeapon(character?.class ?? "gunslinger")).target_ttk_seconds} seconds.</p>`,
       settings: "<h3>Settings</h3><p>Accessibility and interface-scale controls remain available on Home. Opening this menu does not pause the shared world.</p>",
     };
     content.innerHTML = pages[tab] ?? pages.character!;

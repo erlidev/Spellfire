@@ -78,10 +78,22 @@ func (w *World) spend(p *Player, ability tuning.Ability, now time.Time) bool {
 // validated at load carries a travelling projectile, so this is the one shape
 // today; Phase 2.5's areas and walls extend it rather than bypass it.
 func (w *World) deliver(p *Player, ability tuning.Ability, now time.Time) {
+	if ability.Telegraph != nil {
+		w.startTelegraph(p.ID, w.playerElement(p), p.Position, p.Aim, ability, now)
+		return
+	}
 	if ability.Projectile == nil {
 		return
 	}
 	w.spawnRewoundProjectile(p, ability, now)
+}
+
+func (w *World) playerElement(p *Player) string {
+	weapon, ok := w.weapon(p)
+	if !ok || weapon.Spell == "" {
+		return ""
+	}
+	return w.tuning.Tables.Spells[weapon.Spell].Element
 }
 
 func (w *World) spawnRewoundProjectile(p *Player, ability tuning.Ability, now time.Time) {
@@ -96,7 +108,8 @@ func (w *World) spawnRewoundProjectile(p *Player, ability tuning.Ability, now ti
 	origin := w.positionAt(p.ID, shotAt)
 	projectile := &Projectile{
 		ID: fmt.Sprintf("p-%d", w.nextProjectile), OwnerID: p.ID, Kind: ability.Projectile.Kind,
-		Radius: ability.Projectile.Radius, Damage: w.tuning.Tables.BandDamage(ability.DamageBand),
+		Element: w.playerElement(p),
+		Radius:  ability.Projectile.Radius, Damage: w.tuning.Tables.BandDamage(ability.DamageBand),
 		Remaining: ability.Projectile.LifeSeconds, Effects: ability.Effects,
 		Velocity: p.Aim.Mul(ability.Projectile.Speed),
 	}
@@ -112,5 +125,24 @@ func (w *World) spawnRewoundProjectile(p *Player, ability tuning.Ability, now ti
 			return
 		}
 	}
+	w.projectiles[projectile.ID] = projectile
+}
+
+// deliverAt resolves a committed windup from the exact geometry it showed.
+// Unlike an immediate shot, it is not rewound: the telegraph began at server
+// time and has already paid the player-facing latency compensation by being
+// visible for the full declared windup.
+func (w *World) deliverAt(ownerID string, origin, direction Vec, ability tuning.Ability, now time.Time, element string) {
+	if ability.Projectile == nil {
+		return
+	}
+	projectile := &Projectile{
+		ID: fmt.Sprintf("p-%d", w.nextProjectile), OwnerID: ownerID, Kind: ability.Projectile.Kind, Element: element,
+		Radius: ability.Projectile.Radius, Damage: w.tuning.Tables.BandDamage(ability.DamageBand),
+		Remaining: ability.Projectile.LifeSeconds, Effects: ability.Effects,
+		Velocity: direction.Mul(ability.Projectile.Speed),
+	}
+	w.nextProjectile++
+	projectile.Position = origin.Add(direction.Mul(w.tuning.PlayerRadius + ability.Projectile.Radius + 2))
 	w.projectiles[projectile.ID] = projectile
 }

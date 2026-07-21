@@ -67,6 +67,28 @@ func TestShippedTablesLoadAndValidate(t *testing.T) {
 	}
 }
 
+func TestSharedTelegraphGrammarCoversEveryStandardShape(t *testing.T) {
+	shapes := map[string]Telegraph{
+		"circle": {Shape: "circle", Radius: 80, ActiveMS: 100, ResolvedMS: 150},
+		"cone":   {Shape: "cone", Length: 180, AngleDegrees: 60, ActiveMS: 100, ResolvedMS: 150},
+		"line":   {Shape: "line", Length: 300, Width: 40, ActiveMS: 100, ResolvedMS: 150},
+		"ring":   {Shape: "ring", Radius: 120, Width: 20, ActiveMS: 100, ResolvedMS: 150},
+	}
+	for name, telegraph := range shapes {
+		t.Run(name, func(t *testing.T) {
+			problems := &report{}
+			MustLoad().validateTelegraph(problems, "test", name, telegraph)
+			if err := problems.err(); err != nil {
+				t.Fatalf("valid %s rejected: %v", name, err)
+			}
+		})
+	}
+	sentry := MustLoad().Mobs["sentry"]
+	if sentry.DodgeVector != "telegraph" || !contains(TelegraphShapes, sentry.TelegraphShape) {
+		t.Fatalf("Sentry does not consume the shared grammar: %#v", sentry)
+	}
+}
+
 // The keystone versioning invariant: balance lives in shared rows, so editing
 // one row moves every item that references it. Characters store references
 // only, so nothing needs migrating.
@@ -153,9 +175,9 @@ func TestValidationRejectsBrokenTables(t *testing.T) {
 			},
 		},
 		{
-			name: "dodge vector the simulation does not deliver", file: "abilities.json", want: "does not yet deliver",
+			name: "cast time without a windup", file: "abilities.json", want: "claims cast_time but declares no windup",
 			mutate: func(document map[string]any) {
-				document["fire-bolt-cast"].(map[string]any)["dodge_vector"] = "cast_time"
+				document["rifle-shot"].(map[string]any)["dodge_vector"] = "cast_time"
 			},
 		},
 		{
@@ -171,9 +193,9 @@ func TestValidationRejectsBrokenTables(t *testing.T) {
 			},
 		},
 		{
-			name: "a windup the simulation does not run", file: "abilities.json", want: "Phase 1.6",
+			name: "windup without a telegraph", file: "abilities.json", want: "windup_ms and a telegraph together",
 			mutate: func(document map[string]any) {
-				document["fire-bolt-cast"].(map[string]any)["windup_ms"] = 400.0
+				delete(document["fire-bolt-cast"].(map[string]any), "telegraph")
 			},
 		},
 		{

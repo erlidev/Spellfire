@@ -5,6 +5,7 @@
     "silhouette": "fused_turret",
     "damage_band": "standard",
     "dodge_vector": "telegraph",
+    "telegraph_shape": "line",
     "turrets": 1,
     "behavior": "patrol, aggro nearest in range, drive to preferred range, leash and disengage"
   }

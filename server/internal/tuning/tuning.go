@@ -19,7 +19,7 @@ import (
 // SchemaVersion is the table shape this build understands. Bump it only when a
 // table changes shape, and add the matching forward migration; a plain balance
 // edit bumps Manifest.Version instead and needs no code change.
-const SchemaVersion = 4
+const SchemaVersion = 5
 
 type Manifest struct {
 	// Version is the content revision. Bump it on any balance edit; a change
@@ -201,15 +201,25 @@ type Cost struct {
 // grammar is shared, so nothing hand-rolls a telegraph.
 var TelegraphShapes = []string{"circle", "cone", "line", "ring"}
 
-// Telegraph is the shape an ability shows during its windup. Declaring it is
-// what makes the "telegraph" and "ground_indicator" dodge vectors real. The
-// simulation does not yet run a windup, so the loader refuses a row that
-// declares one — see honouredDodgeVectors in validate.go.
+// Telegraph is the shared geometry and phase timing an ability shows during
+// its windup. Players, mobs, bosses, and deployables all emit the same world
+// entity; the renderer never needs an owner-specific telegraph branch.
 type Telegraph struct {
 	Shape        string  `json:"shape"`
 	Radius       float64 `json:"radius"`
 	Length       float64 `json:"length"`
+	Width        float64 `json:"width"`
 	AngleDegrees float64 `json:"angle_degrees"`
+	ActiveMS     int     `json:"active_ms"`
+	ResolvedMS   int     `json:"resolved_ms"`
+}
+
+func (t Telegraph) ActiveDuration() time.Duration {
+	return time.Duration(t.ActiveMS) * time.Millisecond
+}
+
+func (t Telegraph) ResolvedDuration() time.Duration {
+	return time.Duration(t.ResolvedMS) * time.Millisecond
 }
 
 // Ability is the one contract every deliberate action draws from: what it
@@ -364,14 +374,15 @@ type Materials struct {
 }
 
 type Mob struct {
-	ID          string `json:"-"`
-	Name        string `json:"name"`
-	Family      string `json:"family"`
-	Silhouette  string `json:"silhouette"`
-	DamageBand  string `json:"damage_band"`
-	DodgeVector string `json:"dodge_vector"`
-	Turrets     int    `json:"turrets"`
-	Behavior    string `json:"behavior"`
+	ID             string `json:"-"`
+	Name           string `json:"name"`
+	Family         string `json:"family"`
+	Silhouette     string `json:"silhouette"`
+	DamageBand     string `json:"damage_band"`
+	DodgeVector    string `json:"dodge_vector"`
+	TelegraphShape string `json:"telegraph_shape"`
+	Turrets        int    `json:"turrets"`
+	Behavior       string `json:"behavior"`
 }
 
 type Biome struct {

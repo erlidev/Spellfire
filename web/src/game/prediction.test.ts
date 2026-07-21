@@ -12,7 +12,13 @@ const dashTicks = Math.max(1, Math.round((dashDurationMS / 1000) * tickRate));
 const tickMS = 1000 / tickRate;
 
 function entity(overrides: Partial<Entity> = {}): Entity {
-  return { type: 1, id: "p", name: "Player", className: "gunslinger", x: 0, y: 0, vx: 0, vy: 0, aimX: 1, aimY: 0, health: 100, maxHealth: 100, mana: 10, acknowledgedInput: 0, alive: true, ownerID: "", ...overrides };
+  return {
+    type: 1, id: "p", name: "Player", className: "gunslinger", x: 0, y: 0, vx: 0, vy: 0, aimX: 1, aimY: 0,
+    health: 100, maxHealth: 100, mana: 10, acknowledgedInput: 0, alive: true, ownerID: "",
+    element: "", squadID: "", allegiance: 1, telegraphState: 0, invulnerable: false, telegraphShape: "",
+    radius: 0, length: 0, width: 0, angleDegrees: 0, telegraphProgress: 0, abilityID: "", lingering: false, effectIDs: [],
+    ...overrides,
+  };
 }
 
 describe("client prediction", () => {

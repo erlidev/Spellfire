@@ -91,10 +91,10 @@ func TestAbilityChargesTheCostItDeclares(t *testing.T) {
 
 	// Drained, and stepped just past the cadence gate so only the refusal can
 	// explain the result. One step regenerates one tick's worth and no more.
-	before := ownedProjectiles(w, mage.ID)
+	before := w.nextTelegraph
 	mage.Mana = 0
 	fire(w, mage, 2, now.Add(starterAbility(w, model.Mage).Interval()+10*time.Millisecond))
-	if ownedProjectiles(w, mage.ID) != before {
+	if w.nextTelegraph != before {
 		t.Fatal("the mage cast a spell it could not pay for")
 	}
 	if regenerated := w.tuning.ManaRegen / float64(w.tuning.TickRate); math.Abs(mage.Mana-regenerated) > 0.0001 {

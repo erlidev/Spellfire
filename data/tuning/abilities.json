@@ -19,6 +19,14 @@
     "cost": { "kind": "mana", "amount": 12 },
     "interval_ms": 300,
     "cooldown_ms": 0,
+    "windup_ms": 300,
+    "telegraph": {
+      "shape": "line",
+      "length": 889.2,
+      "width": 58,
+      "active_ms": 100,
+      "resolved_ms": 150
+    },
     "dodge_vector": "projectile_travel",
     "damage_band": "standard",
     "projectile": {

@@ -12,13 +12,14 @@ import (
 )
 
 const (
-	ButtonUp     uint32 = 1
-	ButtonDown   uint32 = 2
-	ButtonLeft   uint32 = 4
-	ButtonRight  uint32 = 8
-	ButtonFire   uint32 = 16
-	ButtonDash   uint32 = 32
-	ButtonReload uint32 = 64
+	ButtonUp       uint32 = 1
+	ButtonDown     uint32 = 2
+	ButtonLeft     uint32 = 4
+	ButtonRight    uint32 = 8
+	ButtonFire     uint32 = 16
+	ButtonDash     uint32 = 32
+	ButtonReload   uint32 = 64
+	ButtonInteract uint32 = 128
 )
 
 // Tuning is the simulation's runtime view of the versioned tables. No balance
@@ -72,9 +73,12 @@ func (v Vec) Normalized() Vec {
 }
 
 type Player struct {
-	ID, AccountID, Name             string
-	Class                           model.Class
-	WeaponID                        string
+	ID, AccountID, Name string
+	Class               model.Class
+	WeaponID            string
+	// SquadID is empty until Phase 5 forms squads. It lives on the actor now so
+	// snapshots and future attribution code do not need a protocol migration.
+	SquadID                         string
 	Position, Velocity, Aim         Vec
 	Health, Mana                    float64
 	Alive                           bool
@@ -119,9 +123,9 @@ func (t Tuning) dashSpeed() float64 {
 }
 
 type Projectile struct {
-	ID, OwnerID, Kind         string
-	Position, Velocity        Vec
-	Radius, Damage, Remaining float64
+	ID, OwnerID, Kind, Element string
+	Position, Velocity         Vec
+	Radius, Damage, Remaining  float64
 	// Effects are the statuses a hit applies, carried from the ability that
 	// launched it so the resolver needs no lookup back to the shooter's kit.
 	Effects []string
@@ -143,12 +147,15 @@ type World struct {
 	tick        uint64
 	players     map[string]*Player
 	projectiles map[string]*Projectile
+	telegraphs  map[string]*Telegraph
 	colliders   []Collider
 	history     map[string][]historySample
 	// occupants maps an account to the one character it has a body for, so the
 	// one-body-per-account rule is a lookup rather than a scan of the world.
 	occupants      map[string]string
 	nextProjectile uint64
+	nextTelegraph  uint64
+	combat         *combatLog
 }
 
 func NewWorld(t Tuning) *World {
@@ -156,9 +163,9 @@ func NewWorld(t Tuning) *World {
 		t = DefaultTuning()
 	}
 	return &World{
-		tuning: t, players: make(map[string]*Player), projectiles: make(map[string]*Projectile),
+		tuning: t, players: make(map[string]*Player), projectiles: make(map[string]*Projectile), telegraphs: make(map[string]*Telegraph),
 		colliders: generateTrees(t.Tables.World), history: make(map[string][]historySample),
-		occupants: make(map[string]string),
+		occupants: make(map[string]string), combat: newCombatLog(combatEventCapacity),
 	}
 }
 
@@ -375,6 +382,12 @@ func (w *World) RemovePlayer(id string) {
 	}
 	delete(w.players, id)
 	delete(w.history, id)
+	for telegraphID, telegraph := range w.telegraphs {
+		if telegraph.OwnerID == id {
+			delete(w.telegraphs, telegraphID)
+		}
+	}
+	w.combat.resetTarget(id)
 }
 
 func (w *World) ApplyInput(id string, input protocol.Input) bool {
@@ -403,6 +416,7 @@ func (w *World) Respawn(id string, now time.Time) bool {
 	// cooldowns it died holding.
 	p.Effects, p.Cooldowns = nil, make(map[string]time.Time)
 	p.NextFire, p.ReloadEnds, p.DashReady = now, now, now
+	w.combat.resetTarget(id)
 	w.recordHistory(p, now)
 	return true
 }
@@ -414,6 +428,7 @@ func (w *World) Step(now time.Time) {
 	for _, id := range ids {
 		w.stepPlayer(w.players[id], now, dt)
 	}
+	w.stepTelegraphs(now)
 	w.stepProjectiles(now, dt)
 	for _, id := range ids {
 		if p := w.players[id]; p != nil {
@@ -534,7 +549,7 @@ func (w *World) advanceProjectile(projectile *Projectile, dt float64, at time.Ti
 		// A slow or a knockback landed from inside safety would be exactly the
 		// offensive use of a safe zone the invariant forbids.
 		if owner != nil && owner.Position.LengthSq() > w.tuning.PvPRadius*w.tuning.PvPRadius && position.LengthSq() > w.tuning.PvPRadius*w.tuning.PvPRadius {
-			w.damage(target, projectile.Damage, projectile.OwnerID)
+			w.damage(target, projectile.Damage, projectile.OwnerID, at)
 			w.applyEffects(target, projectile.Effects, projectile.OwnerID, to.Sub(from), at)
 		}
 		return true
@@ -543,10 +558,11 @@ func (w *World) advanceProjectile(projectile *Projectile, dt float64, at time.Ti
 	return to.LengthSq() > w.tuning.WorldRadius*w.tuning.WorldRadius
 }
 
-// damage is the one path health is lost through: shields absorb first, and a
-// body that reaches zero dies and drops everything it was carrying. Phase 1.4's
-// contribution ledger records the source here.
-func (w *World) damage(target *Player, amount float64, sourceID string) {
+// damage is the one path health is lost through: shields absorb first, the
+// contribution ledger records only effective health damage, and a body that
+// reaches zero dies. The lethal event freezes the full per-life ledger for
+// later drop ownership and ranking consumers.
+func (w *World) damage(target *Player, amount float64, sourceID string, at time.Time) {
 	if !target.Alive || amount <= 0 {
 		return
 	}
@@ -554,9 +570,12 @@ func (w *World) damage(target *Player, amount float64, sourceID string) {
 	if amount <= 0 {
 		return
 	}
-	target.Health = math.Max(0, target.Health-amount)
+	applied := math.Min(target.Health, amount)
+	target.Health = math.Max(0, target.Health-applied)
+	w.combat.recordDamage(at, sourceID, target.ID, applied, target.Health == 0)
 	if target.Health == 0 {
 		target.Alive, target.Velocity, target.Effects, target.DashTicksLeft = false, Vec{}, nil, 0
+		w.cancelTelegraphs(target.ID, at)
 	}
 }
 

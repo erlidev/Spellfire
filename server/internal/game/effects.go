@@ -12,8 +12,8 @@ import (
 // running on a player, exactly as it retunes an owned item.
 type ActiveEffect struct {
 	EffectID string
-	// SourceID is who applied it. Phase 1.4's contribution ledger reads this to
-	// credit damage a burn deals after its caster has stopped shooting.
+	// SourceID is who applied it. The contribution ledger reads this to credit
+	// damage a burn deals after its caster has stopped shooting.
 	SourceID  string
 	ExpiresAt time.Time
 	// NextTickAt paces a burn's damage. It is zero for every other kind.
@@ -73,7 +73,7 @@ func (w *World) stepEffects(p *Player, now time.Time) {
 			// Catch up whole ticks rather than one per frame, so a burn deals
 			// the same total however the tick rate divides its cadence.
 			for effect.TickMS > 0 && !now.Before(active.NextTickAt) && p.Alive {
-				w.damage(p, effect.DamageFraction*w.tuning.Tables.BandDamage(effect.DamageBand), active.SourceID)
+				w.damage(p, effect.DamageFraction*w.tuning.Tables.BandDamage(effect.DamageBand), active.SourceID, active.NextTickAt)
 				active.NextTickAt = active.NextTickAt.Add(effect.Tick())
 			}
 		}

@@ -40,6 +40,8 @@ Modules may collapse when irrelevant. Local health, critical combat resources, a
 
 Prompts appear near their object or in one consistent interaction area. They cover harvesting and interruption, loot priority, safe-zone transitions, services, future vehicles, and actionable failures such as locked loadouts or invalid targets. Show action and input briefly; teach detail elsewhere.
 
+The initial interaction binding is E on keyboard and Use on touch. The protocol carries the action now; later contextual systems change the prompt and outcome, not the input contract.
+
 Combat feedback covers damage, healing/shields, status, unavailable cooldown/mana, reload, and death using the design's [telegraph and primitive grammar](../design/visual-direction.md#readability-system). Floating numbers are **Open**; if adopted, they are suppressible and cannot cover telegraphs.
 
 ## Safety and danger
@@ -54,4 +56,3 @@ Combat feedback covers damage, healing/shields, status, unavailable cooldown/man
 - Show exit invulnerability as a persistent self state with its remaining duration, and state that acting hostilely ends it. It must be legible to attackers too, so a protected player is never mistaken for a valid target.
 
 Warnings teach once and then condense. Reduced warnings must retain persistent danger and PvP state.
-

@@ -226,12 +226,9 @@ func (t *Tables) validateBiomes(r *report) {
 }
 
 // honouredDodgeVectors are the counterplay vectors the simulation actually
-// delivers today. A damaging row may only claim one of these: a table that
-// promises a cast time or a telegraph the server does not run would leave the
-// ability with no dodge vector at all, which the invariant forbids. Phase 1.6
-// builds the telegraph grammar and the windup that go with the rest, and adds
-// them here in the same change.
-var honouredDodgeVectors = []string{"projectile_travel"}
+// delivers. A damaging row may only claim one of these; the ability validation
+// below also requires the windup or shared geometry that makes each claim real.
+var honouredDodgeVectors = []string{"projectile_travel", "cast_time", "telegraph", "ground_indicator"}
 
 func (t *Tables) validateEffects(r *report) {
 	for _, id := range sortedKeys(t.Effects) {
@@ -286,20 +283,51 @@ func (t *Tables) validateAbilities(r *report) {
 			r.require(t.Effects[effect].Name != "", "abilities: %q applies unknown effect %q", id, effect)
 		}
 		if ability.Telegraph != nil {
-			r.require(contains(TelegraphShapes, ability.Telegraph.Shape),
-				"abilities: %q has telegraph shape %q, which is not one of the standardized figures %v", id, ability.Telegraph.Shape, TelegraphShapes)
+			t.validateTelegraph(r, "abilities", id, *ability.Telegraph)
 		}
-		// The simulation delivers on use; nothing runs a windup yet, so a row
-		// that declares one would commit the user to a wait that never happens.
-		r.require(ability.WindupMS == 0 && ability.Telegraph == nil,
-			"abilities: %q declares a windup or telegraph, which the simulation does not yet run; Phase 1.6 builds the telegraph grammar and the windup together", id)
+		r.require((ability.WindupMS > 0) == (ability.Telegraph != nil),
+			"abilities: %q must declare a positive windup_ms and a telegraph together, or neither", id)
 		if !ability.Damaging() {
 			r.require(ability.DodgeVector == "", "abilities: %q deals no damage, so it must not claim a dodge vector", id)
 			continue
 		}
 		t.validateDamaging(r, "abilities", id, ability.DamageBand, ability.DodgeVector, ability.Projectile)
 		r.require(contains(honouredDodgeVectors, ability.DodgeVector),
-			"abilities: %q claims dodge vector %q, which the simulation does not yet deliver; only %v are honoured today", id, ability.DodgeVector, honouredDodgeVectors)
+			"abilities: %q claims dodge vector %q, which the simulation does not deliver; only %v are honoured", id, ability.DodgeVector, honouredDodgeVectors)
+		if ability.DodgeVector == "cast_time" {
+			r.require(ability.WindupMS > 0, "abilities: %q claims cast_time but declares no windup", id)
+		}
+		if ability.DodgeVector == "telegraph" || ability.DodgeVector == "ground_indicator" {
+			r.require(ability.Telegraph != nil, "abilities: %q claims %s but declares no telegraph", id, ability.DodgeVector)
+		}
+	}
+}
+
+func (t *Tables) validateTelegraph(r *report, table, id string, telegraph Telegraph) {
+	prefix := fmt.Sprintf("%s: %q telegraph", table, id)
+	if !r.require(contains(TelegraphShapes, telegraph.Shape),
+		"%s has shape %q, want one of the standardized figures %v", prefix, telegraph.Shape, TelegraphShapes) {
+		return
+	}
+	r.require(telegraph.ActiveMS > 0, "%s must declare a positive active_ms", prefix)
+	r.require(telegraph.ResolvedMS > 0, "%s must declare a positive resolved_ms", prefix)
+	switch telegraph.Shape {
+	case "circle":
+		r.require(telegraph.Radius > 0, "%s circle must declare a positive radius", prefix)
+		r.require(telegraph.Length == 0 && telegraph.Width == 0 && telegraph.AngleDegrees == 0,
+			"%s circle declares geometry it does not use", prefix)
+	case "cone":
+		r.require(telegraph.Length > 0, "%s cone must declare a positive length", prefix)
+		r.require(telegraph.AngleDegrees > 0 && telegraph.AngleDegrees < 360,
+			"%s cone angle_degrees must lie between 0 and 360 exclusive", prefix)
+		r.require(telegraph.Radius == 0 && telegraph.Width == 0, "%s cone declares geometry it does not use", prefix)
+	case "line":
+		r.require(telegraph.Length > 0 && telegraph.Width > 0, "%s line must declare a positive length and width", prefix)
+		r.require(telegraph.Radius == 0 && telegraph.AngleDegrees == 0, "%s line declares geometry it does not use", prefix)
+	case "ring":
+		r.require(telegraph.Radius > 0 && telegraph.Width > 0 && telegraph.Width < telegraph.Radius,
+			"%s ring must declare a positive radius and a width smaller than it", prefix)
+		r.require(telegraph.Length == 0 && telegraph.AngleDegrees == 0, "%s ring declares geometry it does not use", prefix)
 	}
 }
 
@@ -375,6 +403,13 @@ func (t *Tables) validateMobs(r *report) {
 		r.require(mob.Turrets >= 1, "mobs: %q must have at least one turret", id)
 		r.require(t.Combat.DamageBands[mob.DamageBand].Name != "", "mobs: %q references unknown damage band %q", id, mob.DamageBand)
 		r.require(contains(t.Combat.DodgeVectors, mob.DodgeVector), "mobs: %q declares no valid dodge vector; every damaging tool needs one", id)
+		if mob.TelegraphShape != "" {
+			r.require(contains(TelegraphShapes, mob.TelegraphShape),
+				"mobs: %q telegraph_shape %q is not one of the shared figures %v", id, mob.TelegraphShape, TelegraphShapes)
+		}
+		if mob.DodgeVector == "telegraph" || mob.DodgeVector == "ground_indicator" {
+			r.require(mob.TelegraphShape != "", "mobs: %q claims %s but selects no shared telegraph_shape", id, mob.DodgeVector)
+		}
 	}
 }
 

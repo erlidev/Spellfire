@@ -50,7 +50,7 @@ Component, material, and biome-placement rows are intentionally empty until the 
 - [x] Saved position expires after 30 min offline and recalls to the nearest unlocked outpost or the hub ([outposts.json](data/tuning/outposts.json), `World.recallDestination`)
 - [x] One body per account: a second character's join is refused while the first is in the world, lingering included, so switching characters is not a combat-log escape (`Engine.Join`/`ErrAccountInWorld`, [architecture.md](docs/architecture.md#one-body-per-account))
 
-Carried materials and unlocked outposts round-trip through the world but nothing mutates them yet: harvesting is Phase 4.1, outpost discovery is Phase 3, and crafting is Phase 2.3. `outposts.json` ships empty, so every recall resolves to the hub until Phase 3 places them. A lingering body is not flagged on the wire, so it reads as a motionless player rather than one visibly logging out — the field belongs with the Phase 1.5 per-entity state expansion.
+Carried materials and unlocked outposts round-trip through the world but nothing mutates them yet: harvesting is Phase 4.1, outpost discovery is Phase 3, and crafting is Phase 2.3. `outposts.json` ships empty, so every recall resolves to the hub until Phase 3 places them. Lingering bodies are now flagged on the wire and rendered as dimmed, offline actors; Phase 7 still owns the surrounding exit and reconnect UX.
 
 ### 1.3 Server-side ability/effect framework
 - [x] One authoritative ability system replacing the ad-hoc branches in `stepPlayer`/`tryFire` — `World.ability`/`useAbility`/`spend`/`deliver` ([ability.go](server/internal/game/ability.go), [architecture.md](docs/architecture.md#abilities-and-effects))
@@ -60,27 +60,34 @@ Carried materials and unlocked outposts round-trip through the world but nothing
 
 `effects.json` ships empty: the layer runs all six kinds, but no design document has settled a
 magnitude, so Phase 2.4's gadgets and Phase 2.5's element secondaries author the rows and the tests
-exercise the layer against rows they add themselves. No shipped ability applies an effect, so client
-prediction stays exact until effects reach the wire with the 1.5 state expansion. Telegraphs and
-windups are declared and validated but not run — the loader refuses a row that declares one, because
-a cast time the server never honours would leave the ability with no dodge vector; 1.6 builds the
-grammar and the windup together.
+exercise the layer against rows they add themselves. Active effect IDs already reach the client in
+the expanded entity state. Windups and telegraphs now run through the same ability path; the starter
+Fire bolt exercises them without prematurely authoring Phase 2's element-secondary values.
 
 ### 1.4 Damage attribution
-- [ ] Per-target contribution ledger in `World.damage`, which already takes the source ID ([world.go:549](server/internal/game/world.go#L549))
-- [ ] Kill credit by most damage dealt, not last hit ([squads-and-world-bosses.md](docs/game/design/squads-and-world-bosses.md#squads))
-- [ ] Combat log surface reusable by drop ownership and boss ranking
+- [x] Per-target contribution ledger in `World.damage`; only effective health damage counts, after shields and capped before overkill ([combat_log.go](server/internal/game/combat_log.go), [combat_log_test.go](server/internal/game/combat_log_test.go))
+- [x] Kill credit by most damage dealt, not last hit; equal totals resolve to the earliest contributor ([squads-and-world-bosses.md](docs/game/design/squads-and-world-bosses.md#squads))
+- [x] Bounded cursor-based combat log plus immutable lethal event, reusable by drop ownership and boss ranking ([architecture.md](docs/architecture.md#damage-attribution-and-combat-log))
+
+Contribution is scoped to one target life and resets on respawn. Damage and kill events remain in the
+bounded stream after that reset, so Phase 4 drops and Phase 5 boss consumers can advance independent
+cursors without retaining pointers into mutable `World` state.
 
 ### 1.5 Protocol expansion
-- [ ] Extend `Entity.Type` beyond `PLAYER`/`PROJECTILE` ([game.proto:37](proto/game.proto#L37)): mob, drop, node, telegraph, deployable, boss
-- [ ] Per-entity fields for element, allegiance/squad, telegraph state, invulnerability
-- [ ] Add an interact button to the input bitfield ([game.proto:18](proto/game.proto#L18))
-- [ ] Measure snapshot size before and after; record the bandwidth budget in `docs/architecture.md`
+- [x] Extend `Entity.Type` beyond `PLAYER`/`PROJECTILE` ([game.proto](proto/game.proto)): mob, drop, node, telegraph, deployable, boss
+- [x] Per-entity fields for element, allegiance/squad, telegraph state/geometry, invulnerability, logout linger, and active effect IDs
+- [x] Add an interact button to the input bitfield and bind it to E / touch Use ([types.ts](web/src/types.ts), [main.ts](web/src/main.ts))
+- [x] Measure snapshot size before and after; enforce and record the bandwidth budget in [`docs/architecture.md`](docs/architecture.md#snapshot-bandwidth-budget)
 
 ### 1.6 Telegraph grammar (built here, not in Phase 6)
-- [ ] Shared data-driven renderer for translucent circle / cone / line / ring ([visual-direction.md](docs/game/design/visual-direction.md#readability-system))
-- [ ] Opacity encodes pending → active → resolved; resolution flash
-- [ ] Both the spell system and the Sentry consume it; nothing hand-rolls a telegraph
+- [x] Shared data-driven renderer for translucent circle / cone / line / ring ([visual-direction.md](docs/game/design/visual-direction.md#readability-system), [view.ts](web/src/game/view.ts))
+- [x] Opacity encodes pending → active → resolved; resolution flash and fade are one shared style function ([telegraph.ts](web/src/game/telegraph.ts))
+- [x] Spells emit the generic authoritative telegraph entity; the Sentry contract selects from the same validated shape vocabulary, and future mobs call the owner-agnostic emitter rather than a render-specific path
+
+The starter Fire bolt now commits its cost and a fixed line telegraph for 300 ms before delivery.
+Origin and direction lock at commit so a warning cannot track a dodging target; death cancels a pending
+cast into its resolution flash. `active_ms`, `resolved_ms`, and shape geometry are versioned tuning,
+while Sentry cadence, projectile values, and full AI remain deliberately deferred to Phase 4.3.
 
 ---
 

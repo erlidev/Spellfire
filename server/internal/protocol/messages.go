@@ -19,6 +19,30 @@ const (
 	ServerPong     uint64 = 4
 )
 
+const (
+	EntityPlayer     uint64 = 1
+	EntityProjectile uint64 = 2
+	EntityMob        uint64 = 3
+	EntityDrop       uint64 = 4
+	EntityNode       uint64 = 5
+	EntityTelegraph  uint64 = 6
+	EntityDeployable uint64 = 7
+	EntityBoss       uint64 = 8
+)
+
+const (
+	AllegianceSelf    uint64 = 1
+	AllegianceSquad   uint64 = 2
+	AllegianceNeutral uint64 = 3
+	AllegianceHostile uint64 = 4
+)
+
+const (
+	TelegraphPending  uint64 = 1
+	TelegraphActive   uint64 = 2
+	TelegraphResolved uint64 = 3
+)
+
 type Input struct {
 	Sequence     uint32
 	Buttons      uint32
@@ -48,6 +72,20 @@ type Entity struct {
 	AcknowledgedInput uint32
 	Alive             bool
 	OwnerID           string
+	Element           string
+	SquadID           string
+	Allegiance        uint64
+	TelegraphState    uint64
+	Invulnerable      bool
+	TelegraphShape    string
+	Radius            float32
+	Length            float32
+	Width             float32
+	AngleDegrees      float32
+	TelegraphProgress float32
+	AbilityID         string
+	Lingering         bool
+	EffectIDs         []string
 }
 
 type Collider struct {
@@ -216,6 +254,26 @@ func encodeEntity(e Entity) []byte {
 		out = appendVarint(out, 15, 1)
 	}
 	out = appendString(out, 16, e.OwnerID)
+	out = appendString(out, 17, e.Element)
+	out = appendString(out, 18, e.SquadID)
+	out = appendVarint(out, 19, e.Allegiance)
+	out = appendVarint(out, 20, e.TelegraphState)
+	if e.Invulnerable {
+		out = appendVarint(out, 21, 1)
+	}
+	out = appendString(out, 22, e.TelegraphShape)
+	out = appendFloat(out, 23, e.Radius)
+	out = appendFloat(out, 24, e.Length)
+	out = appendFloat(out, 25, e.Width)
+	out = appendFloat(out, 26, e.AngleDegrees)
+	out = appendFloat(out, 27, e.TelegraphProgress)
+	out = appendString(out, 28, e.AbilityID)
+	if e.Lingering {
+		out = appendVarint(out, 29, 1)
+	}
+	for _, effectID := range e.EffectIDs {
+		out = appendString(out, 30, effectID)
+	}
 	return out
 }
 

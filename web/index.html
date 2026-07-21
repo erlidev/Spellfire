@@ -42,14 +42,14 @@
         <div class="bar resource"><i id="resource-bar"></i></div>
       </div>
       <div class="hud abilities" aria-label="Combat actions">
-        <div><kbd>Mouse</kbd><span>Primary</span></div><div><kbd>Space</kbd><span>Dash</span></div><div><kbd>R</kbd><span>Reload</span></div>
+        <div><kbd>Mouse</kbd><span>Primary</span></div><div><kbd>Space</kbd><span>Dash</span></div><div><kbd>R</kbd><span>Reload</span></div><div><kbd>E</kbd><span>Interact</span></div>
       </div>
       <div id="world-notice" class="hud world-notice" role="status"></div>
       <div id="connection-overlay" class="connection-overlay" hidden><h2 id="connection-title">Connecting</h2><p id="connection-message">Joining the world…</p><button id="connection-cancel">Return home</button></div>
       <div id="death-overlay" class="connection-overlay" hidden><h2>You fell in the frontier</h2><p>Your crafted gear is safe. This foundation does not yet award carried materials.</p><button id="respawn-button" class="primary">Respawn at central hub</button></div>
       <div id="touch-controls" aria-label="Touch controls">
         <div class="touch-move"><button data-button="up">▲</button><button data-button="left">◀</button><button data-button="down">▼</button><button data-button="right">▶</button></div>
-        <div class="touch-actions"><button data-button="dash">Dash</button><button data-button="fire">Fire</button></div>
+        <div class="touch-actions"><button data-button="interact">Use</button><button data-button="dash">Dash</button><button data-button="fire">Fire</button></div>
       </div>
     </section>
 
@@ -89,7 +89,7 @@
       <h2>Accessibility &amp; controls</h2>
       <label><input id="reduced-motion" type="checkbox" /> Reduce motion and camera feedback</label>
       <label>Interface scale <input id="ui-scale" type="range" min="85" max="130" value="100" /></label>
-      <p>Move with WASD or arrow keys. Aim and fire with the pointer. Dash with Space and reload with R. Touch controls appear on touch-first devices.</p>
+      <p>Move with WASD or arrow keys. Aim and fire with the pointer. Dash with Space, reload with R, and interact with E. Touch controls appear on touch-first devices.</p>
     </dialog>
     <script type="module" src="/src/main.ts"></script>
   </body>

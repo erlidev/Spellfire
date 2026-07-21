@@ -169,7 +169,7 @@ func TestShieldAbsorbsBeforeHealthAndFallsAway(t *testing.T) {
 	hit := w.tuning.Tables.BandDamage("standard")
 	w.applyEffects(p, []string{"shield-test"}, "source", Vec{1, 0}, now)
 
-	w.damage(p, hit*1.5, "source")
+	w.damage(p, hit*1.5, "source", now)
 	if want := w.tuning.MaxHealth - hit*0.5; math.Abs(p.Health-want) > 0.001 {
 		t.Fatalf("health = %g, want %g: the shield should absorb one band hit first", p.Health, want)
 	}
@@ -177,7 +177,7 @@ func TestShieldAbsorbsBeforeHealthAndFallsAway(t *testing.T) {
 	if len(p.Effects) != 0 {
 		t.Fatalf("a spent shield is still running: %#v", p.Effects)
 	}
-	w.damage(p, hit, "source")
+	w.damage(p, hit, "source", now)
 	if want := w.tuning.MaxHealth - hit*1.5; math.Abs(p.Health-want) > 0.001 {
 		t.Fatalf("health = %g, want %g: the spent shield still absorbed", p.Health, want)
 	}
@@ -227,7 +227,7 @@ func TestDeathClearsRunningEffects(t *testing.T) {
 	p := addTestPlayer(w, "p", model.Gunslinger, Vec{1200, 0}, now)
 	w.applyEffects(p, []string{"slow-test"}, "source", Vec{1, 0}, now)
 
-	w.damage(p, w.tuning.MaxHealth, "source")
+	w.damage(p, w.tuning.MaxHealth, "source", now)
 	if p.Alive || len(p.Effects) != 0 {
 		t.Fatalf("a dead body still carries %#v", p.Effects)
 	}

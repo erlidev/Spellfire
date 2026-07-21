@@ -75,7 +75,7 @@ export function encodeSimple(kind: 3 | 4, clientTimeMS = 0): Uint8Array {
 }
 
 function decodeEntity(bytes: Uint8Array): Entity {
-  const value: Entity = { type: 0, id: "", name: "", className: "", x: 0, y: 0, vx: 0, vy: 0, aimX: 0, aimY: 0, health: 0, maxHealth: 0, mana: 0, acknowledgedInput: 0, alive: false, ownerID: "" };
+  const value: Entity = { type: 0, id: "", name: "", className: "", x: 0, y: 0, vx: 0, vy: 0, aimX: 0, aimY: 0, health: 0, maxHealth: 0, mana: 0, acknowledgedInput: 0, alive: false, ownerID: "", element: "", squadID: "", allegiance: 0, telegraphState: 0, invulnerable: false, telegraphShape: "", radius: 0, length: 0, width: 0, angleDegrees: 0, telegraphProgress: 0, abilityID: "", lingering: false, effectIDs: [] };
   const reader = new Reader(bytes);
   while (!reader.done) {
     const tag = reader.varint(), field = tag >>> 3, wire = tag & 7;
@@ -88,6 +88,13 @@ function decodeEntity(bytes: Uint8Array): Entity {
       case 11: value.health = reader.fixed32(); break; case 12: value.maxHealth = reader.fixed32(); break;
       case 13: value.mana = reader.fixed32(); break; case 14: value.acknowledgedInput = reader.varint(); break;
       case 15: value.alive = reader.varint() !== 0; break; case 16: value.ownerID = reader.string(); break;
+      case 17: value.element = reader.string(); break; case 18: value.squadID = reader.string(); break;
+      case 19: value.allegiance = reader.varint(); break; case 20: value.telegraphState = reader.varint(); break;
+      case 21: value.invulnerable = reader.varint() !== 0; break; case 22: value.telegraphShape = reader.string(); break;
+      case 23: value.radius = reader.fixed32(); break; case 24: value.length = reader.fixed32(); break;
+      case 25: value.width = reader.fixed32(); break; case 26: value.angleDegrees = reader.fixed32(); break;
+      case 27: value.telegraphProgress = reader.fixed32(); break; case 28: value.abilityID = reader.string(); break;
+      case 29: value.lingering = reader.varint() !== 0; break; case 30: value.effectIDs.push(reader.string()); break;
       default: reader.skip(wire);
     }
   }

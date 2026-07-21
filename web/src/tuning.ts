@@ -31,7 +31,7 @@ export interface CombatTable { roles: string[]; dodge_vectors: string[]; player:
 export interface Element { name: string; primary_role: string; secondary: string; character: string }
 export interface Projectile { kind: string; speed: number; life_seconds: number; radius: number; silhouette: string }
 export interface Cost { kind: "none" | "ammo" | "mana"; amount: number }
-export interface Telegraph { shape: string; radius?: number; length?: number; angle_degrees?: number }
+export interface Telegraph { shape: "circle" | "cone" | "line" | "ring"; radius?: number; length?: number; width?: number; angle_degrees?: number; active_ms: number; resolved_ms: number }
 export interface Ability { name: string; cost: Cost; interval_ms: number; cooldown_ms: number; windup_ms?: number; telegraph?: Telegraph; dodge_vector?: string; damage_band?: string; projectile?: Projectile; effects?: string[] }
 export interface Effect { name: string; kind: string; stacking: string; duration_ms: number; tick_ms?: number; damage_band?: string; damage_fraction?: number; speed_multiplier?: number; speed?: number; absorb_hits?: number }
 export interface Weapon { name: string; class: CharacterClass; blueprint: string; category: string; starter?: boolean; magazine_size?: number; reload_ms?: number; ability?: string; spell?: string }
@@ -43,7 +43,7 @@ export interface Grade { name: string; tier: number }
 export interface MaterialKind { name: string; universal: boolean; source: string; summary: string }
 export interface Material { name: string; grade: string; kind: string; biome?: string }
 export interface MaterialsTable { grades: Record<string, Grade>; kinds: Record<string, MaterialKind>; materials: Record<string, Material> }
-export interface Mob { name: string; family: string; silhouette: string; damage_band: string; dodge_vector: string; turrets: number; behavior: string }
+export interface Mob { name: string; family: string; silhouette: string; damage_band: string; dodge_vector: string; telegraph_shape?: Telegraph["shape"]; turrets: number; behavior: string }
 export interface Biome { name: string; element: string }
 
 export const manifest = manifestData as Manifest;

@@ -18,12 +18,15 @@ Rules, from [`invariants.md`](../../docs/game/design/invariants.md) and
   drifting item by item.
 - **Every damaging ability declares a dodge vector**, and no projectile may
   have zero travel speed. The loader rejects both, and it also rejects a dodge
-  vector the simulation does not yet deliver — a promised cast time or telegraph
-  the server never runs would leave the ability with no counterplay at all.
+  vector the simulation cannot deliver or a cast-time/telegraph claim without
+  the windup and shared geometry that make its counterplay real.
 - **One ability contract.** Anything that acts — a gun, a spell, and later a
   mob or a deployable — points at an `abilities.json` row for its cost,
   cadence, cooldown, counterplay, delivery, and effects. Weapons and spells hold
   identity only.
+- **One telegraph grammar.** Windups emit an authoritative telegraph entity
+  whose circle, cone, line, or ring geometry and phase durations come from the
+  ability row. Owner type never changes the wire or renderer path.
 
 ## Versioning
 
@@ -66,15 +69,17 @@ Rows are populated only where a design document has settled them.
   settled a magnitude. Phase 2.4's gadgets and Phase 2.5's element secondaries
   author the rows; the tests exercise the layer against rows they add
   themselves.
-- No shipped ability declares a `windup_ms` or a `telegraph`. The simulation
-  delivers on use, so the loader refuses a row that declares either; Phase 1.6
-  builds the telegraph grammar and the windup that honours it in one change,
-  and relaxes `honouredDodgeVectors` in the same place.
+- The starter Fire bolt exercises windups and the shared line telegraph. A cast
+  pays up front, locks its origin and direction, then delivers only after the
+  pending phase; death cancels it into the common resolution flash. The loader
+  requires `windup_ms` and `telegraph` together and validates the exact geometry
+  each of circle, cone, line, and ring consumes.
 - `components.components` and `materials.materials` are empty. Slotted-blueprint
   crafting (Phase 2.3) and harvesting (Phase 4.1) fill them; the schemas and
   their validation exist now so those phases add data, not structure.
 - `mobs.sentry` carries the settled contract — family, silhouette, damage band,
-  dodge vector, turret count — and no aggro radius, leash, movement, or cadence.
+  dodge vector, shared telegraph shape, turret count — and no aggro radius,
+  leash, movement, cadence, telegraph timing, or projectile values.
   [`economy-death-and-pve.md`](../../docs/game/design/economy-death-and-pve.md#sentry)
   defers those to implementation and playtesting; writing numbers now would be
   false precision.
@@ -116,5 +121,7 @@ weapon. Abilities add their own: the cost kind must be one the simulation can
 charge, a magazine weapon's ability must spend ammunition it holds, every
 applied effect must exist, an effect must be of a kind the world can run and may
 only carry the fields its kind uses, and a damaging ability must declare a band
-and an honoured dodge vector. Failures list every problem at once — run
+and an honoured dodge vector. Telegraph rows must pair with a positive windup,
+carry positive active/resolved phase times, and use only their shape's geometry;
+mob telegraph shapes come from the same vocabulary. Failures list every problem at once — run
 `go test ./server/...`.
