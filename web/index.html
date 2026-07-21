@@ -68,7 +68,7 @@
       <form method="dialog" class="modal-close"><button aria-label="Close">×</button></form>
       <h2>Create a character</h2>
       <form id="character-form">
-        <label>Name<input id="character-name" minlength="3" maxlength="20" pattern="[A-Za-z0-9][A-Za-z0-9 _-]{1,18}[A-Za-z0-9]" required /></label>
+        <label>Name<input id="character-name" minlength="3" maxlength="20" pattern="[A-Za-z0-9][A-Za-z0-9 _\-]{1,18}[A-Za-z0-9]" required /></label>
         <fieldset><legend>Class</legend><label><input type="radio" name="class" value="gunslinger" checked /> Gunslinger <small>Mechanical aim and movement</small></label><label><input type="radio" name="class" value="mage" /> Mage <small>Timing and prediction</small></label></fieldset>
         <p id="character-error" class="error" role="alert"></p>
         <button class="primary" type="submit">Create</button>

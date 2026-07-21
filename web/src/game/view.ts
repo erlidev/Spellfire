@@ -1,4 +1,6 @@
 import { Application, Container, Graphics, Text } from "pixi.js";
+// Install eval-free polyfills so WebGL works under a CSP without 'unsafe-eval'. Side-effect import; must run before the renderer is created.
+import "pixi.js/unsafe-eval";
 import type { Collider, Entity, ServerMessage } from "../types";
 import type { Predictor } from "./prediction";
 

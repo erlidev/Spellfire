@@ -110,7 +110,7 @@ Each client has a two-message outbound queue. If a slow client fills it, an olde
 
 ## Rendering and interface
 
-Pixi owns only the play space; DOM elements own forms, dialogs, HUD, status, and accessibility semantics. The world renderer uses `Graphics` geometry for the grid, safety/world rings, angular Gunslingers, round Mages, held procedural guns/staffs, projectiles, health bars, names, and collidable trees. Fill communicates class/element identity while outlines communicate self/hostility, with silhouette providing the required redundant non-color channel.
+Pixi owns only the play space; DOM elements own forms, dialogs, HUD, status, and accessibility semantics. The world renderer uses `Graphics` geometry for the grid, safety/world rings, angular Gunslingers, round Mages, held procedural guns/staffs, projectiles, health bars, names, and collidable trees. Fill communicates class/element identity while outlines communicate self/hostility, with silhouette providing the required redundant non-color channel. Because the server serves a strict `Content-Security-Policy` with `script-src 'self'` (no `unsafe-eval`), `view.ts` imports `pixi.js/unsafe-eval` for its side effect, which swaps Pixi's runtime code generation for eval-free polyfills before the renderer is created.
 
 Desktop controls are WASD/arrows, pointer aim/fire, Space dash, and R reload. Touch-first layouts expose directional, fire, and dash buttons in safe-area-aware thumb zones. The HUD exposes health, class resource, danger/PvP state, actions, latency, reconnect state, death, and respawn. Home authentication and character creation remain in modal context. The in-game menu explicitly states that the world does not pause.
 
