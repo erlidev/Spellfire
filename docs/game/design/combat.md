@@ -34,6 +34,8 @@ Keystones change behavior rather than enlarge numbers. A dash might empower the 
 
 Every build has a short dash with a meaningful cooldown and no invulnerability frames. It can dodge one telegraph or adjust position, but cannot reliably escape or kite.
 
+The dash is a fast burst of movement rather than a teleport: it carries the player along the direction chosen at the press over roughly an eighth of a second, cannot be steered mid-dash, and stops on trees and world bounds like normal movement. The travel time is short enough to feel decisive but long enough to be read and reacted to.
+
 This floor prevents helpless builds at three-second TTK without erasing low-mobility archetypes. Genuine mobility still costs spell or gadget slots; players who decline it depend on teammates.
 
 ## Third parties and outnumbered fights

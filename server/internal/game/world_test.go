@@ -48,31 +48,59 @@ func TestMovementNormalizesDiagonalsAndAcknowledgesInput(t *testing.T) {
 func TestDashIsEdgeTriggeredAndRespectsCooldown(t *testing.T) {
 	w, now := testWorld()
 	p := addTestPlayer(w, "p", model.Gunslinger, Vec{}, now)
-	w.ApplyInput(p.ID, protocol.Input{Sequence: 1, Buttons: ButtonRight | ButtonDash, AimX: 1, ClientTimeMS: uint64(now.UnixMilli())})
-	w.Step(now)
-	first := p.Position.X
-	if first < w.tuning.DashDistance {
-		t.Fatalf("dash distance = %f", first)
+	tick := time.Second / 60
+	ticks := w.tuning.dashTicks()
+	perTick := w.tuning.DashDistance / float64(ticks)
+	sequence := uint32(0)
+	press := func(buttons uint32, at time.Time) {
+		sequence++
+		w.ApplyInput(p.ID, protocol.Input{Sequence: sequence, Buttons: buttons, AimX: 1, ClientTimeMS: uint64(at.UnixMilli())})
+		w.Step(at)
 	}
-	w.ApplyInput(p.ID, protocol.Input{Sequence: 2, Buttons: ButtonRight | ButtonDash, AimX: 1, ClientTimeMS: uint64(now.UnixMilli())})
-	w.Step(now.Add(time.Second / 60))
+	press(ButtonRight|ButtonDash, now)
+	if math.Abs(p.Position.X-perTick) > .001 {
+		t.Fatalf("first dash tick moved %f, want %f", p.Position.X, perTick)
+	}
+	for i := 1; i < ticks; i++ {
+		press(ButtonRight|ButtonDash, now.Add(time.Duration(i)*tick))
+	}
+	first := p.Position.X
+	if math.Abs(first-w.tuning.DashDistance) > .001 {
+		t.Fatalf("dash distance = %f, want %f", first, w.tuning.DashDistance)
+	}
+	press(ButtonRight|ButtonDash, now.Add(time.Duration(ticks)*tick))
 	if p.Position.X-first > w.tuning.PlayerSpeed/60+.01 {
 		t.Fatalf("held dash repeated: %f -> %f", first, p.Position.X)
 	}
-	w.ApplyInput(p.ID, protocol.Input{Sequence: 3, Buttons: ButtonRight, AimX: 1})
-	w.Step(now.Add(time.Second / 30))
-	w.ApplyInput(p.ID, protocol.Input{Sequence: 4, Buttons: ButtonRight | ButtonDash, AimX: 1})
-	w.Step(now.Add(time.Second))
+	press(ButtonRight, now.Add(time.Duration(ticks+1)*tick))
+	press(ButtonRight|ButtonDash, now.Add(time.Second))
 	before := p.Position.X
 	if before-first > 30 {
 		t.Fatalf("dash ignored cooldown but movement delta is excessive: %f", before-first)
 	}
-	w.ApplyInput(p.ID, protocol.Input{Sequence: 5, Buttons: ButtonRight, AimX: 1})
-	w.Step(now.Add(2200 * time.Millisecond))
-	w.ApplyInput(p.ID, protocol.Input{Sequence: 6, Buttons: ButtonRight | ButtonDash, AimX: 1})
-	w.Step(now.Add(2300 * time.Millisecond))
-	if p.Position.X-before < w.tuning.DashDistance {
-		t.Fatalf("dash did not recover after cooldown: %f", p.Position.X-before)
+	press(ButtonRight, now.Add(2200*time.Millisecond))
+	recovered := p.Position.X
+	for i := 0; i < ticks; i++ {
+		press(ButtonRight|ButtonDash, now.Add(2300*time.Millisecond+time.Duration(i)*tick))
+	}
+	if math.Abs(p.Position.X-recovered-w.tuning.DashDistance) > .001 {
+		t.Fatalf("dash did not recover after cooldown: %f", p.Position.X-recovered)
+	}
+}
+
+func TestDashCarriesPlayerAgainstMovementInput(t *testing.T) {
+	w, now := testWorld()
+	p := addTestPlayer(w, "p", model.Gunslinger, Vec{}, now)
+	tick := time.Second / 60
+	ticks := w.tuning.dashTicks()
+	w.ApplyInput(p.ID, protocol.Input{Sequence: 1, Buttons: ButtonRight | ButtonDash, AimX: 1, ClientTimeMS: uint64(now.UnixMilli())})
+	w.Step(now)
+	for i := 1; i < ticks; i++ {
+		w.ApplyInput(p.ID, protocol.Input{Sequence: uint32(i + 1), Buttons: ButtonLeft, AimX: 1})
+		w.Step(now.Add(time.Duration(i) * tick))
+	}
+	if math.Abs(p.Position.X-w.tuning.DashDistance) > .001 || math.Abs(p.Position.Y) > .001 {
+		t.Fatalf("dash was steerable: %#v", p.Position)
 	}
 }
 

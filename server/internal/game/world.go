@@ -25,7 +25,8 @@ type Tuning struct {
 	AOIRadius, WorldRadius              float64
 	SafeRadius, PvPRadius, PlayerRadius float64
 	PlayerSpeed, DashDistance           float64
-	DashCooldown, FireInterval          time.Duration
+	DashDuration, DashCooldown          time.Duration
+	FireInterval                        time.Duration
 	ReloadDuration, MaxRewind           time.Duration
 	ProjectileSpeed, ProjectileLife     float64
 	ProjectileDamage, MaxHealth         float64
@@ -35,7 +36,8 @@ type Tuning struct {
 func DefaultTuning() Tuning {
 	return Tuning{
 		TickRate: 60, SendRate: 20, AOIRadius: 1200, WorldRadius: 3000, SafeRadius: 430, PvPRadius: 1000,
-		PlayerRadius: 20, PlayerSpeed: 260, DashDistance: 105, DashCooldown: 2200 * time.Millisecond,
+		PlayerRadius: 20, PlayerSpeed: 260, DashDistance: 105,
+		DashDuration: 133 * time.Millisecond, DashCooldown: 2200 * time.Millisecond,
 		FireInterval: 300 * time.Millisecond, ReloadDuration: 1400 * time.Millisecond,
 		MaxRewind: 200 * time.Millisecond, ProjectileSpeed: 760, ProjectileLife: 1.5,
 		ProjectileDamage: 10, MaxHealth: 100, MaxMana: 100, ManaRegen: 13,
@@ -67,6 +69,22 @@ type Player struct {
 	PreviousButtons                 uint32
 	NextFire, DashReady, ReloadEnds time.Time
 	Ammo                            int
+	DashDirection                   Vec
+	DashTicksLeft                   int
+}
+
+// A dash covers DashDistance over DashDuration, quantized to whole ticks so the
+// client's fixed-rate prediction reproduces it exactly.
+func (t Tuning) dashTicks() int {
+	ticks := int(math.Round(t.DashDuration.Seconds() * float64(t.TickRate)))
+	if ticks < 1 {
+		ticks = 1
+	}
+	return ticks
+}
+
+func (t Tuning) dashSpeed() float64 {
+	return t.DashDistance / (float64(t.dashTicks()) / float64(t.TickRate))
 }
 
 type Projectile struct {
@@ -136,7 +154,7 @@ func (w *World) Respawn(id string, now time.Time) bool {
 	if p == nil || p.Alive {
 		return false
 	}
-	p.Position, p.Velocity = Vec{}, Vec{}
+	p.Position, p.Velocity, p.DashDirection, p.DashTicksLeft = Vec{}, Vec{}, Vec{}, 0
 	p.Health, p.Mana, p.Alive, p.Ammo = w.tuning.MaxHealth, w.tuning.MaxMana, true, 10
 	p.NextFire, p.ReloadEnds, p.DashReady = now, now, now
 	w.recordHistory(p, now)
@@ -160,7 +178,7 @@ func (w *World) Step(now time.Time) {
 
 func (w *World) stepPlayer(p *Player, now time.Time, dt float64) {
 	if !p.Alive {
-		p.Velocity = Vec{}
+		p.Velocity, p.DashTicksLeft = Vec{}, 0
 		p.Acknowledged = p.Input.Sequence
 		return
 	}
@@ -182,16 +200,21 @@ func (w *World) stepPlayer(p *Player, now time.Time, dt float64) {
 		move.X++
 	}
 	move = move.Normalized()
-	p.Velocity = move.Mul(w.tuning.PlayerSpeed)
-	p.Position = w.moveCircle(p.Position, p.Velocity.Mul(dt), w.tuning.PlayerRadius)
 	if p.Input.Buttons&ButtonDash != 0 && p.PreviousButtons&ButtonDash == 0 && !now.Before(p.DashReady) {
-		direction := move
-		if direction.LengthSq() == 0 {
-			direction = p.Aim
+		p.DashDirection = move
+		if p.DashDirection.LengthSq() == 0 {
+			p.DashDirection = p.Aim
 		}
-		p.Position = w.moveCircle(p.Position, direction.Mul(w.tuning.DashDistance), w.tuning.PlayerRadius)
+		p.DashTicksLeft = w.tuning.dashTicks()
 		p.DashReady = now.Add(w.tuning.DashCooldown)
 	}
+	if p.DashTicksLeft > 0 {
+		p.Velocity = p.DashDirection.Mul(w.tuning.dashSpeed())
+		p.DashTicksLeft--
+	} else {
+		p.Velocity = move.Mul(w.tuning.PlayerSpeed)
+	}
+	p.Position = w.moveCircle(p.Position, p.Velocity.Mul(dt), w.tuning.PlayerRadius)
 	if p.Class == model.Mage {
 		p.Mana = math.Min(w.tuning.MaxMana, p.Mana+w.tuning.ManaRegen*dt)
 	}

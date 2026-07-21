@@ -15,9 +15,19 @@ describe("client prediction", () => {
 
   it("predicts dash only on a press edge", () => {
     const predictor = new Predictor(); predictor.initialize(entity());
-    predictor.step(Buttons.Right | Buttons.Dash, 1, 0, 0); const first = predictor.x;
-    predictor.step(Buttons.Right | Buttons.Dash, 1, 0, 20);
-    expect(first).toBeGreaterThan(105); expect(predictor.x - first).toBeCloseTo(260 / 60);
+    predictor.step(Buttons.Right | Buttons.Dash, 1, 0, 0);
+    expect(predictor.x).toBeCloseTo(105 / 8);
+    for (let index = 1; index < 8; index++) predictor.step(Buttons.Right | Buttons.Dash, 1, 0, index * 17);
+    expect(predictor.x).toBeCloseTo(105);
+    predictor.step(Buttons.Right | Buttons.Dash, 1, 0, 8 * 17);
+    expect(predictor.x - 105).toBeCloseTo(260 / 60);
+  });
+
+  it("carries the dash direction even when movement input changes", () => {
+    const predictor = new Predictor(); predictor.initialize(entity());
+    predictor.step(Buttons.Right | Buttons.Dash, 1, 0, 0);
+    for (let index = 1; index < 8; index++) predictor.step(Buttons.Left, 1, 0, index * 17);
+    expect(predictor.x).toBeCloseTo(105); expect(predictor.y).toBeCloseTo(0);
   });
 
   it("reconciles and replays only unacknowledged motion", () => {

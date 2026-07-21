@@ -4,10 +4,13 @@ const speed = 260;
 const radius = 20;
 const dashDistance = 105;
 const dashCooldownMS = 2200;
+// Mirrors the server: the dash covers dashDistance over a whole number of ticks.
+const dashTicks = 8;
+const dashSpeed = dashDistance / (dashTicks / 60);
 const worldRadius = 3000;
 
 interface Motion { x: number; y: number }
-interface Pending { input: InputFrame; motions: Motion[] }
+interface Pending { input: InputFrame; motion: Motion }
 
 export class Predictor {
   x = 0; y = 0; aimX = 1; aimY = 0;
@@ -16,6 +19,8 @@ export class Predictor {
   private colliders = new Map<string, Collider>();
   private previousButtons = 0;
   private dashReadyAt = 0;
+  private dashDirX = 0; private dashDirY = 0;
+  private dashTicksLeft = 0;
 
   setColliders(values: Collider[]): void { for (const value of values) this.colliders.set(value.id, value); }
 
@@ -28,16 +33,22 @@ export class Predictor {
     let dy = Number(Boolean(buttons & Buttons.Down)) - Number(Boolean(buttons & Buttons.Up));
     const moveLength = Math.hypot(dx, dy);
     if (moveLength) { dx /= moveLength; dy /= moveLength; }
-    const motions: Motion[] = [{ x: dx * speed / 60, y: dy * speed / 60 }];
     if ((buttons & Buttons.Dash) && !(this.previousButtons & Buttons.Dash) && now >= this.dashReadyAt) {
-      const dashX = moveLength ? dx : this.aimX, dashY = moveLength ? dy : this.aimY;
-      motions.push({ x: dashX * dashDistance, y: dashY * dashDistance });
+      this.dashDirX = moveLength ? dx : this.aimX; this.dashDirY = moveLength ? dy : this.aimY;
+      this.dashTicksLeft = dashTicks;
       this.dashReadyAt = now + dashCooldownMS;
     }
-    for (const motion of motions) this.applyMotion(motion);
+    let motion: Motion;
+    if (this.dashTicksLeft > 0) {
+      motion = { x: this.dashDirX * dashSpeed / 60, y: this.dashDirY * dashSpeed / 60 };
+      this.dashTicksLeft--;
+    } else {
+      motion = { x: dx * speed / 60, y: dy * speed / 60 };
+    }
+    this.applyMotion(motion);
     this.previousButtons = buttons;
     const input = { sequence: ++this.sequence, buttons, aimX: this.aimX, aimY: this.aimY, clientTimeMS: Date.now() };
-    this.pending.push({ input, motions });
+    this.pending.push({ input, motion });
     if (this.pending.length > 240) this.pending.shift();
     return input;
   }
@@ -45,7 +56,7 @@ export class Predictor {
   reconcile(authoritative: Entity): void {
     this.x = authoritative.x; this.y = authoritative.y;
     this.pending = this.pending.filter((entry) => entry.input.sequence > authoritative.acknowledgedInput);
-    for (const entry of this.pending) for (const motion of entry.motions) this.applyMotion(motion);
+    for (const entry of this.pending) this.applyMotion(entry.motion);
   }
 
   pendingCount(): number { return this.pending.length; }

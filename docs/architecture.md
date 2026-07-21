@@ -59,6 +59,7 @@ Production deployment must terminate TLS in front of the process, rate-limit aut
 Implemented authoritative rules include:
 
 - normalized eight-direction movement at a capped speed;
+- a timed dash that carries the player at high speed along the direction locked in at the press (movement input, or aim when standing still) for a whole number of ticks, overriding steering for its duration and colliding normally;
 - circular player/world bounds and static circular tree collision, resolved independently on each axis;
 - server-authoritative aim, universal dash, dash cooldown, health, Mage mana/regen, Gunslinger magazine/reload, fire cadence, projectile lifetime, damage, death, and central-hub respawn;
 - projectile-only starter attacks for both classes: a fast narrow bullet and a larger, slower fireball;
@@ -85,7 +86,7 @@ Defaults:
 
 ### Prediction and reconciliation
 
-The client applies local movement and dash immediately at the same fixed rate as the server and retains each input sequence plus its predicted motion. Every authoritative local-player snapshot carries `acknowledged_input`. The client resets to that position, removes acknowledged motions, and replays the remainder through the same circle/tree collision rules. New AOI colliders are merged before reconciliation.
+The client applies local movement and dash immediately at the same fixed rate as the server and retains each input sequence plus its predicted motion. Because the dash is spread over a fixed tick count instead of a single displacement, the client counts down the same dash ticks at 60 Hz and records one motion per input, so replay reproduces the server path exactly. Every authoritative local-player snapshot carries `acknowledged_input`. The client resets to that position, removes acknowledged motions, and replays the remainder through the same circle/tree collision rules. New AOI colliders are merged before reconciliation.
 
 The server never accepts client position, health, damage, cooldown, ammo, or mana values. It accepts buttons, aim direction, input sequence, and client fire time only. Invalid/stale sequences are dropped.
 
