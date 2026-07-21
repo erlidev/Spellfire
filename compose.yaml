@@ -1,0 +1,25 @@
+services:
+  spellfire:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: spellfire:latest
+    container_name: spellfire
+    restart: unless-stopped
+    ports:
+      - "${SPELLFIRE_PORT:-8080}:8080"
+    environment:
+      # Override any of these in a .env file next to this compose file.
+      SPELLFIRE_ADDRESS: ":8080"
+      SPELLFIRE_DATABASE: "/data/spellfire.db"
+      SPELLFIRE_WEB_ROOT: "/app/web"
+      SPELLFIRE_TICK_RATE: "${SPELLFIRE_TICK_RATE:-60}"
+      SPELLFIRE_SEND_RATE: "${SPELLFIRE_SEND_RATE:-20}"
+      SPELLFIRE_AOI_RADIUS: "${SPELLFIRE_AOI_RADIUS:-1200}"
+      SPELLFIRE_MAX_REWIND_MS: "${SPELLFIRE_MAX_REWIND_MS:-200}"
+    volumes:
+      # Named volume keeps the SQLite account/character data across restarts.
+      - spellfire-data:/data
+
+volumes:
+  spellfire-data:

@@ -128,6 +128,14 @@ Desktop controls are WASD/arrows, pointer aim/fire, Space dash, and R reload. To
 
 Tick and send rates must remain evenly compatible for predictable snapshot pacing. Changing simulation speed requires coordinating the client prediction constants; production should expose those values through a versioned welcome/tuning message before making them live-configurable.
 
+## Container deployment
+
+`Dockerfile` is a three-stage build: a `node:20-alpine` stage runs `npm ci && npm run build` to produce the client bundle, a `golang:1.22-alpine` stage compiles the server with `CGO_ENABLED=0` (the SQLite driver is pure Go, so no C toolchain is needed), and an `alpine:3.20` runtime stage carries only the static binary and the built assets. The result runs as a non-root user (`spellfire`, uid 10001) and is ~21 MB.
+
+Inside the image the binary is `/app/spellfire-server`, static assets live at `/app/web` (`SPELLFIRE_WEB_ROOT`), and the SQLite database is written to `/data/spellfire.db` (`SPELLFIRE_DATABASE`) on a mounted volume so account/character data survives container replacement. A `HEALTHCHECK` polls `/api/health`.
+
+`compose.yaml` builds the image, maps `${SPELLFIRE_PORT:-8080}` to container port 8080, persists `/data` in the `spellfire-data` named volume, and exposes the tuning environment variables (overridable through a sibling `.env` file). Run with `docker compose up --build -d`.
+
 ## Testing and verification
 
 Backend tests cover SQLite constraints and account isolation, password/session lifecycle, HTTP validation and non-disclosing credential errors, Protobuf parsing and unknown/truncated fields, fixed-step movement, normalized diagonals, tree/world collision, dash edges/cooldowns, PvP protection, projectile damage, rewind, death/respawn, resources/reload, AOI, engine replacement/backpressure behavior, and WebSocket origin rules. Frontend tests cover wire compatibility, malformed frames, movement/dash prediction, reconciliation replay, and predicted tree collision.

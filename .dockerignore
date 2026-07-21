@@ -1,0 +1,11 @@
+.git
+node_modules
+dist
+docs
+*.md
+spellfire.db
+spellfire.db-shm
+spellfire.db-wal
+.env
+coverage
+*.out
