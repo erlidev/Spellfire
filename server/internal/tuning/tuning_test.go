@@ -477,3 +477,39 @@ func TestValidationRejectsBrokenRetirements(t *testing.T) {
 		})
 	}
 }
+
+// The action bar is one width for both classes: a Gunslinger's weapon plus its
+// gadgets and a Mage's spells must lay out to the same number of bindings.
+func TestLoadoutRejectsMismatchedBarWidths(t *testing.T) {
+	files := edit(t, shipped(t), "loadout.json", func(document map[string]any) {
+		document["gadget_slots"] = 2.0
+	})
+	if _, err := Parse(files); err == nil || !strings.Contains(err.Error(), "action bars of different widths") {
+		t.Fatalf("mismatched bar widths accepted: %v", err)
+	}
+}
+
+// Affinity's shape is locked, but the multiplier is tunable — and a multiplier
+// that makes the grid's own tier-4 build unequippable is a table error.
+func TestLoadoutRejectsAnUnsatisfiableAffinityRule(t *testing.T) {
+	files := edit(t, shipped(t), "loadout.json", func(document map[string]any) {
+		document["affinity"] = map[string]any{"same_element_per_tier": 3.0}
+	})
+	if _, err := Parse(files); err == nil || !strings.Contains(err.Error(), "same-element spells beside it") {
+		t.Fatalf("unsatisfiable affinity accepted: %v", err)
+	}
+}
+
+// A gadget is identity over one ability, exactly like a spell, and it is the
+// Gunslinger's slot kind alone.
+func TestGadgetRowsAreValidatedLikeSpells(t *testing.T) {
+	files := shipped(t)
+	files["tuning/gadgets.json"] = &fstest.MapFile{Data: []byte(`{"smoke": {"name": "Smoke", "class": "mage", "ability": "rifle-shot"}}`)}
+	if _, err := Parse(files); err == nil || !strings.Contains(err.Error(), "gadgets are the Gunslinger's slot kind") {
+		t.Fatalf("a Mage gadget was accepted: %v", err)
+	}
+	files["tuning/gadgets.json"] = &fstest.MapFile{Data: []byte(`{"smoke": {"name": "Smoke", "class": "gunslinger", "ability": "no-such-ability"}}`)}
+	if _, err := Parse(files); err == nil || !strings.Contains(err.Error(), "unknown ability") {
+		t.Fatalf("a gadget with no ability was accepted: %v", err)
+	}
+}

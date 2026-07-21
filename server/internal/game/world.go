@@ -1,11 +1,13 @@
 package game
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"sort"
 	"time"
 
+	"spellfire/server/internal/loadout"
 	"spellfire/server/internal/model"
 	"spellfire/server/internal/protocol"
 	"spellfire/server/internal/tuning"
@@ -75,7 +77,15 @@ func (v Vec) Normalized() Vec {
 type Player struct {
 	ID, AccountID, Name string
 	Class               model.Class
-	WeaponID            string
+	// Loadout is the equipped set — content IDs by slot, resolved against the
+	// tables on every use, never a copy of what those rows hold. Selected is
+	// the action-bar slot the use button acts through, bound to 1–6.
+	Loadout  model.Loadout
+	Selected int
+	// RespecOwed is set when a balance patch or a content withdrawal
+	// re-validated the loadout at join. It stays set until the player next
+	// commits a loadout, which is the free respec the patch entitles them to.
+	RespecOwed bool
 	// SquadID is empty until Phase 5 forms squads. It lives on the actor now so
 	// snapshots and future attribution code do not need a protocol migration.
 	SquadID                         string
@@ -204,6 +214,12 @@ func (w *World) AddPlayer(character model.Character, now time.Time) *Player {
 		w.RemovePlayer(character.ID)
 		character.State.Placed = false
 	}
+	// The saved set is carried onto today's content before the body exists:
+	// retired IDs follow their retirement, an arrangement a balance patch
+	// invalidated is re-validated, and an empty record resolves to the class
+	// default. A character therefore never enters the world holding a set the
+	// rules would refuse.
+	equipped, respec := loadout.Resolve(w.tuning.Tables, character.Class, character.State.Loadout)
 	p := &Player{
 		ID: character.ID, AccountID: character.AccountID, Name: character.Name, Class: character.Class,
 		Position: w.entryPosition(character, now), Aim: Vec{1, 0},
@@ -212,11 +228,11 @@ func (w *World) AddPlayer(character model.Character, now time.Time) *Player {
 		Outposts:        append([]string(nil), character.State.Outposts...),
 		Cooldowns:       make(map[string]time.Time),
 		SpeedMultiplier: 1,
+		Loadout:         equipped,
+		RespecOwed:      respec,
 	}
-	// Until the Phase 2 loadout lands, the equipped weapon is the class starter
-	// row. It is a table reference, never a copy of its stats.
-	if weapon, ok := w.tuning.Tables.StarterWeapon(string(character.Class)); ok {
-		p.WeaponID, p.Ammo = weapon.ID, weapon.MagazineSize
+	if weapon, ok := w.weapon(p); ok {
+		p.Ammo = weapon.MagazineSize
 	}
 	w.players[p.ID] = p
 	if p.AccountID != "" {
@@ -360,6 +376,7 @@ func (w *World) StateOf(id string, now time.Time) (model.CharacterState, bool) {
 		LastSeen:  now,
 		Materials: materials,
 		Outposts:  append([]string(nil), p.Outposts...),
+		Loadout:   p.Loadout.Clone(),
 	}, true
 }
 
@@ -378,8 +395,78 @@ func (w *World) States(now time.Time) map[string]model.CharacterState {
 // weapon resolves the player's equipped row from the tables each time it is
 // needed, so nothing caches a stat snapshot.
 func (w *World) weapon(p *Player) (tuning.Weapon, bool) {
-	weapon, ok := w.tuning.Tables.Weapons[p.WeaponID]
+	weapon, ok := w.tuning.Tables.Weapons[p.Loadout.Weapon]
 	return weapon, ok
+}
+
+// bar is the player's action bar, resolved from the tables on every use for the
+// same reason weapon is: a slot holds an ID, and what that ID means is whatever
+// the tables say today.
+func (w *World) bar(p *Player) []loadout.Slot {
+	return loadout.Bar(w.tuning.Tables, p.Class, p.Loadout)
+}
+
+// selectedSlot is the bar position the use button acts through. A selection
+// past the end of the bar — an old client, or a bar that shrank under a
+// content change — falls back to the first slot rather than doing nothing.
+func (w *World) selectedSlot(p *Player) (loadout.Slot, bool) {
+	slots := w.bar(p)
+	if len(slots) == 0 {
+		return loadout.Slot{}, false
+	}
+	if p.Selected < 0 || p.Selected >= len(slots) {
+		return slots[0], true
+	}
+	return slots[p.Selected], true
+}
+
+// ErrLoadoutLocked is the keystone economy rule: the equipped set is committed
+// to before leaving safety and cannot be rearranged in the field, so owning
+// more options improves preparation and never the power carried into one fight.
+var ErrLoadoutLocked = errors.New("Your loadout is locked outside a safe zone. Return to the hub to change it.")
+
+// ErrLoadoutUnavailable reports a body that cannot commit a change: dead, or
+// lingering after a disconnect.
+var ErrLoadoutUnavailable = errors.New("You cannot change your loadout right now.")
+
+// InSafety reports whether the body stands where loadout and crafting services
+// are available. Phase 3 replaces radius-from-origin with per-outpost radii.
+func (w *World) InSafety(p *Player) bool {
+	return p.Position.LengthSq() <= w.tuning.SafeRadius*w.tuning.SafeRadius
+}
+
+// SetLoadout commits a requested set. Respec is free — nothing is charged and
+// nothing is consumed — so the only gates are the safe-zone lock and the
+// legality of the set itself. A rejected request changes nothing.
+func (w *World) SetLoadout(id string, requested model.Loadout, now time.Time) (model.Loadout, error) {
+	p := w.players[id]
+	if p == nil {
+		return model.Loadout{}, ErrLoadoutUnavailable
+	}
+	if !p.Alive || p.Lingering() {
+		return p.Loadout.Clone(), ErrLoadoutUnavailable
+	}
+	if !w.InSafety(p) {
+		return p.Loadout.Clone(), ErrLoadoutLocked
+	}
+	requested.Version = w.tuning.Tables.Manifest.Version
+	if err := loadout.Validate(w.tuning.Tables, p.Class, requested); err != nil {
+		return p.Loadout.Clone(), err
+	}
+	p.Loadout = requested.Clone()
+	p.RespecOwed = false
+	// A committed change is a fresh kit: the new weapon arrives loaded and no
+	// ability carries a lockout earned by the one it replaced. Both are only
+	// reachable inside safety, so neither can be used to refresh mid-fight.
+	p.Ammo, p.ReloadEnds = 0, time.Time{}
+	if weapon, ok := w.weapon(p); ok {
+		p.Ammo = weapon.MagazineSize
+	}
+	p.Cooldowns, p.NextFire = make(map[string]time.Time), now
+	if slots := w.bar(p); p.Selected >= len(slots) {
+		p.Selected = 0
+	}
+	return p.Loadout.Clone(), nil
 }
 
 func (w *World) RemovePlayer(id string) {
@@ -453,6 +540,12 @@ func (w *World) stepPlayer(p *Player, now time.Time, dt float64) {
 		p.Velocity, p.DashTicksLeft = Vec{}, 0
 		p.Acknowledged = p.Input.Sequence
 		return
+	}
+	// The selected bar slot travels with the input, so the server resolves the
+	// use button against the same slot the player was looking at. An
+	// out-of-range index is clamped rather than rejected.
+	if slots := len(w.bar(p)); slots > 0 {
+		p.Selected = int(p.Input.SelectedSlot) % slots
 	}
 	aim := Vec{float64(p.Input.AimX), float64(p.Input.AimY)}.Normalized()
 	if aim.LengthSq() > 0 {

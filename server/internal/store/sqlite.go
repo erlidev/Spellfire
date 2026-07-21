@@ -57,9 +57,13 @@ CREATE INDEX IF NOT EXISTS crafted_items_character_idx ON crafted_items(characte
 	// 3 — when the saved position was written. Nullable: a row migrated from
 	// version 2 has a position of unknown age, which is treated as expired.
 	`ALTER TABLE characters ADD COLUMN last_seen_at INTEGER;`,
+
+	// 4 — the equipped loadout, as content IDs by slot. An empty object is a
+	// character that has never chosen one and resolves to the class default.
+	`ALTER TABLE characters ADD COLUMN loadout TEXT NOT NULL DEFAULT '{}';`,
 }
 
-const characterColumns = `id,account_id,name,class,level,xp,schema_version,pos_x,pos_y,materials,outposts,last_seen_at`
+const characterColumns = `id,account_id,name,class,level,xp,schema_version,pos_x,pos_y,materials,outposts,last_seen_at,loadout`
 
 func OpenSQLite(path string) (*SQLite, error) {
 	db, err := sql.Open("sqlite", path)
@@ -180,7 +184,7 @@ func (s *SQLite) Characters(ctx context.Context, accountID string) ([]model.Char
 
 func (s *SQLite) CreateCharacter(ctx context.Context, c model.Character) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO characters(id,account_id,name,class,level,xp,schema_version,materials,outposts) VALUES(?,?,?,?,?,?,?,'{}','[]')`,
+		`INSERT INTO characters(id,account_id,name,class,level,xp,schema_version,materials,outposts,loadout) VALUES(?,?,?,?,?,?,?,'{}','[]','{}')`,
 		c.ID, c.AccountID, c.Name, c.Class, c.Level, c.XP, model.CharacterSchemaVersion)
 	return classify(err)
 }
@@ -203,6 +207,10 @@ func (s *SQLite) SaveCharacterState(ctx context.Context, id string, state model.
 	if err != nil {
 		return fmt.Errorf("store: encode unlocked outposts: %w", err)
 	}
+	loadout, err := json.Marshal(state.Loadout)
+	if err != nil {
+		return fmt.Errorf("store: encode loadout: %w", err)
+	}
 	var x, y, lastSeen any
 	if state.Placed {
 		x, y = state.Position.X, state.Position.Y
@@ -211,8 +219,8 @@ func (s *SQLite) SaveCharacterState(ctx context.Context, id string, state model.
 		lastSeen = state.LastSeen.Unix()
 	}
 	result, err := s.db.ExecContext(ctx,
-		`UPDATE characters SET pos_x=?,pos_y=?,materials=?,outposts=?,last_seen_at=?,schema_version=? WHERE id=?`,
-		x, y, string(materials), string(outposts), lastSeen, model.CharacterSchemaVersion, id)
+		`UPDATE characters SET pos_x=?,pos_y=?,materials=?,outposts=?,last_seen_at=?,loadout=?,schema_version=? WHERE id=?`,
+		x, y, string(materials), string(outposts), lastSeen, string(loadout), model.CharacterSchemaVersion, id)
 	if err != nil {
 		return classify(err)
 	}
@@ -264,8 +272,8 @@ func scanCharacter(scan func(...any) error) (model.Character, error) {
 	var c model.Character
 	var x, y sql.NullFloat64
 	var lastSeen sql.NullInt64
-	var materials, outposts string
-	if err := scan(&c.ID, &c.AccountID, &c.Name, &c.Class, &c.Level, &c.XP, &c.SchemaVersion, &x, &y, &materials, &outposts, &lastSeen); err != nil {
+	var materials, outposts, loadout string
+	if err := scan(&c.ID, &c.AccountID, &c.Name, &c.Class, &c.Level, &c.XP, &c.SchemaVersion, &x, &y, &materials, &outposts, &lastSeen, &loadout); err != nil {
 		return c, err
 	}
 	c.State.Placed = x.Valid && y.Valid
@@ -278,6 +286,9 @@ func scanCharacter(scan func(...any) error) (model.Character, error) {
 	}
 	if err := json.Unmarshal([]byte(outposts), &c.State.Outposts); err != nil {
 		return c, fmt.Errorf("store: character %s: decode unlocked outposts: %w", c.ID, err)
+	}
+	if err := json.Unmarshal([]byte(loadout), &c.State.Loadout); err != nil {
+		return c, fmt.Errorf("store: character %s: decode loadout: %w", c.ID, err)
 	}
 	return c.Migrate()
 }

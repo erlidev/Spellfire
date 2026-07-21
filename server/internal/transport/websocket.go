@@ -13,6 +13,7 @@ import (
 
 	"spellfire/server/internal/auth"
 	"spellfire/server/internal/game"
+	"spellfire/server/internal/model"
 	"spellfire/server/internal/protocol"
 	"spellfire/server/internal/store"
 )
@@ -97,6 +98,10 @@ func (h *WebSocket) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			h.engine.Respawn(client.PlayerID, time.Now())
 		case protocol.ClientPing:
 			h.engine.Pong(client.PlayerID, message.ClientTimeMS, time.Now())
+		case protocol.ClientLoadout:
+			h.engine.SetLoadout(client.PlayerID, model.Loadout{
+				Weapon: message.Loadout.Weapon, Gadgets: message.Loadout.Gadgets, Spells: message.Loadout.Spells,
+			}, time.Now())
 		}
 	}
 }

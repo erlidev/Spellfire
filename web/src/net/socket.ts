@@ -1,5 +1,5 @@
-import { ClientKind, ServerKind, type InputFrame, type ServerMessage } from "../types";
-import { decodeServer, encodeInputEnvelope, encodeJoin, encodeSimple } from "./protobuf";
+import { ClientKind, ServerKind, type InputFrame, type LoadoutSet, type ServerMessage } from "../types";
+import { decodeServer, encodeInputEnvelope, encodeJoin, encodeLoadoutEnvelope, encodeSimple } from "./protobuf";
 
 export interface SocketEvents {
   message(message: ServerMessage): void;
@@ -30,6 +30,8 @@ export class GameSocket {
 
   sendInput(input: InputFrame): void { if (this.socket?.readyState === WebSocket.OPEN) this.socket.send(encodeInputEnvelope(input)); }
   respawn(): void { if (this.socket?.readyState === WebSocket.OPEN) this.socket.send(encodeSimple(ClientKind.Respawn)); }
+  /** Requests an equipped set. The server answers with a Loadout message either way. */
+  setLoadout(set: LoadoutSet): boolean { if (this.socket?.readyState !== WebSocket.OPEN) return false; this.socket.send(encodeLoadoutEnvelope(set)); return true; }
   close(): void { this.stopped = true; window.clearTimeout(this.pingTimer); this.socket?.close(1000, "player exit"); }
 
   private retry(): void {

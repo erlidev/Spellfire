@@ -1,6 +1,7 @@
 package protocol
 
 import (
+	"bytes"
 	"fmt"
 	"math"
 	"testing"
@@ -201,4 +202,94 @@ func bandwidthFixture(players, projectiles, telegraphs, colliders int, expanded 
 		message.Colliders = append(message.Colliders, Collider{ID: fmt.Sprintf("tree-%03d", index), X: float32(index * 31), Y: float32(index * -23), Radius: 37, Kind: "tree"})
 	}
 	return message
+}
+
+// The selected action-bar slot rides every input, so the server resolves the
+// use button against the slot the player actually had selected.
+func TestDecodeClientInputCarriesTheSelectedSlot(t *testing.T) {
+	var input []byte
+	input = protowire.AppendTag(input, 1, protowire.VarintType)
+	input = protowire.AppendVarint(input, 9)
+	input = protowire.AppendTag(input, 6, protowire.VarintType)
+	input = protowire.AppendVarint(input, 5)
+	var envelope []byte
+	envelope = protowire.AppendTag(envelope, 1, protowire.VarintType)
+	envelope = protowire.AppendVarint(envelope, ClientInput)
+	envelope = protowire.AppendTag(envelope, 4, protowire.BytesType)
+	envelope = protowire.AppendBytes(envelope, input)
+	decoded, err := DecodeClient(envelope)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if decoded.Input.SelectedSlot != 5 {
+		t.Fatalf("selected slot = %d, want 5", decoded.Input.SelectedSlot)
+	}
+}
+
+// Slot order is meaning: an empty slot must survive the wire as an empty slot,
+// or slot four would silently inherit slot three's binding.
+func TestLoadoutWirePreservesEmptySlots(t *testing.T) {
+	var set []byte
+	set = protowire.AppendTag(set, 1, protowire.BytesType)
+	set = protowire.AppendString(set, "starter-staff")
+	for _, id := range []string{"", "", "fire-bolt"} {
+		set = protowire.AppendTag(set, 3, protowire.BytesType)
+		set = protowire.AppendString(set, id)
+	}
+	var envelope []byte
+	envelope = protowire.AppendTag(envelope, 1, protowire.VarintType)
+	envelope = protowire.AppendVarint(envelope, ClientLoadout)
+	envelope = protowire.AppendTag(envelope, 6, protowire.BytesType)
+	envelope = protowire.AppendBytes(envelope, set)
+	decoded, err := DecodeClient(envelope)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if decoded.Kind != ClientLoadout || decoded.Loadout.Weapon != "starter-staff" {
+		t.Fatalf("decoded = %#v", decoded)
+	}
+	if len(decoded.Loadout.Spells) != 3 || decoded.Loadout.Spells[2] != "fire-bolt" || decoded.Loadout.Spells[0] != "" {
+		t.Fatalf("spell slots = %#v", decoded.Loadout.Spells)
+	}
+}
+
+// The reply must round-trip the same way, and a snapshot must not carry a
+// loadout at all — it changes only in safety, so paying for it every frame
+// would be waste against the bandwidth budget.
+func TestEncodeServerCarriesLoadoutOnlyWhenSet(t *testing.T) {
+	reply := EncodeServer(ServerEnvelope{
+		Kind: ServerLoadout, PlayerID: "p1", LoadoutEditable: true,
+		Loadout: &Loadout{Weapon: "starter-staff", Spells: []string{"", "fire-bolt"}},
+	})
+	snapshot := EncodeServer(ServerEnvelope{Kind: ServerSnapshot, PlayerID: "p1"})
+	if !bytes.Contains(reply, []byte("fire-bolt")) {
+		t.Fatalf("reply lost the equipped set: %x", reply)
+	}
+	for _, field := range []protowire.Number{9, 10, 11} {
+		if hasField(snapshot, field) {
+			t.Fatalf("snapshot carries loadout field %d", field)
+		}
+	}
+	if !hasField(reply, 9) || !hasField(reply, 10) {
+		t.Fatalf("reply is missing its loadout fields: %x", reply)
+	}
+}
+
+func hasField(data []byte, want protowire.Number) bool {
+	for len(data) > 0 {
+		number, wire, n := protowire.ConsumeTag(data)
+		if n < 0 {
+			return false
+		}
+		if number == want {
+			return true
+		}
+		data = data[n:]
+		m := protowire.ConsumeFieldValue(number, wire, data)
+		if m < 0 {
+			return false
+		}
+		data = data[m:]
+	}
+	return false
 }

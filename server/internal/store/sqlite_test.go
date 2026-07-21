@@ -124,6 +124,11 @@ INSERT INTO characters(id,account_id,name,class,level,xp) VALUES('c','a','Vance'
 	if c.SchemaVersion != model.CharacterSchemaVersion || c.State.Placed || len(c.State.Materials) != 0 || len(c.State.Outposts) != 0 {
 		t.Fatalf("record migration = %#v", c)
 	}
+	// A record that predates equipped slots migrates to an empty loadout, which
+	// resolves to the class default on the next join rather than to nothing.
+	if !c.State.Loadout.Empty() {
+		t.Fatalf("migrated loadout = %#v, want the empty one", c.State.Loadout)
+	}
 	if !c.State.LastSeen.IsZero() {
 		t.Fatalf("last seen = %v, want the unstamped zero that expires", c.State.LastSeen)
 	}
@@ -171,6 +176,7 @@ func TestSQLitePersistsCharacterStateAndCraftedItems(t *testing.T) {
 	state := model.CharacterState{
 		Position: model.Point{X: -1420.5, Y: 880.25}, Placed: true, LastSeen: lastSeen,
 		Materials: map[string]int{"iron": 7, "spent": 0}, Outposts: []string{"ridge", "ford", "ridge"},
+		Loadout: model.Loadout{Weapon: "starter-staff", Spells: []string{"", "fire-bolt", ""}, Version: 4},
 	}
 	if err := s.SaveCharacterState(ctx, "c", state); err != nil {
 		t.Fatal(err)
@@ -192,6 +198,11 @@ func TestSQLitePersistsCharacterStateAndCraftedItems(t *testing.T) {
 	}
 	if !reflect.DeepEqual(loaded.State.Outposts, []string{"ford", "ridge"}) {
 		t.Fatalf("outposts = %#v", loaded.State.Outposts)
+	}
+	// The equipped set round-trips as references by slot, empty slots included:
+	// a slot's index is its binding, so losing one would rebind the rest.
+	if !reflect.DeepEqual(loaded.State.Loadout, state.Loadout) {
+		t.Fatalf("loadout = %#v, want %#v", loaded.State.Loadout, state.Loadout)
 	}
 	if err := s.SaveCharacterState(ctx, "missing", state); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("save for an unknown character = %v", err)

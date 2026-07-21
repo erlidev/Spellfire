@@ -9,6 +9,8 @@ import combatData from "../../data/tuning/combat.json";
 import effectsData from "../../data/tuning/effects.json";
 import componentsData from "../../data/tuning/components.json";
 import elementsData from "../../data/tuning/elements.json";
+import gadgetsData from "../../data/tuning/gadgets.json";
+import loadoutData from "../../data/tuning/loadout.json";
 import manifestData from "../../data/tuning/manifest.json";
 import materialsData from "../../data/tuning/materials.json";
 import mobsData from "../../data/tuning/mobs.json";
@@ -37,6 +39,8 @@ export interface Ability { name: string; cost: Cost; interval_ms: number; cooldo
 export interface Effect { name: string; kind: string; stacking: string; duration_ms: number; tick_ms?: number; damage_band?: string; damage_fraction?: number; speed_multiplier?: number; speed?: number; absorb_hits?: number }
 export interface Weapon { name: string; class: CharacterClass; blueprint: string; category: string; starter?: boolean; magazine_size?: number; reload_ms?: number; ability?: string; spell?: string }
 export interface Spell { name: string; element: string; tier: number; starter?: boolean; ability: string }
+export interface Gadget { name: string; class: CharacterClass; starter?: boolean; ability: string }
+export interface LoadoutTable { weapon_slots: number; gadget_slots: number; spell_slots: number; affinity: { same_element_per_tier: number } }
 export interface Blueprint { name: string; slots: string[] }
 export interface Component { name: string; blueprint: string; slot: string; effect?: string }
 export interface ComponentsTable { blueprints: Record<string, Blueprint>; components: Record<string, Component> }
@@ -62,6 +66,8 @@ export const abilities = abilitiesData as Record<string, Ability>;
 export const effects = effectsData as Record<string, Effect>;
 export const weapons = weaponsData as Record<string, Weapon>;
 export const spells = spellsData as Record<string, Spell>;
+export const gadgets = gadgetsData as Record<string, Gadget>;
+export const loadoutTable = loadoutData as LoadoutTable;
 export const components = componentsData as ComponentsTable;
 export const materials = materialsData as MaterialsTable;
 export const mobs = mobsData as Record<string, Mob>;
@@ -118,10 +124,9 @@ function damageBand(band: string): DamageBand {
   return row;
 }
 
-/** The resource the HUD meters: a magazine for magazine weapons, mana otherwise. */
-export function resourceMax(characterClass: CharacterClass): { label: string; max: number } {
-  const weapon = starterWeapon(characterClass);
-  if (weapon.magazine_size) return { label: "Ammo", max: weapon.magazine_size };
+/** The resource the HUD meters: the equipped magazine, or mana when it has none. */
+export function resourceMax(weapon: Weapon | undefined): { label: string; max: number } {
+  if (weapon?.magazine_size) return { label: "Ammo", max: weapon.magazine_size };
   return { label: "Mana", max: combat.player.max_mana };
 }
 

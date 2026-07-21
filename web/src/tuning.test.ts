@@ -42,8 +42,8 @@ describe("shared tuning tables", () => {
   });
 
   it("meters the resource the equipped weapon actually spends", () => {
-    expect(resourceMax("gunslinger")).toEqual({ label: "Ammo", max: weapons["starter-rifle"]!.magazine_size });
-    expect(resourceMax("mage")).toEqual({ label: "Mana", max: combat.player.max_mana });
+    expect(resourceMax(starterWeapon("gunslinger"))).toEqual({ label: "Ammo", max: weapons["starter-rifle"]!.magazine_size });
+    expect(resourceMax(starterWeapon("mage"))).toEqual({ label: "Mana", max: combat.player.max_mana });
   });
 
   it("resolves a projectile silhouette from the kind a snapshot carries", () => {

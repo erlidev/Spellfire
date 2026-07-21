@@ -21,6 +21,7 @@ func (t *Tables) validate() error {
 	t.validateWorld(problems)
 	t.validateOutposts(problems)
 	t.validateCombat(problems)
+	t.validateLoadout(problems)
 	t.validateElements(problems)
 	t.validateComponents(problems)
 	t.validateMaterials(problems)
@@ -28,6 +29,7 @@ func (t *Tables) validate() error {
 	t.validateEffects(problems)
 	t.validateAbilities(problems)
 	t.validateSpells(problems)
+	t.validateGadgets(problems)
 	t.validateWeapons(problems)
 	t.validateMobs(problems)
 	t.validateRetired(problems)
@@ -227,6 +229,26 @@ func (t *Tables) validateCombat(r *report) {
 	}
 }
 
+// validateLoadout keeps the slot model coherent. The one rule that is not just
+// a positive count is the bar width: a Gunslinger's weapon plus gadgets and a
+// Mage's spells must lay out to the same number of selectable slots, or one
+// class would have bindings the other cannot reach.
+func (t *Tables) validateLoadout(r *report) {
+	l := t.Loadout
+	r.require(l.WeaponSlots == 1, "loadout: weapon_slots is %d; a character carries exactly one weapon", l.WeaponSlots)
+	r.require(l.GadgetSlots > 0, "loadout: gadget_slots must be positive")
+	r.require(l.SpellSlots > 0, "loadout: spell_slots must be positive")
+	r.require(l.WeaponSlots+l.GadgetSlots == l.SpellSlots,
+		"loadout: weapon_slots %d plus gadget_slots %d must equal spell_slots %d, or the two classes fill action bars of different widths",
+		l.WeaponSlots, l.GadgetSlots, l.SpellSlots)
+	r.require(l.Affinity.SameElementPerTier >= 0, "loadout: affinity.same_element_per_tier must not be negative")
+	// A tier-4 signature must remain equippable inside the bar it shares with
+	// the rest of the loadout, or the grid's own 4 + 2 build is unbuildable.
+	r.require(l.RequiredSameElement(4)+1 <= l.SpellSlots,
+		"loadout: a tier-4 spell needs %d same-element spells beside it but only %d spell slots exist",
+		l.RequiredSameElement(4), l.SpellSlots)
+}
+
 func (t *Tables) validateElements(r *report) {
 	for _, id := range sortedKeys(t.Elements) {
 		element := t.Elements[id]
@@ -419,6 +441,18 @@ func (t *Tables) validateSpells(r *report) {
 		// A spell is identity — element, tier, unlock — over one ability. Cost,
 		// cadence, cooldown, counterplay, and delivery all live on the ability.
 		r.require(t.Abilities[spell.Ability].Name != "", "spells: %q references unknown ability %q", id, spell.Ability)
+	}
+}
+
+// validateGadgets mirrors validateSpells: a gadget is identity — name, class,
+// unlock — over one ability, and every combat value it has lives on that
+// ability row.
+func (t *Tables) validateGadgets(r *report) {
+	for _, id := range sortedKeys(t.Gadgets) {
+		gadget := t.Gadgets[id]
+		r.require(gadget.Name != "", "gadgets: %q has no name", id)
+		r.require(gadget.Class == "gunslinger", "gadgets: %q has class %q; gadgets are the Gunslinger's slot kind and the Mage's are spells", id, gadget.Class)
+		r.require(t.Abilities[gadget.Ability].Name != "", "gadgets: %q references unknown ability %q", id, gadget.Ability)
 	}
 }
 

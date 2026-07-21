@@ -46,6 +46,10 @@ type Engine struct {
 	tickEvery, sendEvery time.Duration
 	persist              Persister
 	saveEvery            time.Duration
+	// saves carries pending writes to the writer goroutine. It is created up
+	// front rather than inside Run so a deliberate commit outside the tick loop
+	// — a loadout change — reaches the same queue.
+	saves chan characterSave
 }
 
 // NewEngine builds the world and its client registry. A nil persister runs the
@@ -54,6 +58,7 @@ func NewEngine(t Tuning, persist Persister) *Engine {
 	return &Engine{
 		world: NewWorld(t), clients: make(map[string]*Client), persist: persist, saveEvery: autosaveEvery,
 		tickEvery: time.Second / time.Duration(t.TickRate), sendEvery: time.Second / time.Duration(t.SendRate),
+		saves: make(chan characterSave, saveQueue),
 	}
 }
 
@@ -62,9 +67,8 @@ func (e *Engine) Run(ctx context.Context) {
 	defer ticker.Stop()
 	// Saves go to a writer goroutine: a database write must never sit inside
 	// the tick loop, and a slow write must never delay the simulation.
-	saves := make(chan characterSave, saveQueue)
-	writerDone := make(chan struct{})
-	go e.writeLoop(saves, writerDone)
+	stop, writerDone := make(chan struct{}), make(chan struct{})
+	go e.writeLoop(stop, writerDone)
 	lastSend, lastSave := time.Time{}, time.Time{}
 	for {
 		select {
@@ -80,15 +84,15 @@ func (e *Engine) Run(ctx context.Context) {
 				pending, lastSave = append(pending, e.statesLocked(now)...), now
 			}
 			e.mu.Unlock()
-			e.enqueue(saves, pending)
+			e.enqueue(pending)
 		case <-ctx.Done():
 			// A shutdown must not discard the session, including bodies still
 			// inside their logout window.
 			e.mu.Lock()
 			pending := e.statesLocked(time.Now())
 			e.mu.Unlock()
-			e.enqueue(saves, pending)
-			close(saves)
+			e.enqueue(pending)
+			close(stop)
 			<-writerDone
 			return
 		}
@@ -123,13 +127,13 @@ func (e *Engine) statesLocked(now time.Time) []characterSave {
 // enqueue hands saves to the writer without ever blocking the tick loop. A full
 // queue means the database is far behind; the save still happens, just on a
 // goroutine of its own rather than in queue order.
-func (e *Engine) enqueue(saves chan<- characterSave, pending []characterSave) {
+func (e *Engine) enqueue(pending []characterSave) {
 	if e.persist == nil {
 		return
 	}
 	for _, save := range pending {
 		select {
-		case saves <- save:
+		case e.saves <- save:
 		default:
 			slog.Warn("character save queue is full", "character", save.id)
 			go e.write(save)
@@ -137,10 +141,26 @@ func (e *Engine) enqueue(saves chan<- characterSave, pending []characterSave) {
 	}
 }
 
-func (e *Engine) writeLoop(saves <-chan characterSave, done chan<- struct{}) {
+// writeLoop drains the save queue until shutdown. The queue is never closed —
+// a loadout commit enqueues from the transport goroutine, and a closed channel
+// would turn a late commit into a panic — so shutdown signals through stop and
+// the loop drains whatever was already handed over before it exits.
+func (e *Engine) writeLoop(stop <-chan struct{}, done chan<- struct{}) {
 	defer close(done)
-	for save := range saves {
-		e.write(save)
+	for {
+		select {
+		case save := <-e.saves:
+			e.write(save)
+		case <-stop:
+			for {
+				select {
+				case save := <-e.saves:
+					e.write(save)
+				default:
+					return
+				}
+			}
+		}
 	}
 }
 
@@ -173,7 +193,15 @@ func (e *Engine) Join(character model.Character, now time.Time) (*Client, error)
 	}
 	client := &Client{PlayerID: character.ID, Send: make(chan []byte, 2), Kick: make(chan struct{})}
 	e.clients[character.ID] = client
-	client.Send <- protocol.EncodeServer(e.world.SnapshotFor(character.ID, now, protocol.ServerWelcome))
+	welcome := e.world.SnapshotFor(character.ID, now, protocol.ServerWelcome)
+	// The equipped set rides the welcome so the menu can show it without a
+	// second round trip, and so a respec a balance patch granted is announced
+	// the moment the character enters.
+	if p := e.world.players[character.ID]; p != nil {
+		reply := e.loadoutMessageLocked(character.ID, p.Loadout, nil)
+		welcome.Loadout, welcome.LoadoutEditable, welcome.RespecOwed = reply.Loadout, reply.LoadoutEditable, reply.RespecOwed
+	}
+	client.Send <- protocol.EncodeServer(welcome)
 	return client, nil
 }
 
@@ -228,6 +256,47 @@ func (e *Engine) SetAdminAttributes(playerID string, attributes map[string]float
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	return e.world.setAdminAttributes(playerID, attributes)
+}
+
+// SetLoadout commits a requested equipped set and answers the client either
+// way. A refusal is reported on the same message as the authoritative set the
+// player still has, so the menu can show what actually holds rather than
+// leaving an unconfirmed change on screen. A change that took is persisted
+// immediately: it is a deliberate commit, not incidental world state.
+func (e *Engine) SetLoadout(playerID string, requested model.Loadout, now time.Time) {
+	e.mu.Lock()
+	committed, err := e.world.SetLoadout(playerID, requested, now)
+	var pending []characterSave
+	if err == nil {
+		if state, ok := e.world.StateOf(playerID, now); ok {
+			pending = append(pending, characterSave{id: playerID, state: state})
+		}
+	}
+	reply := e.loadoutMessageLocked(playerID, committed, err)
+	client := e.clients[playerID]
+	if client != nil {
+		e.queue(client, protocol.EncodeServer(reply))
+	}
+	e.mu.Unlock()
+	e.enqueue(pending)
+}
+
+// loadoutMessageLocked builds the reply that reports an equipped set. The
+// caller holds the engine lock.
+func (e *Engine) loadoutMessageLocked(playerID string, set model.Loadout, err error) protocol.ServerEnvelope {
+	message := protocol.ServerEnvelope{
+		Kind: protocol.ServerLoadout, ServerTick: e.world.tick,
+		ServerTimeMS: uint64(time.Now().UnixMilli()), PlayerID: playerID,
+		Loadout: &protocol.Loadout{Weapon: set.Weapon, Gadgets: set.Gadgets, Spells: set.Spells},
+	}
+	if err != nil {
+		message.Error = err.Error()
+	}
+	if p := e.world.players[playerID]; p != nil {
+		message.LoadoutEditable = p.Alive && !p.Lingering() && e.world.InSafety(p)
+		message.RespecOwed = p.RespecOwed
+	}
+	return message
 }
 
 func (e *Engine) Pong(playerID string, clientTime uint64, now time.Time) {

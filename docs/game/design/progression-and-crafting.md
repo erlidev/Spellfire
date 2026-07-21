@@ -10,6 +10,17 @@ Progression grants access and build breadth while preserving a narrow combat pow
 | Crafting | Permanent items | Guns, staffs, special ammo, consumables | Safe zones only |
 | Loadout | Fluid | One weapon plus equipped gadgets/spells and keystones | Safe zones only; locked outside |
 
+### Slots
+
+The loadout is one **six-slot action bar**, the same width for both classes so a single binding set serves them:
+
+| Class | Slot 1 | Slots 2–6 |
+|---|---|---|
+| Gunslinger | Equipped weapon | Five gadgets |
+| Mage | Spell | Five more spells |
+
+A Mage's staff is the delivery device rather than a bar slot: it casts whichever spell is selected. The counts live in [`loadout.json`](../../../data/tuning/loadout.json) and are tunable, but the two arrangements must stay the same width, because a class with bindings the other cannot reach would need its own control scheme. Keystones join the bar's owning table when [Phase 2.7](../../../TODO.md) settles them.
+
 The open-world loadout lock is the economy's keystone. Players commit before leaving safety and can be countered. Owning more options improves preparation, never the power carried into one encounter. Both classes can eventually unlock everything.
 
 ## Starter kit

@@ -28,7 +28,7 @@ export class Predictor {
 
   initialize(entity: Entity): void { this.x = entity.x; this.y = entity.y; this.aimX = entity.aimX || 1; this.aimY = entity.aimY; this.pending = []; }
 
-  step(buttons: number, aimX: number, aimY: number, now: number): InputFrame {
+  step(buttons: number, aimX: number, aimY: number, selectedSlot: number, now: number): InputFrame {
     const aimLength = Math.hypot(aimX, aimY);
     if (aimLength > 0.001) { this.aimX = aimX / aimLength; this.aimY = aimY / aimLength; }
     let dx = Number(Boolean(buttons & Buttons.Right)) - Number(Boolean(buttons & Buttons.Left));
@@ -49,7 +49,9 @@ export class Predictor {
     }
     this.applyMotion(motion);
     this.previousButtons = buttons;
-    const input = { sequence: ++this.sequence, buttons, aimX: this.aimX, aimY: this.aimY, clientTimeMS: Date.now() };
+    // The selected slot is carried, not predicted: abilities resolve on the
+    // server, so nothing here re-simulates what the slot does.
+    const input = { sequence: ++this.sequence, buttons, aimX: this.aimX, aimY: this.aimY, selectedSlot, clientTimeMS: Date.now() };
     this.pending.push({ input, motion });
     if (this.pending.length > 240) this.pending.shift();
     return input;

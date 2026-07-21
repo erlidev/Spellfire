@@ -5,12 +5,13 @@ package spellfire.v1;
 // WebSocket payloads are binary protobuf. The first field is the message kind,
 // allowing both implementations to decode only the relevant payload fields.
 message ClientEnvelope {
-  enum Kind { UNKNOWN = 0; JOIN = 1; INPUT = 2; RESPAWN = 3; PING = 4; }
+  enum Kind { UNKNOWN = 0; JOIN = 1; INPUT = 2; RESPAWN = 3; PING = 4; LOADOUT = 5; }
   Kind kind = 1;
   string session_token = 2;
   string character_id = 3;
   Input input = 4;
   uint64 client_time_ms = 5;
+  Loadout loadout = 6; // LOADOUT only: the requested equipped set
 }
 
 message Input {
@@ -19,18 +20,30 @@ message Input {
   float aim_x = 3;
   float aim_y = 4;
   uint64 client_time_ms = 5;
+  uint32 selected_slot = 6; // zero-based action-bar slot the use button acts through
+}
+
+// The equipped set. Both repeated fields are positional: entry n is slot n, and
+// an empty slot travels as an empty string so a slot's index stays its binding.
+message Loadout {
+  string weapon = 1;
+  repeated string gadgets = 2;
+  repeated string spells = 3;
 }
 
 message ServerEnvelope {
-  enum Kind { UNKNOWN = 0; WELCOME = 1; SNAPSHOT = 2; ERROR = 3; PONG = 4; }
+  enum Kind { UNKNOWN = 0; WELCOME = 1; SNAPSHOT = 2; ERROR = 3; PONG = 4; LOADOUT = 5; }
   Kind kind = 1;
   uint64 server_tick = 2;
   uint64 server_time_ms = 3;
   string player_id = 4;
   repeated Entity entities = 5;
   repeated StaticCollider colliders = 6;
-  string error = 7;
+  string error = 7; // on LOADOUT this is a rejection reason, not a terminal error
   uint64 echoed_client_time_ms = 8;
+  Loadout loadout = 9;        // WELCOME and LOADOUT only, never on a snapshot
+  bool loadout_editable = 10; // whether the set may be changed from where the body stands
+  bool respec_owed = 11;      // a balance patch granted a free respec
 }
 
 message Entity {

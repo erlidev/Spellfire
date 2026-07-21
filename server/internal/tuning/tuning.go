@@ -20,7 +20,7 @@ import (
 // SchemaVersion is the table shape this build understands. Bump it only when a
 // table changes shape, and add the matching forward migration; a plain balance
 // edit bumps Manifest.Version instead and needs no code change.
-const SchemaVersion = 7
+const SchemaVersion = 8
 
 type Manifest struct {
 	// Version is the content revision. Bump it on any balance edit; a change
@@ -364,6 +364,49 @@ type Spell struct {
 	Ability string `json:"ability"`
 }
 
+// Gadget is the Gunslinger's equivalent of a spell: identity over one ability,
+// occupying a loadout slot. The table ships empty — Phase 2.4 authors smoke,
+// flashbangs, and the rest — so today a Gunslinger's bar holds its weapon and
+// five empty slots.
+type Gadget struct {
+	ID      string `json:"-"`
+	Name    string `json:"name"`
+	Class   string `json:"class"`
+	Starter bool   `json:"starter"`
+	Ability string `json:"ability"`
+}
+
+// Affinity is the Mage's specialisation rule. Its shape is locked by
+// mage.md#element-affinity — a tier-N spell needs N−1 other spells of its
+// element — and only the multiplier is tunable.
+type Affinity struct {
+	SameElementPerTier int `json:"same_element_per_tier"`
+}
+
+// Loadout declares how many of each slot kind a character equips. The action
+// bar is one size for both classes: a Gunslinger fills it with its weapon plus
+// gadgets, a Mage with spells, and validation keeps the two arrangements the
+// same length so one binding set serves both.
+type Loadout struct {
+	WeaponSlots int      `json:"weapon_slots"`
+	GadgetSlots int      `json:"gadget_slots"`
+	SpellSlots  int      `json:"spell_slots"`
+	Affinity    Affinity `json:"affinity"`
+}
+
+// BarSlots is the number of selectable action-bar slots, which the keyboard
+// binds to 1–6 and the touch layout renders as buttons.
+func (l Loadout) BarSlots() int { return l.SpellSlots }
+
+// RequiredSameElement is how many *other* spells of the same element a loadout
+// must already hold for a tier-N spell to be equippable.
+func (l Loadout) RequiredSameElement(tier int) int {
+	if tier <= 1 {
+		return 0
+	}
+	return (tier - 1) * l.Affinity.SameElementPerTier
+}
+
 type Blueprint struct {
 	ID    string   `json:"-"`
 	Name  string   `json:"name"`
@@ -433,7 +476,7 @@ type Biome struct {
 
 // RetiredKinds are the tables a retirement may name. A retired ID resolves
 // within its own kind; nothing is ever retired across tables.
-var RetiredKinds = []string{"weapon", "spell", "ability", "effect", "component", "blueprint", "material", "element", "biome", "mob"}
+var RetiredKinds = []string{"weapon", "spell", "gadget", "ability", "effect", "component", "blueprint", "material", "element", "biome", "mob"}
 
 // maxRetirementHops bounds a replacement chain. Validation rejects cycles, so
 // this only guards a table that somehow reached the resolver unvalidated.
@@ -460,11 +503,13 @@ type Tables struct {
 	World      World
 	Outposts   map[string]Outpost
 	Combat     Combat
+	Loadout    Loadout
 	Elements   map[string]Element
 	Abilities  map[string]Ability
 	Effects    map[string]Effect
 	Weapons    map[string]Weapon
 	Spells     map[string]Spell
+	Gadgets    map[string]Gadget
 	Components Components
 	Materials  Materials
 	Mobs       map[string]Mob
@@ -508,6 +553,8 @@ func (t *Tables) Live(kind, id string) bool {
 		return t.Weapons[id].Name != ""
 	case "spell":
 		return t.Spells[id].Name != ""
+	case "gadget":
+		return t.Gadgets[id].Name != ""
 	case "ability":
 		return t.Abilities[id].Name != ""
 	case "effect":
@@ -563,6 +610,30 @@ func (t *Tables) StarterWeapon(class string) (Weapon, bool) {
 	return Weapon{}, false
 }
 
+// StarterSpells lists the spells a new Mage starts able to slot, in a stable
+// order. Phase 2.2 replaces the flat list with a random draw against the unlock
+// ledger; the loadout only needs to know which rows are open at zero progress.
+func (t *Tables) StarterSpells() []string {
+	starters := make([]string, 0, len(t.Spells))
+	for _, id := range sortedKeys(t.Spells) {
+		if t.Spells[id].Starter {
+			starters = append(starters, id)
+		}
+	}
+	return starters
+}
+
+// StarterGadgets is the Gunslinger's equivalent of StarterSpells.
+func (t *Tables) StarterGadgets(class string) []string {
+	starters := make([]string, 0, len(t.Gadgets))
+	for _, id := range sortedKeys(t.Gadgets) {
+		if gadget := t.Gadgets[id]; gadget.Starter && gadget.Class == class {
+			starters = append(starters, id)
+		}
+	}
+	return starters
+}
+
 var load = sync.OnceValues(func() (*Tables, error) { return Parse(data.Tuning) })
 
 // Load parses and validates the embedded tables once per process.
@@ -594,11 +665,13 @@ func Parse(fsys fs.FS) (*Tables, error) {
 		{"world.json", &tables.World},
 		{"outposts.json", &tables.Outposts},
 		{"combat.json", &tables.Combat},
+		{"loadout.json", &tables.Loadout},
 		{"elements.json", &tables.Elements},
 		{"abilities.json", &tables.Abilities},
 		{"effects.json", &tables.Effects},
 		{"weapons.json", &tables.Weapons},
 		{"spells.json", &tables.Spells},
+		{"gadgets.json", &tables.Gadgets},
 		{"components.json", &tables.Components},
 		{"materials.json", &tables.Materials},
 		{"mobs.json", &tables.Mobs},
@@ -657,6 +730,10 @@ func (t *Tables) stampIDs() {
 	for id, spell := range t.Spells {
 		spell.ID = id
 		t.Spells[id] = spell
+	}
+	for id, gadget := range t.Gadgets {
+		gadget.ID = id
+		t.Gadgets[id] = gadget
 	}
 	for id, blueprint := range t.Components.Blueprints {
 		blueprint.ID = id

@@ -3,12 +3,12 @@ import { decodeServer, encodeInputEnvelope, encodeJoin } from "./protobuf";
 
 describe("protobuf wire codec", () => {
   it("encodes a client input with the schema field numbers", () => {
-    const encoded = encodeInputEnvelope({ sequence: 1, buttons: 16, aimX: 1, aimY: 0, clientTimeMS: 0 });
+    const encoded = encodeInputEnvelope({ sequence: 1, buttons: 16, aimX: 1, aimY: 0, selectedSlot: 0, clientTimeMS: 0 });
     expect([...encoded]).toEqual([0x08, 0x02, 0x22, 0x09, 0x08, 0x01, 0x10, 0x10, 0x1d, 0x00, 0x00, 0x80, 0x3f]);
   });
 
   it("encodes the interact bit without changing the input field", () => {
-    const encoded = encodeInputEnvelope({ sequence: 1, buttons: 128, aimX: 0, aimY: 0, clientTimeMS: 0 });
+    const encoded = encodeInputEnvelope({ sequence: 1, buttons: 128, aimX: 0, aimY: 0, selectedSlot: 0, clientTimeMS: 0 });
     expect([...encoded]).toContain(0x80);
     expect([...encoded]).toContain(0x01);
   });

@@ -13,15 +13,18 @@ import (
 // Mob attacks, deployables, and the Phase 2 loadout's spell slots enter through
 // the same three functions.
 
-// ability resolves what the player's use button performs. The equipped weapon
-// is the only source today; Phase 2.1's loadout adds gadget and spell slots and
-// returns the ability bound to the slot that was pressed.
+// ability resolves what the player's use button performs: the ability bound to
+// the selected action-bar slot. A Gunslinger's slot zero is its weapon and the
+// rest are gadgets; a Mage's slots are spells, cast through the staff it holds.
+// An empty slot has nothing to perform, which is not an error — it is a slot
+// the player has not filled.
 func (w *World) ability(p *Player) (tuning.Ability, bool) {
-	weapon, ok := w.weapon(p)
-	if !ok {
+	slot, ok := w.selectedSlot(p)
+	if !ok || slot.AbilityID == "" {
 		return tuning.Ability{}, false
 	}
-	return w.tuning.Tables.WeaponAbility(weapon)
+	ability, ok := w.tuning.Tables.Abilities[slot.AbilityID]
+	return ability, ok
 }
 
 // useAbility charges and delivers one use. It is the only way an action reaches
@@ -88,12 +91,14 @@ func (w *World) deliver(p *Player, ability tuning.Ability, now time.Time) {
 	w.spawnRewoundProjectile(p, ability, now)
 }
 
+// playerElement is the element the selected slot delivers, which is what the
+// renderer tints a body and its projectiles by. A gun or a gadget has none.
 func (w *World) playerElement(p *Player) string {
-	weapon, ok := w.weapon(p)
-	if !ok || weapon.Spell == "" {
+	slot, ok := w.selectedSlot(p)
+	if !ok {
 		return ""
 	}
-	return w.tuning.Tables.Spells[weapon.Spell].Element
+	return slot.Element
 }
 
 func (w *World) spawnRewoundProjectile(p *Player, ability tuning.Ability, now time.Time) {

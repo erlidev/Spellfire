@@ -42,13 +42,12 @@
         <label id="resource-label">Ammo <span>10 / 10</span></label>
         <div class="bar resource"><i id="resource-bar"></i></div>
       </div>
-      <div class="hud abilities" aria-label="Combat actions">
-        <div><kbd>Mouse</kbd><span>Primary</span></div><div><kbd>Space</kbd><span>Dash</span></div><div><kbd>R</kbd><span>Reload</span></div><div><kbd>E</kbd><span>Interact</span></div>
-      </div>
+      <div id="ability-bar" class="hud abilities" aria-label="Equipped slots"></div>
       <div id="world-notice" class="hud world-notice" role="status"></div>
       <aside id="developer-mode-hud" class="hud developer-mode-hud" hidden><strong>Developer mode</strong><span id="developer-mode-selection"></span><button id="developer-mode-exit">Exit mode</button></aside>
       <div id="connection-overlay" class="connection-overlay" hidden><h2 id="connection-title">Connecting</h2><p id="connection-message">Joining the world…</p><button id="connection-cancel">Return home</button></div>
       <div id="death-overlay" class="connection-overlay" hidden><h2>You fell in the frontier</h2><p>Your crafted gear is safe. This foundation does not yet award carried materials.</p><button id="respawn-button" class="primary">Respawn at central hub</button></div>
+      <div id="touch-slots" class="hud touch-slots" aria-label="Select equipped slot"></div>
       <div id="touch-controls" aria-label="Touch controls">
         <div class="touch-move"><button data-button="up">▲</button><button data-button="left">◀</button><button data-button="down">▼</button><button data-button="right">▶</button></div>
         <div class="touch-actions"><button data-button="interact">Use</button><button data-button="dash">Dash</button><button data-button="fire">Fire</button></div>

@@ -368,3 +368,229 @@ func dialAndJoin(t *testing.T, serverURL, token, characterID string) (*websocket
 	}
 	return connection, kind, nil
 }
+
+// The loadout is committed over the socket and the safe-zone lock is enforced
+// server-side, so a client that ignores its own disabled controls still cannot
+// rearrange its kit in the field.
+func TestWebSocketLoadoutCommitHonoursTheSafeZoneLock(t *testing.T) {
+	data, err := store.OpenSQLite(filepath.Join(t.TempDir(), "ws.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer data.Close()
+	ctx := context.Background()
+	authService := auth.New(data, time.Hour)
+	balance := game.DefaultTuning()
+	engine := game.NewEngine(balance, data)
+	runCtx, stop := context.WithCancel(ctx)
+	defer stop()
+	go engine.Run(runCtx)
+	server := httptest.NewServer(NewWebSocket(authService, data, engine))
+	defer server.Close()
+
+	// One Mage logged out in the field and one that has never been placed, so
+	// it enters on the hub spawn ring. Separate accounts, because an account
+	// gets one body in the world at a time.
+	field := &model.Point{X: balance.SafeRadius + 400}
+	inField, fieldToken, _ := mage(t, ctx, data, authService, "field-kit@example.com", field)
+	inHub, hubToken, hubAccount := mage(t, ctx, data, authService, "hub-kit@example.com", nil)
+
+	request := loadoutEnvelope("starter-staff", []string{"", "fire-bolt"})
+	fieldConn, kind, err := dialAndJoin(t, server.URL, fieldToken, inField)
+	if err != nil || kind != protocol.ServerWelcome {
+		t.Fatalf("field join = %d, %v", kind, err)
+	}
+	defer fieldConn.Close()
+	if err := fieldConn.WriteMessage(websocket.BinaryMessage, request); err != nil {
+		t.Fatal(err)
+	}
+	refused := readLoadoutReply(t, fieldConn)
+	if refused.rejection == "" {
+		t.Fatal("a commit from the field was accepted")
+	}
+	if refused.editable {
+		t.Fatal("the field reported the loadout as editable")
+	}
+	if refused.spells[1] == "fire-bolt" {
+		t.Fatal("the refusal reported the requested set rather than the one still equipped")
+	}
+
+	hubConn, kind, err := dialAndJoin(t, server.URL, hubToken, inHub)
+	if err != nil || kind != protocol.ServerWelcome {
+		t.Fatalf("hub join = %d, %v", kind, err)
+	}
+	defer hubConn.Close()
+	if err := hubConn.WriteMessage(websocket.BinaryMessage, request); err != nil {
+		t.Fatal(err)
+	}
+	accepted := readLoadoutReply(t, hubConn)
+	if accepted.rejection != "" {
+		t.Fatalf("a commit inside the hub was refused: %s", accepted.rejection)
+	}
+	if !accepted.editable || len(accepted.spells) < 2 || accepted.spells[1] != "fire-bolt" {
+		t.Fatalf("reply = %#v", accepted)
+	}
+
+	// A committed set is persisted immediately, not only at the next autosave.
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		reloaded, err := data.Character(ctx, hubAccount, inHub)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(reloaded.State.Loadout.Spells) > 1 && reloaded.State.Loadout.Spells[1] == "fire-bolt" {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("saved loadout = %#v", reloaded.State.Loadout)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// mage registers an account with one Mage, optionally logged out at a position.
+func mage(t *testing.T, ctx context.Context, data store.Store, authService *auth.Service, email string, at *model.Point) (characterID, token, accountID string) {
+	t.Helper()
+	token, err := authService.Register(ctx, email, "socket password")
+	if err != nil {
+		t.Fatal(err)
+	}
+	accountID, err = authService.Authenticate(ctx, token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	character := model.Character{ID: auth.NewID(), AccountID: accountID, Name: "Kit " + email[:4], Class: model.Mage, Level: 1}
+	if err := data.CreateCharacter(ctx, character); err != nil {
+		t.Fatal(err)
+	}
+	if at != nil {
+		state := model.CharacterState{Position: *at, Placed: true, LastSeen: time.Now(), Materials: map[string]int{}}
+		if err := data.SaveCharacterState(ctx, character.ID, state); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return character.ID, token, accountID
+}
+
+func loadoutEnvelope(weapon string, spells []string) []byte {
+	var set []byte
+	set = protowire.AppendTag(set, 1, protowire.BytesType)
+	set = protowire.AppendString(set, weapon)
+	for _, id := range spells {
+		set = protowire.AppendTag(set, 3, protowire.BytesType)
+		set = protowire.AppendString(set, id)
+	}
+	var envelope []byte
+	envelope = protowire.AppendTag(envelope, 1, protowire.VarintType)
+	envelope = protowire.AppendVarint(envelope, protocol.ClientLoadout)
+	envelope = protowire.AppendTag(envelope, 6, protowire.BytesType)
+	envelope = protowire.AppendBytes(envelope, set)
+	return envelope
+}
+
+// loadoutReply is the part of a server loadout message this test reads. The
+// server never decodes its own output, so the fields are pulled out here.
+type loadoutReply struct {
+	rejection string
+	editable  bool
+	spells    []string
+}
+
+// readLoadoutReply reads past the snapshots the world keeps broadcasting.
+func readLoadoutReply(t *testing.T, connection *websocket.Conn) loadoutReply {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if err := connection.SetReadDeadline(deadline); err != nil {
+			t.Fatal(err)
+		}
+		_, data, err := connection.ReadMessage()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if reply, ok := parseLoadoutReply(t, data); ok {
+			return reply
+		}
+	}
+	t.Fatal("no loadout reply arrived")
+	return loadoutReply{}
+}
+
+func parseLoadoutReply(t *testing.T, data []byte) (loadoutReply, bool) {
+	t.Helper()
+	var reply loadoutReply
+	loadout := false
+	for len(data) > 0 {
+		number, wire, n := protowire.ConsumeTag(data)
+		if n < 0 {
+			t.Fatalf("invalid reply: %x", data)
+		}
+		data = data[n:]
+		switch number {
+		case 1:
+			kind, m := protowire.ConsumeVarint(data)
+			if m < 0 {
+				t.Fatalf("invalid kind: %x", data)
+			}
+			if kind != protocol.ServerLoadout {
+				return reply, false
+			}
+			loadout = true
+			data = data[m:]
+			continue
+		case 7:
+			value, m := protowire.ConsumeString(data)
+			if m < 0 {
+				t.Fatalf("invalid error: %x", data)
+			}
+			reply.rejection, data = value, data[m:]
+			continue
+		case 9:
+			value, m := protowire.ConsumeBytes(data)
+			if m < 0 {
+				t.Fatalf("invalid loadout: %x", data)
+			}
+			reply.spells, data = parseSpellSlots(t, value), data[m:]
+			continue
+		case 10:
+			value, m := protowire.ConsumeVarint(data)
+			if m < 0 {
+				t.Fatalf("invalid editable flag: %x", data)
+			}
+			reply.editable, data = value != 0, data[m:]
+			continue
+		}
+		m := protowire.ConsumeFieldValue(number, wire, data)
+		if m < 0 {
+			t.Fatalf("invalid field %d: %x", number, data)
+		}
+		data = data[m:]
+	}
+	return reply, loadout
+}
+
+func parseSpellSlots(t *testing.T, data []byte) []string {
+	t.Helper()
+	var spells []string
+	for len(data) > 0 {
+		number, wire, n := protowire.ConsumeTag(data)
+		if n < 0 {
+			t.Fatalf("invalid loadout field: %x", data)
+		}
+		data = data[n:]
+		if number == 3 {
+			value, m := protowire.ConsumeString(data)
+			if m < 0 {
+				t.Fatalf("invalid spell slot: %x", data)
+			}
+			spells, data = append(spells, value), data[m:]
+			continue
+		}
+		m := protowire.ConsumeFieldValue(number, wire, data)
+		if m < 0 {
+			t.Fatalf("invalid loadout field %d: %x", number, data)
+		}
+		data = data[m:]
+	}
+	return spells
+}

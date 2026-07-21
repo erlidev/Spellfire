@@ -1,9 +1,10 @@
 import { API } from "./api";
+import { bar, barSlots, contentName, defaultLoadout, equippable, loadoutProblem, type SlotKind } from "./game/loadout";
 import { Predictor } from "./game/prediction";
 import { GameView } from "./game/view";
 import { GameSocket } from "./net/socket";
-import { adminTools, damageBandFor, dangerBandAt, resourceMax, session, spells, starterWeapon, world, type AdminAttribute, type AdminSpawnable, type AdminToolField } from "./tuning";
-import { Buttons, ServerKind, type Character, type CharacterClass, type Entity, type ServerMessage } from "./types";
+import { adminTools, damageBandFor, dangerBandAt, resourceMax, safeRadius, session, weapons, world, type AdminAttribute, type AdminSpawnable, type AdminToolField } from "./tuning";
+import { Buttons, ServerKind, type Character, type CharacterClass, type Entity, type LoadoutSet, type ServerMessage } from "./types";
 
 function element<T extends HTMLElement>(id: string): T {
   const value = document.getElementById(id);
@@ -27,6 +28,16 @@ class SpellFire {
   private developerMode = false;
   private adminSpawnID = Object.keys(adminTools.spawnables).sort()[0] ?? "";
   private adminSpawnConfig: Record<string, string> = this.defaultAdminConfig(this.adminSpawnID);
+  // The authoritative equipped set and the slot the use button acts through.
+  // `draft` is the unconfirmed edit in the menu; nothing shows as committed
+  // until a Loadout reply confirms it.
+  private loadout: LoadoutSet = { weapon: "", gadgets: [], spells: [] };
+  private draft?: LoadoutSet;
+  private selectedSlot = 0;
+  private inSafety = true;
+  private respecOwed = false;
+  private loadoutStatus = "";
+  private menuTab = "character";
 
   async init(): Promise<void> {
     this.bindHome(); this.bindDialogs(); this.bindControls(); this.bindSettings();
@@ -82,7 +93,13 @@ class SpellFire {
 
   private bindControls(): void {
     const keyMap: Record<string, number> = { KeyW: Buttons.Up, ArrowUp: Buttons.Up, KeyS: Buttons.Down, ArrowDown: Buttons.Down, KeyA: Buttons.Left, ArrowLeft: Buttons.Left, KeyD: Buttons.Right, ArrowRight: Buttons.Right, Space: Buttons.Dash, KeyR: Buttons.Reload, KeyE: Buttons.Interact };
-    window.addEventListener("keydown", (event) => { const button = keyMap[event.code]; if (button && !isFormField(event.target)) { event.preventDefault(); this.pressed.add(button); } });
+    window.addEventListener("keydown", (event) => {
+      // 1–6 select the equipped slot the use button acts through: a Mage's six
+      // spells, a Gunslinger's weapon and five gadgets.
+      const slot = slotKey(event.code);
+      if (slot !== undefined && !isFormField(event.target)) { event.preventDefault(); this.selectSlot(slot); return; }
+      const button = keyMap[event.code]; if (button && !isFormField(event.target)) { event.preventDefault(); this.pressed.add(button); }
+    });
     window.addEventListener("keyup", (event) => { const button = keyMap[event.code]; if (button) this.pressed.delete(button); });
     window.addEventListener("pointermove", (event) => { if (!this.view) return; this.aim = this.view.pointerWorld(event.clientX, event.clientY); });
     element("canvas-host").addEventListener("pointerdown", (event) => {
@@ -92,6 +109,9 @@ class SpellFire {
     });
     window.addEventListener("pointerup", (event) => { if ((event as PointerEvent).button === 0) this.pressed.delete(Buttons.Fire); });
     element("canvas-host").addEventListener("contextmenu", (event) => event.preventDefault());
+    // The wheel steps through the same slots, wrapping in both directions.
+    element("canvas-host").addEventListener("wheel", (event) => { event.preventDefault(); this.selectSlot((this.selectedSlot + (event.deltaY > 0 ? 1 : barSlots - 1)) % barSlots); }, { passive: false });
+    element("touch-slots").addEventListener("click", (event) => { const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-slot]"); if (button) this.selectSlot(Number(button.dataset.slot)); });
     const touchMap: Record<string, number> = { up: Buttons.Up, down: Buttons.Down, left: Buttons.Left, right: Buttons.Right, fire: Buttons.Fire, dash: Buttons.Dash, interact: Buttons.Interact };
     for (const button of document.querySelectorAll<HTMLButtonElement>("#touch-controls button")) {
       const bit = touchMap[button.dataset.button ?? ""];
@@ -162,28 +182,72 @@ class SpellFire {
 
   private async play(): Promise<void> {
     const character = this.selectedCharacter(); if (!character) return;
+    // Shown until the welcome arrives with the authoritative set; the server
+    // resolves the same default for a character that has never chosen one.
+    this.loadout = defaultLoadout(character.class); this.draft = undefined; this.selectedSlot = 0; this.loadoutStatus = "";
     sessionStorage.setItem("spellfire-character", character.id); element("home").hidden = true; element("game").hidden = false;
     element("connection-overlay").hidden = false; element("connection-title").textContent = "Connecting"; element("connection-message").textContent = "Joining the shared world…";
     this.predictor = new Predictor(); this.view = new GameView(); await this.view.init(element("canvas-host")); this.view.bindPredictor(this.predictor);
     this.activeCharacter = character;
-    this.socket = new GameSocket(this.api.token, character.id, { message: (message) => this.receive(message, character), status: (state, detail) => this.connectionStatus(state, detail) });
+    this.socket = new GameSocket(this.api.token, character.id, { message: (message) => this.receive(message), status: (state, detail) => this.connectionStatus(state, detail) });
     this.socket.connect(); window.clearInterval(this.inputTimer); this.inputTimer = window.setInterval(() => this.simulateInput(), 1000 / 60);
   }
 
-  private receive(message: ServerMessage, character: Character): void {
+  private receive(message: ServerMessage): void {
     if (message.kind === ServerKind.Pong) { element("latency").textContent = `${Math.max(0, Date.now() - message.echoedClientTimeMS)} ms`; return; }
+    if (message.loadout) this.applyLoadout(message);
+    if (message.kind === ServerKind.Loadout) return;
     this.predictor?.setColliders(message.colliders); this.view?.apply(message);
     const local = message.entities.find((entity) => entity.id === message.playerID);
     if (!local || !this.predictor) return;
     if (message.kind === ServerKind.Welcome) this.predictor.initialize(local); else this.predictor.reconcile(local);
-    this.updateHUD(local, character); element("connection-overlay").hidden = true; element("death-overlay").hidden = local.alive;
+    this.updateHUD(local); element("connection-overlay").hidden = true; element("death-overlay").hidden = local.alive;
   }
 
   private simulateInput(): void {
     if (!this.predictor || element("game").hidden) return;
     const blocked = element<HTMLDialogElement>("menu-dialog").open;
     let buttons = 0; if (!blocked) for (const value of this.pressed) buttons |= value;
-    const input = this.predictor.step(buttons, this.aim.x, this.aim.y, performance.now()); this.socket?.sendInput(input);
+    const input = this.predictor.step(buttons, this.aim.x, this.aim.y, this.selectedSlot, performance.now()); this.socket?.sendInput(input);
+  }
+
+  private selectSlot(slot: number): void {
+    if (element<HTMLDialogElement>("menu-dialog").open || slot < 0 || slot >= barSlots) return;
+    this.selectedSlot = slot; this.renderAbilityBar();
+  }
+
+  /** Adopts the authoritative set and reports what the server made of a commit. */
+  private applyLoadout(message: ServerMessage): void {
+    this.loadout = message.loadout!; this.respecOwed = message.respecOwed;
+    if (message.kind === ServerKind.Loadout) {
+      this.draft = undefined;
+      this.loadoutStatus = message.error || "Loadout committed.";
+      if (message.error) this.notice(message.error);
+    }
+    if (this.selectedSlot >= barSlots) this.selectSlot(0);
+    this.renderAbilityBar();
+    if (this.menuTab === "loadout" && element<HTMLDialogElement>("menu-dialog").open) this.renderMenu("loadout");
+    if (this.respecOwed) this.notice("A balance patch re-validated your loadout. Respec is free in any safe zone.");
+  }
+
+  private renderAbilityBar(): void {
+    const character = this.selectedCharacter(); if (!character) return;
+    const slots = bar(character.class, this.loadout);
+    const label = (index: number) => `${index + 1}`;
+    element("ability-bar").replaceChildren(...slots.map((slot) => {
+      const cell = document.createElement("div");
+      cell.className = slot.index === this.selectedSlot ? "slot selected" : "slot";
+      cell.innerHTML = `<kbd>${label(slot.index)}</kbd><span>${escapeHTML(slot.name || "Empty")}</span>`;
+      return cell;
+    }));
+    element("touch-slots").replaceChildren(...slots.map((slot) => {
+      const button = document.createElement("button");
+      button.dataset.slot = String(slot.index); button.className = slot.index === this.selectedSlot ? "selected" : "";
+      button.textContent = label(slot.index);
+      button.setAttribute("aria-label", `Slot ${slot.index + 1}: ${slot.name || "empty"}`);
+      button.setAttribute("aria-pressed", String(slot.index === this.selectedSlot));
+      return button;
+    }));
   }
 
   private connectionStatus(state: "connecting" | "connected" | "reconnecting" | "failed", detail?: string): void {
@@ -192,12 +256,20 @@ class SpellFire {
     overlay.hidden = false; element("connection-title").textContent = state === "failed" ? "Connection failed" : state === "reconnecting" ? "Reconnecting" : "Connecting"; element("connection-message").textContent = detail ?? (state === "reconnecting" ? "Gameplay input is paused." : "Contacting the world server…");
   }
 
-  private updateHUD(entity: Entity, character: Character): void {
+  private updateHUD(entity: Entity): void {
     const health = Math.max(0, entity.health / Math.max(1, entity.maxHealth)); element("health-bar").style.width = `${health * 100}%`; element("health-label").textContent = `${Math.ceil(entity.health)} / ${Math.ceil(entity.maxHealth)}`;
-    const { label, max } = resourceMax(character.class), resource = entity.mana; element("resource-label").innerHTML = `${label} <span>${Math.floor(resource)} / ${max}</span>`; element("resource-bar").style.width = `${Math.max(0, resource / max) * 100}%`;
-    const band = dangerBandAt(Math.hypot(entity.x, entity.y));
+    const { label, max } = resourceMax(weapons[this.loadout.weapon]), resource = entity.mana; element("resource-label").innerHTML = `${label} <span>${Math.floor(resource)} / ${max}</span>`; element("resource-bar").style.width = `${Math.max(0, resource / max) * 100}%`;
+    const distance = Math.hypot(entity.x, entity.y), band = dangerBandAt(distance);
     element("danger-text").textContent = `${band.name} · ${band.summary}`; element("danger-shape").textContent = band.shape;
     if (band.name !== this.lastBand && this.lastBand) this.notice(`${band.name}: ${band.summary}`); this.lastBand = band.name;
+    // Crossing out of safety locks the equipped set. Warn at the crossing, not
+    // only when the player later opens the menu and finds the controls dead.
+    const safe = distance <= safeRadius;
+    if (safe !== this.inSafety) {
+      this.notice(safe ? "Safe zone: loadout unlocked." : "You left the safe zone. Your loadout is locked until you return.");
+      if (this.menuTab === "loadout" && element<HTMLDialogElement>("menu-dialog").open) this.renderMenu("loadout");
+    }
+    this.inSafety = safe;
   }
 
   private notice(message: string): void { const notice = element("world-notice"); notice.textContent = message; notice.classList.add("visible"); window.clearTimeout(this.noticeTimer); this.noticeTimer = window.setTimeout(() => notice.classList.remove("visible"), 2600); }
@@ -206,15 +278,17 @@ class SpellFire {
     const admin = Boolean(this.api.account?.is_admin);
     const adminTab = element<HTMLButtonElement>("admin-menu-tab"); adminTab.hidden = !admin;
     if (tab === "admin" && !admin) tab = "character";
+    this.menuTab = tab;
     for (const button of document.querySelectorAll<HTMLButtonElement>("#menu-tabs button")) button.classList.toggle("active", button.dataset.tab === tab);
     const character = this.selectedCharacter(); const content = element("menu-content");
     if (tab === "admin") { this.renderAdminMenu(content); return; }
+    if (tab === "loadout") { this.renderLoadoutSection(content, character); return; }
+    const equipped = weapons[this.loadout.weapon];
     const pages: Record<string, string> = {
       character: `<h3>${escapeHTML(character?.name ?? "Character")}</h3><p>${titleCase(character?.class ?? "gunslinger")} · Level ${character?.level ?? 1}</p><p>Progression unlocks options, never raw combat power.</p>`,
-      loadout: `<h3>Starter loadout</h3><p>${escapeHTML(describeLoadout(character?.class ?? "gunslinger"))}</p><p>Loadouts are editable only inside the central safe zone. Expanded crafting and affinity validation are not available in this foundation.</p>`,
       inventory: "<h3>Materials</h3><p>No carried materials. Material harvesting and death drops are not available in this foundation.</p>",
       world: `<h3>Known world</h3><p>${world.danger_bands.map((band) => escapeHTML(band.name)).join(" → ")}. The circular world is contiguous; trees are authoritative static cover.</p>`,
-      reference: `<h3>Field reference</h3><p>WASD/Arrows move · pointer aims · primary pointer fires · Space dashes · R reloads · E interacts. The hub is safe. Combat is server-authoritative and raw time-to-kill is about ${damageBandFor(starterWeapon(character?.class ?? "gunslinger")).target_ttk_seconds} seconds.</p>`,
+      reference: `<h3>Field reference</h3><p>WASD/Arrows move · pointer aims · primary pointer fires · 1–6 or the wheel select an equipped slot · Space dashes · R reloads · E interacts. The hub is safe. Combat is server-authoritative and raw time-to-kill is about ${equipped ? damageBandFor(equipped).target_ttk_seconds : 3} seconds.</p>`,
       settings: "<h3>Settings</h3><p>Accessibility and interface-scale controls remain available on Home. Opening this menu does not pause the shared world.</p>",
     };
     content.innerHTML = pages[tab] ?? pages.character!;
@@ -285,24 +359,98 @@ class SpellFire {
     catch (error) { notice.textContent = messageOf(error); notice.classList.add("error"); }
   }
 
+  /**
+   * The Loadout section: viewable anywhere, editable only in safety. Editing
+   * builds a draft and commits it as one request; nothing is shown as equipped
+   * until the server confirms it.
+   */
+  private renderLoadoutSection(content: HTMLElement, character: Character | undefined): void {
+    if (!character) { content.innerHTML = "<h3>Loadout</h3><p>No character selected.</p>"; return; }
+    const set = this.draft ?? this.loadout;
+    const slots = bar(character.class, set);
+    const editable = this.inSafety;
+    const problem = loadoutProblem(character.class, set);
+    content.replaceChildren();
+    content.append(heading("Loadout"));
+    const lock = document.createElement("p");
+    lock.className = editable ? "status good" : "warning";
+    lock.textContent = editable
+      ? "You are inside a safe zone. Respec is free and takes effect immediately."
+      : "Locked: the equipped set can only be changed inside a safe zone. You committed to this kit when you left.";
+    content.append(lock);
+    if (this.respecOwed) { const patch = document.createElement("p"); patch.className = "status good"; patch.textContent = "A balance patch re-validated this loadout. Rearranging it costs nothing."; content.append(patch); }
+
+    const list = document.createElement("div"); list.className = "loadout-slots";
+    list.append(this.slotRow(character, "weapon", 0, set.weapon, editable, "Weapon"));
+    for (const slot of slots) {
+      if (slot.kind === "weapon") continue;
+      const index = character.class === "gunslinger" ? slot.index - 1 : slot.index;
+      const stored = (character.class === "gunslinger" ? set.gadgets : set.spells)[index] ?? "";
+      list.append(this.slotRow(character, slot.kind, index, stored, editable, `Slot ${slot.index + 1}`));
+    }
+    content.append(list);
+
+    const message = document.createElement("p");
+    message.className = problem ? "error" : "status good";
+    message.textContent = problem ?? this.loadoutStatus;
+    content.append(message);
+
+    const save = document.createElement("button");
+    save.className = "primary"; save.textContent = this.draft ? "Commit loadout" : "No changes";
+    save.disabled = !editable || !this.draft || Boolean(problem);
+    save.addEventListener("click", () => this.commitLoadout(set));
+    content.append(save);
+  }
+
+  /** One slot row: a select over the content this character may equip there. */
+  private slotRow(character: Character, kind: SlotKind, index: number, id: string, editable: boolean, label: string): HTMLElement {
+    const row = document.createElement("label"); row.className = "loadout-slot";
+    const select = document.createElement("select");
+    select.disabled = !editable;
+    const options = equippable(character.class, kind);
+    if (kind !== "weapon") select.append(new Option("Empty", ""));
+    for (const option of options) select.append(new Option(contentName(kind, option), option));
+    if (!options.length && kind !== "weapon") select.append(new Option(kind === "gadget" ? "No gadgets unlocked yet" : "No spells unlocked yet", "", true, true));
+    select.value = id;
+    select.addEventListener("change", () => { this.editDraft(kind, index, select.value); });
+    row.append(document.createTextNode(label), select);
+    return row;
+  }
+
+  private editDraft(kind: SlotKind, index: number, id: string): void {
+    const draft = this.draft ?? { weapon: this.loadout.weapon, gadgets: [...this.loadout.gadgets], spells: [...this.loadout.spells] };
+    if (kind === "weapon") draft.weapon = id;
+    else if (kind === "gadget") draft.gadgets[index] = id;
+    else draft.spells[index] = id;
+    this.draft = draft; this.loadoutStatus = "";
+    this.renderMenu("loadout");
+  }
+
+  private commitLoadout(set: LoadoutSet): void {
+    // The server is the authority on both the lock and the rules; this only
+    // avoids a request that is already known to be refused.
+    if (!this.socket?.setLoadout(set)) { this.loadoutStatus = "Not connected. The change was not sent."; this.renderMenu("loadout"); return; }
+    this.loadoutStatus = "Committing…"; this.renderMenu("loadout");
+  }
+
   private selectedCharacter(): Character | undefined { const id = element<HTMLSelectElement>("character-select").value; return this.characters.find((character) => character.id === id); }
 
   private exitGame(): void {
     window.clearInterval(this.inputTimer); this.socket?.close(); this.socket = undefined; this.view?.destroy(); this.view = undefined; this.predictor = undefined; this.pressed.clear(); this.lastBand = "";
+    this.draft = undefined; this.selectedSlot = 0; this.inSafety = true; this.respecOwed = false; this.loadoutStatus = "";
+    element("ability-bar").replaceChildren(); element("touch-slots").replaceChildren();
     const menu = element<HTMLDialogElement>("menu-dialog"); if (menu.open) menu.close(); this.activeCharacter = undefined; this.setDeveloperMode(false); element("game").hidden = true; element("home").hidden = false; element("death-overlay").hidden = true; element("connection-overlay").hidden = true;
   }
 }
 
-// The menu names what the character actually carries, read from the same
-// tuning tables the simulation fires with.
-function describeLoadout(characterClass: CharacterClass): string {
-  const weapon = starterWeapon(characterClass);
-  const parts = [weapon.name];
-  const spell = weapon.spell ? spells[weapon.spell] : undefined;
-  if (spell) parts.push(spell.name);
-  if (weapon.magazine_size) parts.push(`${weapon.magazine_size}-round magazine`);
-  parts.push("Universal dash");
-  return parts.join(" · ");
+function heading(text: string): HTMLElement { const node = document.createElement("h3"); node.textContent = text; return node; }
+
+/** The action-bar slot a digit key selects, or undefined for any other key. */
+function slotKey(code: string): number | undefined {
+  const match = /^(?:Digit|Numpad)([1-9])$/.exec(code);
+  if (!match) return undefined;
+  const slot = Number(match[1]) - 1;
+  return slot < barSlots ? slot : undefined;
 }
 
 function isFormField(target: EventTarget | null): boolean { return target instanceof HTMLInputElement || target instanceof HTMLSelectElement || target instanceof HTMLTextAreaElement; }

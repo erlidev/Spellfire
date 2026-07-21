@@ -21,7 +21,8 @@ func (c Class) Valid() bool { return c == Gunslinger || c == Mage }
 //	1  name, class, level, and xp
 //	2  adds saved world position, carried materials, and unlocked outposts
 //	3  adds the last-seen stamp that decides whether the position still holds
-const CharacterSchemaVersion = 3
+//	4  adds the equipped loadout: weapon, gadget slots, and spell slots
+const CharacterSchemaVersion = 4
 
 type Account struct {
 	ID           string
@@ -30,6 +31,35 @@ type Account struct {
 }
 
 type Point struct{ X, Y float64 }
+
+// Loadout is the equipped set: content IDs by slot, never their stats. The
+// slices are positional and may hold empty strings for empty slots, because a
+// slot's index is what the action bar binds to a key.
+//
+// Version records the content revision the set was last validated at. When it
+// no longer matches the manifest, a balance patch has landed and the character
+// is owed the global respec — the set is re-resolved and re-validated on the
+// next join rather than silently carrying an arrangement a patch invalidated.
+type Loadout struct {
+	Weapon  string   `json:"weapon"`
+	Gadgets []string `json:"gadgets"`
+	Spells  []string `json:"spells"`
+	Version int      `json:"version"`
+}
+
+// Empty reports a record that has never had a loadout written — a character
+// created before it chose one, which resolves to the class default.
+func (l Loadout) Empty() bool {
+	return l.Weapon == "" && len(l.Gadgets) == 0 && len(l.Spells) == 0
+}
+
+// Clone copies the slices so a stored loadout cannot be mutated through a
+// reference the world handed out.
+func (l Loadout) Clone() Loadout {
+	l.Gadgets = append([]string(nil), l.Gadgets...)
+	l.Spells = append([]string(nil), l.Spells...)
+	return l
+}
 
 // CharacterState is the world state a character keeps across a disconnect. It
 // holds references and counts only — never derived combat values — so a tuning
@@ -45,6 +75,9 @@ type CharacterState struct {
 	LastSeen  time.Time
 	Materials map[string]int // carried raw material ID → count
 	Outposts  []string       // unlocked outpost IDs, sorted
+	// Loadout is the equipped set. An empty one is not an error: it resolves to
+	// the class default the first time the character enters the world.
+	Loadout Loadout
 }
 
 type Character struct {
@@ -77,6 +110,11 @@ func (c Character) Migrate() (Character, error) {
 			// v2 saved a position but not when. An undatable position cannot
 			// be trusted to be recent, so it is left unstamped and expires.
 			c.State.LastSeen = time.Time{}
+		case 3:
+			// v3 predates equipped slots. An empty loadout resolves to the
+			// class default on the next join, which is exactly what the
+			// character was already fighting with.
+			c.State.Loadout = Loadout{}
 		}
 		c.SchemaVersion++
 	}

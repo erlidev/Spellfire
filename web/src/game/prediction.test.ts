@@ -24,37 +24,37 @@ function entity(overrides: Partial<Entity> = {}): Entity {
 describe("client prediction", () => {
   it("normalizes diagonal movement", () => {
     const predictor = new Predictor(); predictor.initialize(entity());
-    predictor.step(Buttons.Right | Buttons.Down, 1, 0, 0);
+    predictor.step(Buttons.Right | Buttons.Down, 1, 0, 0, 0);
     expect(predictor.x).toBeCloseTo(speed / Math.sqrt(2) / tickRate); expect(predictor.y).toBeCloseTo(speed / Math.sqrt(2) / tickRate);
   });
 
   it("predicts dash only on a press edge", () => {
     const predictor = new Predictor(); predictor.initialize(entity());
-    predictor.step(Buttons.Right | Buttons.Dash, 1, 0, 0);
+    predictor.step(Buttons.Right | Buttons.Dash, 1, 0, 0, 0);
     expect(predictor.x).toBeCloseTo(dashDistance / dashTicks);
-    for (let index = 1; index < dashTicks; index++) predictor.step(Buttons.Right | Buttons.Dash, 1, 0, index * tickMS);
+    for (let index = 1; index < dashTicks; index++) predictor.step(Buttons.Right | Buttons.Dash, 1, 0, 0, index * tickMS);
     expect(predictor.x).toBeCloseTo(dashDistance);
-    predictor.step(Buttons.Right | Buttons.Dash, 1, 0, dashTicks * tickMS);
+    predictor.step(Buttons.Right | Buttons.Dash, 1, 0, 0, dashTicks * tickMS);
     expect(predictor.x - dashDistance).toBeCloseTo(speed / tickRate);
   });
 
   it("carries the dash direction even when movement input changes", () => {
     const predictor = new Predictor(); predictor.initialize(entity());
-    predictor.step(Buttons.Right | Buttons.Dash, 1, 0, 0);
-    for (let index = 1; index < dashTicks; index++) predictor.step(Buttons.Left, 1, 0, index * tickMS);
+    predictor.step(Buttons.Right | Buttons.Dash, 1, 0, 0, 0);
+    for (let index = 1; index < dashTicks; index++) predictor.step(Buttons.Left, 1, 0, 0, index * tickMS);
     expect(predictor.x).toBeCloseTo(dashDistance); expect(predictor.y).toBeCloseTo(0);
   });
 
   it("reconciles and replays only unacknowledged motion", () => {
     const predictor = new Predictor(); predictor.initialize(entity());
-    predictor.step(Buttons.Right, 1, 0, 0); predictor.step(Buttons.Right, 1, 0, 20);
+    predictor.step(Buttons.Right, 1, 0, 0, 0); predictor.step(Buttons.Right, 1, 0, 0, 20);
     predictor.reconcile(entity({ x: 4, acknowledgedInput: 1 }));
     expect(predictor.pendingCount()).toBe(1); expect(predictor.x).toBeCloseTo(4 + speed / tickRate);
   });
 
   it("uses authoritative tree circles during prediction", () => {
     const predictor = new Predictor(); predictor.initialize(entity()); predictor.setColliders([{ id: "tree", kind: "tree", x: 42, y: 0, radius: 20 }]);
-    for (let index = 0; index < 20; index++) predictor.step(Buttons.Right, 1, 0, index * tickMS);
+    for (let index = 0; index < 20; index++) predictor.step(Buttons.Right, 1, 0, 0, index * tickMS);
     expect(predictor.x).toBeLessThanOrEqual(42 - 20 - combat.player.radius + 0.01);
   });
 });

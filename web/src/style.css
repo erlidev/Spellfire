@@ -48,7 +48,16 @@ fieldset input { width: auto; } fieldset small { display: block; grid-column: 2;
 .vital-panel label { display: flex; justify-content: space-between; margin: 3px 0; font-size: .72rem; }
 .bar { height: 11px; overflow: hidden; border: 2px solid #080e19; border-radius: 7px; background: #2a3140; }.bar i { display: block; width: 100%; height: 100%; background: #65d89d; transition: width .12s; }.bar.resource i { background: #5dbde8; }
 .abilities { bottom: max(15px, env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); display: flex; padding: 7px; gap: 5px; }
-.abilities div { min-width: 72px; text-align: center; font-size: .65rem; }.abilities span { display: block; color: #9fb1ca; } kbd { font-family: inherit; font-weight: 800; }
+.abilities .slot { min-width: 76px; padding: 4px 6px; border: 1px solid transparent; border-radius: 7px; text-align: center; font-size: .65rem; }
+.abilities .slot span { display: block; color: #9fb1ca; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Selection is marked by border and weight as well as fill, never colour alone. */
+.abilities .slot.selected { border-color: #ffd166; background: #2a3958; }.abilities .slot.selected span { color: #edf4ff; font-weight: 700; }
+kbd { font-family: inherit; font-weight: 800; }
+.touch-slots { display: none; bottom: max(96px, calc(env(safe-area-inset-bottom) + 96px)); left: 50%; transform: translateX(-50%); padding: 6px; gap: 5px; }
+.touch-slots button { pointer-events: auto; width: 40px; height: 40px; padding: 0; background: #1c2c49bb; }
+.touch-slots button.selected { border-color: #ffd166; background: #2a3958; font-weight: 800; }
+.loadout-slots { display: grid; gap: 6px; }
+.loadout-slot { display: grid; grid-template-columns: 108px 1fr; align-items: center; gap: 10px; margin: 0; font-size: .85rem; }
 .world-notice { left: 50%; top: 18%; transform: translateX(-50%); padding: 10px 16px; opacity: 0; transition: opacity .2s; }.world-notice.visible { opacity: 1; }
 .developer-mode-hud { pointer-events: auto; top: max(62px, calc(env(safe-area-inset-top) + 48px)); right: max(14px, env(safe-area-inset-right)); display: grid; gap: 5px; padding: 10px; color: #ffd166; font-size: .78rem; }.developer-mode-hud span { color: #edf4ff; }.developer-mode-hud button { padding: 5px 8px; font-size: .75rem; }
 .developer-mode #canvas-host { cursor: crosshair; }
@@ -57,6 +66,8 @@ fieldset input { width: auto; } fieldset small { display: block; grid-column: 2;
 .admin-spawn-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(155px, 1fr)); gap: 7px; max-height: 180px; overflow: auto; }.admin-spawn-list button { text-align: left; }.admin-spawn-list button[aria-pressed="true"] { border-color: #ffd166; background: #4f432b; }.admin-spawn-list strong, .admin-spawn-list small { display: block; }.admin-spawn-list small { color: #afc7e8; }.admin-config, #admin-attributes-form { margin-top: 16px; border-top: 1px solid #405674; padding-top: 5px; }#admin-attributes-form .secondary { margin-top: 8px; }
 #touch-controls { display: none; position: fixed; z-index: 5; inset: auto 0 max(20px, env(safe-area-inset-bottom)); padding: 18px; justify-content: space-between; pointer-events: none; }
 #touch-controls button { pointer-events: auto; width: 54px; height: 54px; padding: 0; user-select: none; touch-action: none; background: #1c2c49bb; }.touch-move { display: grid; grid-template-columns: repeat(3, 54px); grid-template-rows: repeat(2, 54px); }.touch-move button:nth-child(1) { grid-column: 2; }.touch-move button:nth-child(2) { grid-row: 2; grid-column: 1; }.touch-move button:nth-child(3) { grid-row: 2; grid-column: 2; }.touch-move button:nth-child(4) { grid-row: 2; grid-column: 3; }.touch-actions { display: grid; grid-template-columns: 54px 72px; grid-template-rows: repeat(2, 54px); gap: 8px; align-items: center; }.touch-actions button:nth-child(2) { grid-row: 2; }.touch-actions button:last-child { grid-column: 2; grid-row: 1 / span 2; width: 72px; height: 72px; border-radius: 50%; }
-@media (pointer: coarse), (max-width: 700px) { #touch-controls { display: flex; }.abilities { display: none; }.vital-panel { bottom: max(155px, calc(env(safe-area-inset-bottom) + 155px)); width: 44vw; }.play-panel { padding: 28px 22px; }.game-menu { inset: 0; max-width: none; width: 100%; max-height: none; height: 100%; border-radius: 0; } }
+/* Touch gets the six slots as buttons; optimising the wider touch layout is
+   still open (see TODO.md Phase 7). */
+@media (pointer: coarse), (max-width: 700px) { #touch-controls { display: flex; }.abilities { display: none; }.touch-slots { display: flex; }.vital-panel { bottom: max(155px, calc(env(safe-area-inset-bottom) + 155px)); width: 44vw; }.play-panel { padding: 28px 22px; }.game-menu { inset: 0; max-width: none; width: 100%; max-height: none; height: 100%; border-radius: 0; } }
 .reduced-motion *, .reduced-motion *::before, .reduced-motion *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; } }

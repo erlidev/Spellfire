@@ -1,4 +1,4 @@
-import type { Collider, Entity, InputFrame, ServerMessage } from "../types";
+import type { Collider, Entity, InputFrame, LoadoutSet, ServerMessage } from "../types";
 
 class Writer {
   private bytes: number[] = [];
@@ -10,6 +10,8 @@ class Writer {
   }
   uint(field: number, value: number): void { if (value !== 0) { this.tag(field, 0); this.varint(value); } }
   string(field: number, value: string): void { if (value) this.message(field, new TextEncoder().encode(value)); }
+  /** Writes a slot even when it is empty: order is meaning in a positional list. */
+  slot(field: number, value: string): void { this.message(field, new TextEncoder().encode(value)); }
   float(field: number, value: number): void {
     if (value === 0) return;
     this.tag(field, 5);
@@ -59,7 +61,35 @@ function encodeInput(input: InputFrame): Uint8Array {
   const writer = new Writer();
   writer.uint(1, input.sequence); writer.uint(2, input.buttons);
   writer.float(3, input.aimX); writer.float(4, input.aimY); writer.uint(5, input.clientTimeMS);
+  writer.uint(6, input.selectedSlot);
   return writer.finish();
+}
+
+function encodeLoadout(set: LoadoutSet): Uint8Array {
+  const writer = new Writer();
+  writer.string(1, set.weapon);
+  for (const id of set.gadgets) writer.slot(2, id);
+  for (const id of set.spells) writer.slot(3, id);
+  return writer.finish();
+}
+
+export function encodeLoadoutEnvelope(set: LoadoutSet): Uint8Array {
+  const writer = new Writer(); writer.uint(1, 5); writer.message(6, encodeLoadout(set)); return writer.finish();
+}
+
+function decodeLoadout(bytes: Uint8Array): LoadoutSet {
+  const value: LoadoutSet = { weapon: "", gadgets: [], spells: [] };
+  const reader = new Reader(bytes);
+  while (!reader.done) {
+    const tag = reader.varint(), field = tag >>> 3, wire = tag & 7;
+    switch (field) {
+      case 1: value.weapon = reader.string(); break;
+      case 2: value.gadgets.push(reader.string()); break;
+      case 3: value.spells.push(reader.string()); break;
+      default: reader.skip(wire);
+    }
+  }
+  return value;
 }
 
 export function encodeJoin(token: string, characterID: string): Uint8Array {
@@ -116,7 +146,7 @@ function decodeCollider(bytes: Uint8Array): Collider {
 }
 
 export function decodeServer(data: ArrayBuffer): ServerMessage {
-  const value: ServerMessage = { kind: 0, serverTick: 0, serverTimeMS: 0, playerID: "", entities: [], colliders: [], error: "", echoedClientTimeMS: 0 };
+  const value: ServerMessage = { kind: 0, serverTick: 0, serverTimeMS: 0, playerID: "", entities: [], colliders: [], error: "", echoedClientTimeMS: 0, loadoutEditable: false, respecOwed: false };
   const reader = new Reader(new Uint8Array(data));
   while (!reader.done) {
     const tag = reader.varint(), field = tag >>> 3, wire = tag & 7;
@@ -125,6 +155,8 @@ export function decodeServer(data: ArrayBuffer): ServerMessage {
       case 3: value.serverTimeMS = reader.varint(); break; case 4: value.playerID = reader.string(); break;
       case 5: value.entities.push(decodeEntity(reader.data())); break; case 6: value.colliders.push(decodeCollider(reader.data())); break;
       case 7: value.error = reader.string(); break; case 8: value.echoedClientTimeMS = reader.varint(); break;
+      case 9: value.loadout = decodeLoadout(reader.data()); break;
+      case 10: value.loadoutEditable = reader.varint() !== 0; break; case 11: value.respecOwed = reader.varint() !== 0; break;
       default: reader.skip(wire);
     }
   }

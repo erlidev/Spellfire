@@ -20,6 +20,7 @@ Initial placement:
 - movement at lower left;
 - aim/primary action at lower right;
 - abilities, dash, interact, reload/class equivalent in reachable thumb zones;
+- the six [equipped slots](game-view-and-hud.md#slot-selection) as buttons — currently a plain row above the controls, which is functional but not yet placed for one-handed reach;
 - menu and low-frequency information near upper safe-area edges.
 
 Fixed versus floating sticks, aim/target assistance, and orientation are **Open** because they affect combat balance. Validate them against the [skill and dodgeability rules](../design/combat.md) through playtesting.

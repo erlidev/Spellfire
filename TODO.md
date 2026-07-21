@@ -105,11 +105,19 @@ through the authorization wrapper; client visibility alone never grants access.
 ## Phase 2 — Content axis
 
 ### 2.1 Equipped slots & loadout
-- [ ] Slot model: one weapon, gadget slots, six spell slots ([progression-and-crafting.md](docs/game/design/progression-and-crafting.md#progression-layers))
-- [ ] Server-side loadout validator: slot limits, Mage affinity (tier-N needs N−1 same-element spells)
-- [ ] Loadout lock outside safe zones, enforced server-side on mutation — the keystone economy rule
-- [ ] Free respec inside safety; global respec/refund on a balance patch
-- [ ] Menu Loadout section: view anywhere, edit only in safety, with an explicit lock reason ([system-interfaces.md](docs/game/ui/system-interfaces.md#safe-zone-loadout-and-crafting))
+- [x] Slot model: one weapon, five gadget slots, six spell slots, laid out over one six-slot action bar ([loadout.json](data/tuning/loadout.json), [loadout.go](server/internal/loadout/loadout.go), [progression-and-crafting.md](docs/game/design/progression-and-crafting.md#slots))
+- [x] Server-side loadout validator: slot limits, class ownership, no duplicates, Mage affinity (tier-N needs N−1 same-element spells) — `loadout.Validate`
+- [x] Loadout lock outside safe zones, enforced server-side on mutation — the keystone economy rule (`World.SetLoadout`/`ErrLoadoutLocked`, [architecture.md](docs/architecture.md#loadout-and-slots))
+- [x] Free respec inside safety; global respec/refund on a balance patch — `loadout.Resolve` re-validates against the manifest version and reports the grant
+- [x] Menu Loadout section: view anywhere, edit only in safety, with an explicit lock reason ([system-interfaces.md](docs/game/ui/system-interfaces.md#safe-zone-loadout-and-crafting), [main.ts](web/src/main.ts))
+- [x] Slot selection: 1–6 and the mouse wheel on desktop, six buttons on touch, carried per input so the server resolves the use button against the selected slot ([game-view-and-hud.md](docs/game/ui/game-view-and-hud.md#slot-selection))
+
+`gadgets.json` ships empty, so a Gunslinger's bar is its weapon plus five empty slots until Phase 2.4
+authors the rows; an empty slot performs nothing rather than erroring. A Mage's slot one falls back to
+its staff's declared spell, so a set emptied by a content withdrawal can still fight. Loadouts cannot
+be edited outside the world at all — there is no HTTP mutation path — so logging out in the Deadlands
+is not a way to respec. Keystone slots wait on Phase 2.7, and the unlock ledger that will narrow the
+equippable set from "every live row" to "what this character owns" is Phase 2.2.
 
 ### 2.2 Unlock ledger & starter kit
 - [ ] Flat permanent unlock ledger for gun parts, spells, and keystone IDs ([model.go:18-25](server/internal/model/model.go#L18-L25) holds only level/XP)
@@ -261,6 +269,7 @@ through the authorization wrapper; client visibility alone never grants access.
 - [ ] Text/UI contrast verified over every biome and danger palette
 - [ ] Independent audio controls and non-audio critical cues
 - [ ] Mobile: configurable control regions, idle fade with discoverable return, collapsed squad/activity summaries ([responsive-and-mobile.md](docs/game/ui/responsive-and-mobile.md#gameplay-and-touch))
+- [ ] Optimise the touch layout for six equipped slots: the current plain button row above the controls works but is not placed for one-handed reach, and it competes with the aim and movement zones ([game-view-and-hud.md](docs/game/ui/game-view-and-hud.md#slot-selection))
 
 ---
 

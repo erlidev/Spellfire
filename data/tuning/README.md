@@ -49,11 +49,13 @@ Rules, from [`invariants.md`](../../docs/game/design/invariants.md) and
 | `session.json` | Logout linger window and saved-position expiry |
 | `world.json` | World radius, spawn radius, danger bands, procedural tree parameters |
 | `combat.json` | Role and dodge-vector vocabularies, player body, universal dash, damage bands |
+| `loadout.json` | Slot counts per kind and the Mage affinity multiplier |
 | `elements.json` | The five Mage elements and their roles |
 | `abilities.json` | What every action costs, how often it may be used, how it is dodged, what it delivers, and what it applies |
 | `effects.json` | Status effects: burn, slow, root, stun, knockback, shield |
 | `weapons.json` | Craftable weapons: class, blueprint, magazine, and the ability they fire or the spell they cast |
 | `spells.json` | Spells: element, tier, and the ability they cast |
+| `gadgets.json` | Gadgets: the Gunslinger's slot content, and the ability each performs |
 | `components.json` | Blueprint slot layouts and the components that fill them |
 | `materials.json` | Material grades, kinds, and rows |
 | `mobs.json` | Mob contracts |
@@ -87,6 +89,10 @@ Rows are populated only where a design document has settled them.
   pending phase; death cancels it into the common resolution flash. The loader
   requires `windup_ms` and `telegraph` together and validates the exact geometry
   each of circle, cone, line, and ring consumes.
+- `gadgets` is empty. The slot model, its validation, and the Gunslinger's five
+  gadget bindings all run against it; Phase 2.4 authors smoke, flashbangs, and
+  the rest as rows. Until then a Gunslinger's bar is its weapon plus five empty
+  slots, and an empty slot performs nothing rather than erroring.
 - `components.components` and `materials.materials` are empty. Slotted-blueprint
   crafting (Phase 2.3) and harvesting (Phase 4.1) fill them; the schemas and
   their validation exist now so those phases add data, not structure.
@@ -130,7 +136,10 @@ caller may drop is an ID no build ever shipped.
 rejected, every cross-table reference is resolved, danger bands must run
 outward from the hub to the rim with contiguous PvP protection, projectile
 kinds must be unique across tables, and each class must have exactly one starter
-weapon. Abilities add their own: the cost kind must be one the simulation can
+weapon. The loadout table must lay both classes out over one action bar —
+`weapon_slots + gadget_slots` has to equal `spell_slots` — and its affinity
+multiplier must leave a tier-4 spell equippable inside those slots, or the
+spell grid's own 4 + 2 build would be unbuildable. Abilities add their own: the cost kind must be one the simulation can
 charge, a magazine weapon's ability must spend ammunition it holds, every
 applied effect must exist, an effect must be of a kind the world can run and may
 only carry the fields its kind uses, and a damaging ability must declare a band

@@ -12,11 +12,16 @@ const (
 	ClientInput   uint64 = 2
 	ClientRespawn uint64 = 3
 	ClientPing    uint64 = 4
+	ClientLoadout uint64 = 5
 
 	ServerWelcome  uint64 = 1
 	ServerSnapshot uint64 = 2
 	ServerError    uint64 = 3
 	ServerPong     uint64 = 4
+	// ServerLoadout answers a loadout commit. Unlike ServerError it is not
+	// terminal: it carries the authoritative equipped set, and Error when the
+	// request was refused, so a rejection never drops the connection.
+	ServerLoadout uint64 = 5
 )
 
 const (
@@ -44,11 +49,24 @@ const (
 )
 
 type Input struct {
-	Sequence     uint32
-	Buttons      uint32
-	AimX         float32
-	AimY         float32
+	Sequence uint32
+	Buttons  uint32
+	AimX     float32
+	AimY     float32
+	// SelectedSlot is the action-bar slot the use button acts through, bound to
+	// 1–6 and carried per input so a mid-frame swap resolves against the slot
+	// the player actually had selected.
+	SelectedSlot uint32
 	ClientTimeMS uint64
+}
+
+// Loadout is the equipped set on the wire: content IDs by slot. The repeated
+// fields are positional and encode empty slots as empty strings, because a
+// slot's index is its binding.
+type Loadout struct {
+	Weapon  string
+	Gadgets []string
+	Spells  []string
 }
 
 type ClientEnvelope struct {
@@ -57,6 +75,7 @@ type ClientEnvelope struct {
 	CharacterID  string
 	Input        Input
 	ClientTimeMS uint64
+	Loadout      Loadout
 }
 
 type Entity struct {
@@ -104,6 +123,15 @@ type ServerEnvelope struct {
 	Colliders          []Collider
 	Error              string
 	EchoedClientTimeMS uint64
+	// Loadout travels on the welcome and on every loadout reply, never on a
+	// snapshot: the equipped set changes only in safety, so paying for it 20
+	// times a second would be pure waste against the bandwidth budget.
+	Loadout *Loadout
+	// LoadoutEditable is the authoritative answer to whether the set may be
+	// changed from where the body stands, and RespecOwed reports the free
+	// respec a balance patch entitled the character to.
+	LoadoutEditable bool
+	RespecOwed      bool
 }
 
 func DecodeClient(data []byte) (ClientEnvelope, error) {
@@ -153,6 +181,17 @@ func DecodeClient(data []byte) (ClientEnvelope, error) {
 				return out, errors.New("invalid time")
 			}
 			out.ClientTimeMS = v
+			data = data[m:]
+		case 6:
+			v, m := protowire.ConsumeBytes(data)
+			if m < 0 {
+				return out, errors.New("invalid loadout")
+			}
+			set, err := decodeLoadout(v)
+			if err != nil {
+				return out, err
+			}
+			out.Loadout = set
 			data = data[m:]
 		default:
 			m := protowire.ConsumeFieldValue(num, typ, data)
@@ -206,10 +245,53 @@ func decodeInput(data []byte) (Input, error) {
 			}
 			out.ClientTimeMS = v
 			data = data[m:]
+		case 6:
+			v, m := protowire.ConsumeVarint(data)
+			if m < 0 {
+				return out, errors.New("invalid selected slot")
+			}
+			out.SelectedSlot = uint32(v)
+			data = data[m:]
 		default:
 			m := protowire.ConsumeFieldValue(num, typ, data)
 			if m < 0 {
 				return out, errors.New("invalid input field")
+			}
+			data = data[m:]
+		}
+	}
+	return out, nil
+}
+
+// decodeLoadout reads the requested set. Order is meaning here: the nth
+// repeated entry is slot n, empty string included, so nothing may be skipped.
+func decodeLoadout(data []byte) (Loadout, error) {
+	var out Loadout
+	for len(data) > 0 {
+		num, typ, n := protowire.ConsumeTag(data)
+		if n < 0 {
+			return out, errors.New("invalid loadout tag")
+		}
+		data = data[n:]
+		switch num {
+		case 1, 2, 3:
+			v, m := protowire.ConsumeString(data)
+			if m < 0 {
+				return out, errors.New("invalid loadout slot")
+			}
+			switch num {
+			case 1:
+				out.Weapon = v
+			case 2:
+				out.Gadgets = append(out.Gadgets, v)
+			case 3:
+				out.Spells = append(out.Spells, v)
+			}
+			data = data[m:]
+		default:
+			m := protowire.ConsumeFieldValue(num, typ, data)
+			if m < 0 {
+				return out, errors.New("invalid loadout field")
 			}
 			data = data[m:]
 		}
@@ -231,7 +313,35 @@ func EncodeServer(message ServerEnvelope) []byte {
 	}
 	out = appendString(out, 7, message.Error)
 	out = appendVarint(out, 8, message.EchoedClientTimeMS)
+	if message.Loadout != nil {
+		out = appendMessage(out, 9, encodeLoadout(*message.Loadout))
+	}
+	if message.LoadoutEditable {
+		out = appendVarint(out, 10, 1)
+	}
+	if message.RespecOwed {
+		out = appendVarint(out, 11, 1)
+	}
 	return out
+}
+
+// encodeLoadout writes every slot, empty ones included: appendString drops an
+// empty value, and dropping slot 3 would silently promote slot 4 into its
+// binding.
+func encodeLoadout(set Loadout) []byte {
+	out := appendString(nil, 1, set.Weapon)
+	for _, id := range set.Gadgets {
+		out = appendSlot(out, 2, id)
+	}
+	for _, id := range set.Spells {
+		out = appendSlot(out, 3, id)
+	}
+	return out
+}
+
+func appendSlot(out []byte, field protowire.Number, value string) []byte {
+	out = protowire.AppendTag(out, field, protowire.BytesType)
+	return protowire.AppendString(out, value)
 }
 
 func encodeEntity(e Entity) []byte {

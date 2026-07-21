@@ -27,6 +27,7 @@ Fill identifies class/element; outline and overhead ring identify allegiance. Co
 | Region | Required state | Behavior |
 |---|---|---|
 | Lower center | Weapon/abilities, slots, cooldowns, charges, class resource, bindings, universal dash | Mage shows mana; Gunslinger shows magazine/reload |
+| Lower center | Six equipped slots with their bindings and the selected one marked | Selection uses border and weight as well as fill, never color alone |
 | Lower center/side | Health and statuses | More precise than the actor plate |
 | Upper corner | Menu; material connection/latency warning | Always reachable |
 | Upper/side | Squad roster, health, state, direction/distance | Conditional, up to four |
@@ -41,6 +42,10 @@ Modules may collapse when irrelevant. Local health, critical combat resources, a
 Prompts appear near their object or in one consistent interaction area. They cover harvesting and interruption, loot priority, safe-zone transitions, services, future vehicles, and actionable failures such as locked loadouts or invalid targets. Show action and input briefly; teach detail elsewhere.
 
 The initial interaction binding is E on keyboard and Use on touch. The protocol carries the action now; later contextual systems change the prompt and outcome, not the input contract.
+
+## Slot selection
+
+The [six equipped slots](../design/progression-and-crafting.md#slots) bind to **1–6**, and the **mouse wheel** steps through them and wraps in both directions. Touch gets six slot buttons; that is the minimum viable placement rather than the settled one, and a touch layout that carries six slots without crowding the aim and movement zones is still owed. The selection travels with every input, so the server resolves the use button against the slot the player actually had selected rather than against whatever arrived last. An empty slot does nothing, visibly: it is a slot the player has not filled, not a failure to report. Bindings are remappable once [remappable controls](accessibility.md) land.
 
 Combat feedback covers damage, healing/shields, status, unavailable cooldown/mana, reload, and death using the design's [telegraph and primitive grammar](../design/visual-direction.md#readability-system). Floating numbers are **Open**; if adopted, they are suppressible and cannot cover telegraphs.
 
