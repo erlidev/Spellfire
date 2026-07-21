@@ -1,10 +1,10 @@
-import { API } from "./api";
+import { API, type AdminEntityState } from "./api";
 import { componentOf, cost as craftCost, craftable, describe, fitting, itemLabel, materialName, resolvedWeapon, shortfall, slotsOf } from "./game/crafting";
 import { bar, barSlots, contentName, defaultLoadout, equippable, ledgerOf, loadoutProblem, type Ledger, type SlotKind } from "./game/loadout";
 import { Predictor } from "./game/prediction";
 import { GameView } from "./game/view";
 import { GameSocket } from "./net/socket";
-import { adminTools, damageBandFor, dangerBandAt, materials as materialsTable, progression as progressionTable, resourceMax, safeRadius, session, weapons, world, xpToNext, type AdminAttribute, type AdminSpawnable, type AdminToolField } from "./tuning";
+import { damageBandFor, dangerBandAt, entityDefinitions, materials as materialsTable, progression as progressionTable, resourceMax, safeRadius, session, weapons, world, xpToNext, type AdminField, type EntityDefinition } from "./tuning";
 import { Buttons, ServerKind, type Character, type CharacterClass, type CraftedItem, type Entity, type LoadoutSet, type ServerMessage } from "./types";
 
 function element<T extends HTMLElement>(id: string): T {
@@ -26,9 +26,10 @@ class SpellFire {
   private noticeTimer = 0;
   private lastBand = "";
   private activeCharacter?: Character;
-  private developerMode = false;
-  private adminSpawnID = Object.keys(adminTools.spawnables).sort()[0] ?? "";
+  private adminMode: "off" | "spawn" | "select" | "delete" = "off";
+  private adminSpawnID = Object.keys(entityDefinitions).filter((id) => entityDefinitions[id]!.admin.spawnable).sort()[0] ?? "";
   private adminSpawnConfig: Record<string, string> = this.defaultAdminConfig(this.adminSpawnID);
+  private adminSelected?: AdminEntityState;
   // The authoritative equipped set and the slot the use button acts through.
   // `draft` is the unconfirmed edit in the menu; nothing shows as committed
   // until a Loadout reply confirms it.
@@ -101,7 +102,7 @@ class SpellFire {
     element("auth-switch").addEventListener("click", () => { this.authMode = this.authMode === "login" ? "register" : "login"; this.renderAuth(); });
     element<HTMLFormElement>("auth-form").addEventListener("submit", (event) => void this.submitAuth(event));
     element<HTMLFormElement>("character-form").addEventListener("submit", (event) => void this.createCharacter(event));
-    element("menu-button").addEventListener("click", () => { this.renderMenu("character"); element<HTMLDialogElement>("menu-dialog").showModal(); });
+    element("menu-button").addEventListener("click", () => { const menu = element<HTMLDialogElement>("menu-dialog"); if (menu.open) menu.close(); else { this.renderMenu(this.menuTab); menu.show(); } });
     element("menu-tabs").addEventListener("click", (event) => { const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-tab]"); if (button) this.renderMenu(button.dataset.tab ?? "character"); });
     element("exit-button").addEventListener("click", () => { if (confirm(`Exit to Home? Your body stays in the world for ${session.logout_linger_seconds} seconds after you leave and can still be attacked.`)) this.exitGame(); });
     element("connection-cancel").addEventListener("click", () => this.exitGame());
@@ -122,7 +123,7 @@ class SpellFire {
     window.addEventListener("pointermove", (event) => { if (!this.view) return; this.aim = this.view.pointerWorld(event.clientX, event.clientY); });
     element("canvas-host").addEventListener("pointerdown", (event) => {
       if ((event as PointerEvent).button !== 0) return;
-      if (this.developerMode) { void this.placeAdminEntity(event as PointerEvent); return; }
+      if (this.adminMode !== "off") { void this.useAdminPointer(event as PointerEvent); return; }
       this.pressed.add(Buttons.Fire);
     });
     window.addEventListener("pointerup", (event) => { if ((event as PointerEvent).button === 0) this.pressed.delete(Buttons.Fire); });
@@ -231,13 +232,12 @@ class SpellFire {
 
   private simulateInput(): void {
     if (!this.predictor || element("game").hidden) return;
-    const blocked = element<HTMLDialogElement>("menu-dialog").open;
-    let buttons = 0; if (!blocked) for (const value of this.pressed) buttons |= value;
+    let buttons = 0; for (const value of this.pressed) buttons |= value;
     const input = this.predictor.step(buttons, this.aim.x, this.aim.y, this.selectedSlot, performance.now()); this.socket?.sendInput(input);
   }
 
   private selectSlot(slot: number): void {
-    if (element<HTMLDialogElement>("menu-dialog").open || slot < 0 || slot >= barSlots) return;
+    if (slot < 0 || slot >= barSlots) return;
     this.selectedSlot = slot; this.renderAbilityBar();
   }
 
@@ -345,47 +345,70 @@ class SpellFire {
   private renderAdminMenu(content: HTMLElement, query = ""): void {
     const selected = this.selectedAdminSpawn();
     const search = query.toLowerCase();
-    const entries = Object.entries(adminTools.spawnables).filter(([, spawnable]) => spawnable.name.toLowerCase().includes(search) || spawnable.kind.includes(search)).sort(([, left], [, right]) => left.name.localeCompare(right.name));
-    content.innerHTML = `<h3>Developer mode</h3><p>Developer mode replaces primary fire with repeatable placement. Configure an entity, close this menu, then click the world.</p><button id="developer-mode-toggle" class="${this.developerMode ? "danger-button" : "primary"}">${this.developerMode ? "Disable developer mode" : "Enable developer mode"}</button><label>Search spawnables<input id="admin-spawn-search" value="${escapeHTML(query)}" placeholder="Player, projectile, telegraph…" /></label><div id="admin-spawn-list" class="admin-spawn-list">${entries.map(([id, spawnable]) => `<button data-admin-spawn="${escapeHTML(id)}" aria-pressed="${id === this.adminSpawnID}"><strong>${escapeHTML(spawnable.name)}</strong><small>${escapeHTML(spawnable.kind)}</small></button>`).join("") || "<p>No spawnables match.</p>"}</div>${selected ? this.adminConfigMarkup(selected) : "<p class=\"error\">No spawnable is configured.</p>"}<form id="admin-materials-form"><h4>Grant materials</h4><p>Harvesting is not implemented yet, so this is the only way to put materials in a character's hands and exercise a real crafting spend.</p><label>Material<select id="admin-material-select">${Object.keys(materialsTable.materials).sort().map((id) => `<option value="${escapeHTML(id)}"${id === this.adminMaterialID ? " selected" : ""}>${escapeHTML(materialsTable.materials[id]!.name)}</option>`).join("")}</select></label>${this.adminFieldMarkup({ ...adminTools.material_grant, id: "count" }, "admin-material-count", "count")}<button class="secondary" type="submit">Grant to your character</button></form><form id="admin-attributes-form"><h4>Your player</h4><p>These temporary overrides affect only your current body and reset when it leaves the world.</p>${Object.entries(adminTools.attributes).map(([id, field]) => this.adminFieldMarkup(field, `admin-attribute-${id}`, id)).join("")}<button class="secondary" type="submit">Apply player overrides</button></form><p id="admin-notice" class="error" role="status"></p>`;
-    element<HTMLButtonElement>("developer-mode-toggle").addEventListener("click", () => this.setDeveloperMode(!this.developerMode));
+    const entries = Object.entries(entityDefinitions).filter(([, definition]) => definition.admin.spawnable && (definition.admin.name.toLowerCase().includes(search))).sort(([, left], [, right]) => left.admin.name.localeCompare(right.admin.name));
+    const selectedEditor = this.adminSelected ? this.adminEditorMarkup(this.adminSelected) : "<p>Select mode lets you click any visible entity and edit the fields its archetype exposes.</p>";
+    content.innerHTML = `<h3>Developer tools</h3><p>Choose a pointer mode. The floating panel stays interactive while movement and the world remain under your control.</p><div class="admin-modes">${(["off", "spawn", "select", "delete"] as const).map((mode) => `<button data-admin-mode="${mode}" aria-pressed="${this.adminMode === mode}" class="${mode === "delete" ? "danger-button" : ""}">${titleCase(mode)}</button>`).join("")}</div><label>Search spawnables<input id="admin-spawn-search" value="${escapeHTML(query)}" placeholder="Player, projectile, tree…" /></label><div id="admin-spawn-list" class="admin-spawn-list">${entries.map(([id, definition]) => `<button data-admin-spawn="${escapeHTML(id)}" aria-pressed="${id === this.adminSpawnID}"><strong>${escapeHTML(definition.admin.name)}</strong><small>${escapeHTML(id)}</small></button>`).join("") || "<p>No spawnables match.</p>"}</div>${selected ? this.adminConfigMarkup(selected) : "<p class=\"error\">No spawnable is configured.</p>"}<section class="admin-selected"><h4>Selected entity</h4>${selectedEditor}</section><form id="admin-materials-form"><h4>Grant materials</h4><label>Material<select id="admin-material-select">${Object.keys(materialsTable.materials).sort().map((id) => `<option value="${escapeHTML(id)}"${id === this.adminMaterialID ? " selected" : ""}>${escapeHTML(materialsTable.materials[id]!.name)}</option>`).join("")}</select></label>${this.adminFieldMarkup(materialsTable.admin_grant, "admin-material-count", materialsTable.admin_grant.default)}<button class="secondary" type="submit">Grant to your character</button></form><p id="admin-notice" class="error" role="status"></p>`;
+    for (const button of document.querySelectorAll<HTMLButtonElement>("[data-admin-mode]")) button.addEventListener("click", () => this.setAdminMode(button.dataset.adminMode as typeof this.adminMode));
     element<HTMLInputElement>("admin-spawn-search").addEventListener("input", (event) => this.renderAdminMenu(content, (event.currentTarget as HTMLInputElement).value));
     for (const button of document.querySelectorAll<HTMLButtonElement>("[data-admin-spawn]")) button.addEventListener("click", () => { this.adminSpawnID = button.dataset.adminSpawn ?? ""; this.adminSpawnConfig = this.defaultAdminConfig(this.adminSpawnID); this.renderAdminMenu(content, query); });
     for (const input of document.querySelectorAll<HTMLInputElement>("[data-admin-config]")) input.addEventListener("input", () => { this.adminSpawnConfig[input.dataset.adminConfig ?? ""] = input.value; });
-    element<HTMLFormElement>("admin-attributes-form").addEventListener("submit", (event) => void this.applyAdminAttributes(event));
+    for (const select of document.querySelectorAll<HTMLSelectElement>("select[data-admin-config]")) select.addEventListener("change", () => { this.adminSpawnConfig[select.dataset.adminConfig ?? ""] = select.value; });
+    document.getElementById("admin-entity-form")?.addEventListener("submit", (event) => void this.applyAdminEntity(event as SubmitEvent));
     element<HTMLSelectElement>("admin-material-select").addEventListener("change", (event) => { this.adminMaterialID = (event.currentTarget as HTMLSelectElement).value; });
     element<HTMLFormElement>("admin-materials-form").addEventListener("submit", (event) => void this.grantAdminMaterials(event));
   }
 
-  private adminConfigMarkup(selected: AdminSpawnable): string {
-    return `<section class="admin-config"><h4>Place ${escapeHTML(selected.name)}</h4>${selected.fields.map((field) => this.adminFieldMarkup(field, `admin-config-${field.id}`, field.id, "data-admin-config")).join("")}</section>`;
+  private adminConfigMarkup(selected: EntityDefinition): string {
+    const fields = selected.admin.fields.filter((field) => field.scope === "spawn" || field.scope === "both");
+    return `<section class="admin-config"><h4>Place ${escapeHTML(selected.admin.name)}</h4>${fields.map((field) => this.adminFieldMarkup(field, `admin-config-${field.attribute}`, this.adminSpawnConfig[field.attribute] ?? field.default, "data-admin-config")).join("")}</section>`;
   }
 
-  private adminFieldMarkup(field: AdminToolField | AdminAttribute, inputID: string, key: string, dataAttribute = ""): string {
-    if (field.kind === "text") {
-      const value = dataAttribute ? this.adminSpawnConfig[key] ?? field.default_text ?? "" : field.default_text ?? "";
-      return `<label>${escapeHTML(field.label)}<input id="${escapeHTML(inputID)}" ${dataAttribute}="${escapeHTML(key)}" type="text" maxlength="${field.max_length ?? 1}" value="${escapeHTML(value)}" /></label>`;
-    }
-    const value = dataAttribute ? this.adminSpawnConfig[key] ?? String(field.default_number ?? 0) : String(field.default_number ?? 0);
-    const attribute = dataAttribute || "data-admin-attribute";
-    return `<label>${escapeHTML(field.label)}<input id="${escapeHTML(inputID)}" ${attribute}="${escapeHTML(key)}" type="number" min="${field.minimum ?? 0}" max="${field.maximum ?? 0}" step="${field.step ?? 1}" value="${escapeHTML(value)}" /></label>`;
+  private adminFieldMarkup(field: AdminField, inputID: string, value: string, dataAttribute = ""): string {
+    const binding = dataAttribute ? `${dataAttribute}="${escapeHTML(field.attribute)}"` : "";
+    if (field.input === "select") return `<label>${escapeHTML(field.label)}<select id="${escapeHTML(inputID)}" ${binding}>${(field.options ?? []).map((option) => `<option value="${escapeHTML(option.value)}"${option.value === value ? " selected" : ""}>${escapeHTML(option.label)}</option>`).join("")}</select></label>`;
+    if (field.input === "text") return `<label>${escapeHTML(field.label)}<input id="${escapeHTML(inputID)}" ${binding} type="text" maxlength="${field.max_length ?? 1}" value="${escapeHTML(value)}" /></label>`;
+    return `<label>${escapeHTML(field.label)}<input id="${escapeHTML(inputID)}" ${binding} type="number" min="${field.min ?? 0}" max="${field.max ?? 0}" step="${field.step ?? 1}" value="${escapeHTML(value)}" /></label>`;
   }
 
-  private selectedAdminSpawn(): AdminSpawnable | undefined { return adminTools.spawnables[this.adminSpawnID]; }
+  private adminEditorMarkup(state: AdminEntityState): string {
+    const definition = entityDefinitions[state.definition_id];
+    if (!definition) return `<p class="error">${escapeHTML(state.id)} has no client tuning schema.</p>`;
+    const fields = definition.admin.fields.filter((field) => (field.scope === "edit" || field.scope === "both") && state.values[field.attribute] !== undefined);
+    return `<form id="admin-entity-form"><p><strong>${escapeHTML(state.id)}</strong> · ${escapeHTML(definition.admin.name)}</p>${fields.map((field) => this.adminFieldMarkup(field, `admin-edit-${field.attribute}`, state.values[field.attribute]!, "data-admin-edit")).join("")}<button class="secondary" type="submit">Apply entity attributes</button></form>`;
+  }
+
+  private selectedAdminSpawn(): EntityDefinition | undefined { return entityDefinitions[this.adminSpawnID]; }
 
   private defaultAdminConfig(id: string): Record<string, string> {
     const values: Record<string, string> = {};
-    for (const field of adminTools.spawnables[id]?.fields ?? []) values[field.id] = field.kind === "number" ? String(field.default_number ?? 0) : field.default_text ?? "";
+    for (const field of entityDefinitions[id]?.admin.fields ?? []) if (field.scope === "spawn" || field.scope === "both") values[field.attribute] = field.default;
     return values;
   }
 
   private setDeveloperMode(enabled: boolean): void {
-    if (enabled && !this.api.account?.is_admin) return;
-    this.developerMode = enabled;
-    document.body.classList.toggle("developer-mode", enabled);
-    const hud = element("developer-mode-hud"); hud.hidden = !enabled;
-    const label = this.selectedAdminSpawn()?.name ?? "entity";
-    element("developer-mode-selection").textContent = enabled ? `Placing: ${label}` : "";
-    const menu = element<HTMLDialogElement>("menu-dialog"); if (enabled && menu.open) this.renderAdminMenu(element("menu-content"));
+    this.setAdminMode(enabled ? "spawn" : "off");
+  }
+
+  private setAdminMode(mode: typeof this.adminMode): void {
+    if (mode !== "off" && !this.api.account?.is_admin) return;
+    this.adminMode = mode;
+    document.body.classList.toggle("developer-mode", mode !== "off");
+    const hud = element("developer-mode-hud"); hud.hidden = mode === "off";
+    const label = this.selectedAdminSpawn()?.admin.name ?? "entity";
+    element("developer-mode-selection").textContent = mode === "spawn" ? `Placing: ${label}` : mode === "select" ? "Selecting entity attributes" : mode === "delete" ? "Deleting entities" : "";
+    const menu = element<HTMLDialogElement>("menu-dialog"); if (menu.open && this.menuTab === "admin") this.renderAdminMenu(element("menu-content"));
+  }
+
+  private async useAdminPointer(event: PointerEvent): Promise<void> {
+    if (this.adminMode === "spawn") { await this.placeAdminEntity(event); return; }
+    const character = this.activeCharacter, target = this.view?.entityAtPointer(event.clientX, event.clientY);
+    if (!character || !target) { this.notice("No entity at that point."); return; }
+    event.preventDefault();
+    try {
+      if (this.adminMode === "delete") { await this.api.adminEntityDelete(character.id, target.id); this.adminSelected = undefined; this.notice(`Removed ${target.name || target.className || target.id}.`); }
+      else { this.adminSelected = await this.api.adminEntityInspect(character.id, target.id); this.notice(`Selected ${target.name || target.className || target.id}.`); }
+      const menu = element<HTMLDialogElement>("menu-dialog"); if (menu.open && this.menuTab === "admin") this.renderAdminMenu(element("menu-content"));
+    } catch (error) { this.notice(`Admin action rejected: ${messageOf(error)}`); }
   }
 
   private async placeAdminEntity(event: PointerEvent): Promise<void> {
@@ -395,7 +418,7 @@ class SpellFire {
     const point = this.view.worldAtPointer(event.clientX, event.clientY);
     try {
       await this.api.adminSpawn({ character_id: character.id, spawn_id: this.adminSpawnID, x: point.x, y: point.y, config: this.adminSpawnConfig });
-      this.notice(`Placed ${spawnable.name}.`);
+      this.notice(`Placed ${spawnable.admin.name}.`);
     } catch (error) { this.notice(`Placement rejected: ${messageOf(error)}`); }
   }
 
@@ -415,13 +438,13 @@ class SpellFire {
     } catch (error) { notice.textContent = messageOf(error); notice.classList.add("error"); }
   }
 
-  private async applyAdminAttributes(event: SubmitEvent): Promise<void> {
+  private async applyAdminEntity(event: SubmitEvent): Promise<void> {
     event.preventDefault();
-    if (!this.activeCharacter) return;
-    const attributes: Record<string, number> = {};
-    for (const input of document.querySelectorAll<HTMLInputElement>("[data-admin-attribute]")) attributes[input.dataset.adminAttribute ?? ""] = Number(input.value);
+    if (!this.activeCharacter || !this.adminSelected) return;
+    const attributes: Record<string, string> = {};
+    for (const input of document.querySelectorAll<HTMLInputElement | HTMLSelectElement>("[data-admin-edit]")) attributes[input.dataset.adminEdit ?? ""] = input.value;
     const notice = element("admin-notice"); notice.textContent = "";
-    try { await this.api.adminAttributes(this.activeCharacter.id, attributes); notice.textContent = "Player overrides applied."; notice.classList.remove("error"); }
+    try { this.adminSelected = await this.api.adminEntityEdit(this.activeCharacter.id, this.adminSelected.id, attributes); notice.textContent = "Entity attributes applied."; notice.classList.remove("error"); this.renderAdminMenu(element("menu-content")); }
     catch (error) { notice.textContent = messageOf(error); notice.classList.add("error"); }
   }
 

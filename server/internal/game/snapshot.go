@@ -37,6 +37,7 @@ func (w *World) SnapshotFor(playerID string, now time.Time, kind uint64) protoco
 			Element: w.playerElement(p), SquadID: p.SquadID, Allegiance: playerAllegiance(viewer, p),
 			Lingering: p.Lingering(), EffectIDs: activeEffectIDs(p.Effects),
 			Mass: float32(p.Mass), Radius: float32(p.circleRadius()),
+			Deleting: p.Deleting, DeleteProgress: float32(p.deleteProgress(now)),
 		})
 	}
 	for _, id := range sortedProjectileIDs(w.projectiles) {
@@ -49,6 +50,7 @@ func (w *World) SnapshotFor(playerID string, now time.Time, kind uint64) protoco
 			X: float32(p.Position.X), Y: float32(p.Position.Y), VX: float32(p.Velocity.X), VY: float32(p.Velocity.Y),
 			Health: float32(p.Health), MaxHealth: float32(p.MaxHealth), OwnerID: p.OwnerID, Element: p.Element,
 			Allegiance: ownerAllegiance(viewer, w.players[p.OwnerID]), Alive: p.Alive, Mass: float32(p.Mass),
+			Deleting: p.Deleting, DeleteProgress: float32(p.deleteProgress(now)),
 		})
 	}
 	for _, id := range sortedTelegraphIDs(w.telegraphs) {
@@ -65,11 +67,11 @@ func (w *World) SnapshotFor(playerID string, now time.Time, kind uint64) protoco
 			Radius: float32(telegraph.Radius), Length: float32(telegraph.Length), Width: float32(telegraph.Width),
 			AngleDegrees: float32(telegraph.AngleDegrees), TelegraphProgress: float32(telegraph.progress(now)),
 			Health: float32(telegraph.Health), MaxHealth: float32(telegraph.MaxHealth), Alive: telegraph.Alive,
-			Mass: float32(telegraph.Mass),
+			Mass: float32(telegraph.Mass), Deleting: telegraph.Deleting, DeleteProgress: float32(telegraph.deleteProgress(now)),
 		})
 	}
 	for _, item := range w.worldItems {
-		if !item.Alive {
+		if item == nil || (!item.Alive && !item.Deleting) {
 			continue
 		}
 		extent := item.boundingRadius()
@@ -79,13 +81,17 @@ func (w *World) SnapshotFor(playerID string, now time.Time, kind uint64) protoco
 		entity := protocol.Entity{
 			Type: protocol.EntityWorldItem, ID: item.ID, ClassName: item.Kind,
 			X: float32(item.Position.X), Y: float32(item.Position.Y), VX: float32(item.Velocity.X), VY: float32(item.Velocity.Y),
-			Health: float32(item.Health), MaxHealth: float32(item.MaxHealth), Alive: true, Mass: float32(item.Mass), Allegiance: protocol.AllegianceNeutral,
+			Health: float32(item.Health), MaxHealth: float32(item.MaxHealth), Alive: item.Alive, Mass: float32(item.Mass), Allegiance: protocol.AllegianceNeutral,
+			Deleting: item.Deleting, DeleteProgress: float32(item.deleteProgress(now)),
 		}
 		if len(item.CollisionObjects) > 0 {
 			primary := item.CollisionObjects[0]
 			entity.Radius, entity.Length, entity.Width = float32(primary.Radius), float32(primary.HalfWidth*2), float32(primary.HalfHeight*2)
 		}
 		message.Entities = append(message.Entities, entity)
+		if item.Deleting {
+			continue
+		}
 		for index, object := range item.CollisionObjects {
 			shape := "circle"
 			if object.Type == CollisionBox {
@@ -150,6 +156,9 @@ func (w *World) SetPlayerPosition(id string, position Vec, now time.Time) bool {
 func (w *World) WorldItems() []Entity {
 	items := make([]Entity, 0, len(w.worldItems))
 	for _, item := range w.worldItems {
+		if item == nil {
+			continue
+		}
 		copy := *item
 		copy.CollisionObjects = append([]CollisionObject(nil), item.CollisionObjects...)
 		items = append(items, copy)

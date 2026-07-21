@@ -31,13 +31,13 @@ describe("protobuf wire codec", () => {
       ...stringField(18, "squad-a"), ...uintField(19, 4), ...uintField(20, 3), ...uintField(21, 1),
       ...stringField(22, "ring"), ...floatField(23, 120), ...floatField(25, 20), ...floatField(27, .75),
       ...stringField(28, "fire-ring"), ...uintField(29, 1), ...stringField(30, "burn"), ...stringField(30, "slow"),
-      ...floatField(31, -1),
+      ...floatField(31, -1), ...uintField(32, 1), ...floatField(33, .5),
     ];
     const envelope = Uint8Array.from([...uintField(1, 2), ...messageField(5, entity)]).buffer;
     expect(decodeServer(envelope).entities[0]).toMatchObject({
       type: 6, id: "warning", ownerID: "caster", element: "fire", squadID: "squad-a", allegiance: 4,
       telegraphState: 3, invulnerable: true, telegraphShape: "ring", radius: 120, width: 20,
-      telegraphProgress: .75, abilityID: "fire-ring", lingering: true, effectIDs: ["burn", "slow"], mass: -1,
+      telegraphProgress: .75, abilityID: "fire-ring", lingering: true, effectIDs: ["burn", "slow"], mass: -1, deleting: true, deleteProgress: .5,
     });
   });
 

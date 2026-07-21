@@ -39,42 +39,50 @@ HTTP request, so they receive the new authorization state after restart.
 
 ## Developer mode
 
-Administrators see an **Admin** tab in the in-game Field menu. It provides a
-searchable catalog, configuration fields for the selected item, and temporary
-overrides for the administrator's connected character:
+Administrators see an **Admin** tab in the floating Field menu. Four pointer
+modes are available while ordinary movement remains active:
 
-- Movement speed multiplier: 0.25–4×.
-- View distance: 300–2,000 world units. This only changes that administrator's
-  snapshot/AOI and can increase their received snapshot size.
-- Material grants: any live material, in a count bounded by
-  `admin_tools.material_grant`. Harvest nodes and mob drops are not implemented
-  yet, so this is the only way to put materials in a character's hands and
-  exercise a real crafting spend. The world validates the material ID against
-  the tables and the count against that catalog row; the browser never decides
-  what a grant may be.
+- **Off** restores primary fire.
+- **Spawn** repeatedly places the selected spawnable archetype.
+- **Select** targets any visible entity and loads its live editable values.
+- **Delete** forces the targeted entity through graceful removal.
 
-Enable Developer Mode after configuring an item, close the menu, and click the
-world to place it. While enabled, primary clicks place the selected item rather
-than firing; the compact developer HUD names the active selection and can exit
-the mode. Placement repeats until the mode is disabled.
+The catalog and form schemas live on the archetypes in
+[`data/tuning/entities.json`](../data/tuning/entities.json). `admin.spawnable`
+controls catalog visibility. Each field declares a stable
+`component.attribute` binding, a `spawn`, `edit`, or `both` scope, and a
+number/text/select input definition including bounds, length, or options. At
+minimum every entity exposes editable X/Y position. The browser renders this
+metadata without attribute-specific UI code; the server validates it and uses
+an explicit attribute adapter registry. Adding a field requires tuning plus a
+registry adapter, and the adapter is the only layer that must change when
+runtime storage moves to ECS components.
 
-The spawn catalog and panel schema live in
-[`data/tuning/admin_tools.json`](../data/tuning/admin_tools.json). It currently
-contains the entity families the world really runs: disposable training players,
-projectiles, and telegraphs. Each catalog row declares its type, source class or
-ability, optional element, and typed bounded fields. The browser renders the
-same catalog but the server resolves the row, rejects unknown fields/out-of-range
-values, checks the requested coordinate, and creates the world entity. New rows
-for existing kinds are data-only; a new entity kind requires a world executor
-and validation rule before it is permitted.
+Spawn currently supports player, projectile, telegraph, tree, and wall
+archetypes. Selection can inspect and edit any of those families, including a
+connected player. Position is checked against world bounds as a complete pair
+before mutation. Speed and view distance remain temporary in-memory player
+values; view distance changes that player's AOI and can increase snapshot size.
+
+Delete is idempotent. A target immediately leaves gameplay/collision and fades
+over 350 ms, remains for a short snapshot-delivery grace, then its non-player
+store reaps it. Connected players are not removed from the session: they enter
+the existing dead state, fade, and can respawn normally. Disposable admin
+players are reaped after fading.
+
+Material grants remain available for any live material. Their count is bounded
+by `materials.admin_grant`; grants are persisted inventory and therefore a real
+economy mutation, unlike temporary entity overrides.
 
 Spawned training players are non-persistent fixtures: they are visible,
 collidable, and damageable like a player but never occupy an account slot or
 become a saved character. Developer overrides reset when the administrator's
 body leaves the world. Granted materials do not: they are ordinary carried
 inventory from the moment they land, persisted and spendable like any other, so
-a grant on a live account is a real economy change rather than a fixture. The HTTP commands are `POST /api/admin/spawn`,
-`POST /api/admin/attributes`, and `POST /api/admin/materials`; each verifies the
+a grant on a live account is a real economy change rather than a fixture. The
+HTTP commands are `POST /api/admin/spawn`, `POST /api/admin/entity/inspect`,
+`/edit`, `/delete`, and `POST /api/admin/materials`; the legacy
+`POST /api/admin/attributes` remains compatible. Each verifies the
 session's admin role and that the selected in-world character belongs to that
 account.
 

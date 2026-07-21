@@ -34,7 +34,7 @@ export interface Entity {
   telegraphState: number; invulnerable: boolean; telegraphShape: string;
   radius: number; length: number; width: number; angleDegrees: number; telegraphProgress: number;
   abilityID: string; lingering: boolean; effectIDs: string[];
-  mass: number;
+  mass: number; deleting: boolean; deleteProgress: number;
 }
 
 export interface Collider {

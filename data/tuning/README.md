@@ -62,10 +62,9 @@ Rules, from [`invariants.md`](../../docs/game/design/invariants.md) and
 |---|---|
 | `manifest.json` | Content and schema versions |
 | `admins.json` | Normalized account emails granted administrator authorization |
-| `admin_tools.json` | Developer-mode spawn catalog, editable per-entity fields, and bounded player overrides |
 | `simulation.json` | Tick/send rates, AOI radius, rewind window, interpolation delay |
 | `session.json` | Logout linger window and saved-position expiry |
-| `entities.json` | Common entity mass, health, and collision-object defaults |
+| `entities.json` | Common entity defaults plus spawnability and generic admin-field/input metadata |
 | `world.json` | World radius, spawn radius, danger bands, procedural tree parameters, fixed fixtures |
 | `combat.json` | Role and dodge-vector vocabularies, player movement/resources, universal dash, damage bands |
 | `loadout.json` | Slot counts per kind and the Mage affinity multiplier |
@@ -77,7 +76,7 @@ Rules, from [`invariants.md`](../../docs/game/design/invariants.md) and
 | `spells.json` | Spells: element, tier, unlock level, and the ability they cast |
 | `gadgets.json` | Gadgets: the Gunslinger's slot content, its unlock level, and the ability each performs |
 | `components.json` | Blueprint slot layouts, and the components that fill them: material cost, behaviour modifiers, and the plain-language effect the crafting UI shows |
-| `materials.json` | Material grades, kinds, and rows |
+| `materials.json` | Material grades, kinds, rows, and the bounded admin grant input |
 | `mobs.json` | Mob contracts |
 | `biomes.json` | Biomes and the element they align to |
 | `outposts.json` | Recall destinations: outpost names and world positions |
@@ -91,11 +90,12 @@ Rows are populated only where a design document has settled them.
   server-derived administrator role, then rebuild and restart the server. Email
   matching is case-insensitive; the loader rejects malformed or duplicate
   normalized entries. See [`administration.md`](../../docs/administration.md).
-- `admin_tools.json` contains every entity family the live world can currently
-  materialize: temporary player fixtures, projectiles, and telegraphs. Rows are
-  rendered as a searchable admin catalog and validated again by the server;
-  adding another row of one of those kinds requires no UI code. A new entity
-  kind still needs its authoritative world executor before it can be added.
+- `entities.*.admin` is the developer catalog and editor contract. A spawnable
+  row appears automatically, and each field uses a stable `component.attribute`
+  binding with spawn/edit scope plus number, text, or select input metadata.
+  The explicit server registry resolves those bindings today and can be
+  retargeted to ECS component stores later. New UI fields need no client code;
+  new runtime attributes need one registry adapter.
 
 - `effects` is empty. The simulation runs all six kinds — burn ticks from a
   band, slows scale movement and take the strongest rather than compounding,
@@ -127,7 +127,7 @@ Rows are populated only where a design document has settled them.
   element-aligned shard per biome, because component costs have to name
   something real. Nothing *produces* a material yet — harvest nodes and mob
   drops are Phase 4.1 — so the only source today is the bounded developer-mode
-  grant in `admin_tools.material_grant`.
+  grant in `materials.admin_grant`.
 - `components.components` covers both blueprints: five gun slots and three staff
   slots, two options each. Their modifiers reach only the attributes the
   simulation reads today. Recoil, spread, and scoped state are Phase 2.4 and

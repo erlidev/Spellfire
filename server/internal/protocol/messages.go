@@ -139,6 +139,8 @@ type Entity struct {
 	Lingering         bool
 	EffectIDs         []string
 	Mass              float32
+	Deleting          bool
+	DeleteProgress    float32
 }
 
 type Collider struct {
@@ -574,6 +576,10 @@ func encodeEntity(e Entity) []byte {
 		out = appendString(out, 30, effectID)
 	}
 	out = appendFloat(out, 31, e.Mass)
+	if e.Deleting {
+		out = appendVarint(out, 32, 1)
+	}
+	out = appendFloat(out, 33, e.DeleteProgress)
 	return out
 }
 

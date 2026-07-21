@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { abilities, abilityFor, adminTools, combat, damageBandFor, dangerBandAt, damageOf, entityDefinitions, projectileByKind, pvpRadius, resourceMax, safeRadius, simulation, spells, starterWeapon, weapons, world } from "./tuning";
+import { abilities, abilityFor, combat, damageBandFor, dangerBandAt, damageOf, entityDefinitions, materials, projectileByKind, pvpRadius, resourceMax, safeRadius, simulation, spells, starterWeapon, weapons, world } from "./tuning";
 
 describe("shared tuning tables", () => {
   it("derives the safety radii from the danger band rows rather than literals", () => {
@@ -62,14 +62,13 @@ describe("shared tuning tables", () => {
     expect(world.fixtures).toContainEqual({ id: "wall-00", entity: "wall", position: [650, 0] });
   });
 
-  it("exposes only live developer-mode entity families through data", () => {
-    const kinds = new Set(Object.values(adminTools.spawnables).map((spawnable) => spawnable.kind));
-    expect(kinds).toEqual(new Set(["player", "projectile", "telegraph"]));
-    for (const spawnable of Object.values(adminTools.spawnables)) for (const field of spawnable.fields) {
-      expect(["number", "text"]).toContain(field.kind);
-      if (field.kind === "number") expect(field.minimum).toBeLessThanOrEqual(field.default_number!);
+  it("exposes spawn and edit metadata on entity archetypes", () => {
+    expect(Object.values(entityDefinitions).every((definition) => definition.admin.spawnable)).toBe(true);
+    for (const definition of Object.values(entityDefinitions)) for (const field of definition.admin.fields) {
+      expect(field.attribute).toContain(".");
+      expect(["number", "text", "select"]).toContain(field.input);
     }
-    expect(adminTools.attributes.speed_multiplier).toBeDefined();
-    expect(adminTools.attributes.view_distance).toBeDefined();
+    expect(entityDefinitions.player!.admin.fields.some((field) => field.attribute === "transform.position.x" && field.scope === "edit")).toBe(true);
+    expect(materials.admin_grant.attribute).toBe("inventory.material_count");
   });
 });

@@ -25,6 +25,8 @@ type recordingAdminTools struct {
 	spawn      game.AdminSpawn
 	attributes map[string]float64
 	materials  map[string]int
+	state      game.AdminEntityState
+	entityID   string
 }
 
 func (r *recordingAdminTools) AdminSpawn(_ string, spawn game.AdminSpawn) error {
@@ -34,6 +36,22 @@ func (r *recordingAdminTools) AdminSpawn(_ string, spawn game.AdminSpawn) error 
 
 func (r *recordingAdminTools) SetAdminAttributes(_ string, attributes map[string]float64) error {
 	r.attributes = attributes
+	return nil
+}
+
+func (r *recordingAdminTools) AdminInspect(_, entityID string) (game.AdminEntityState, error) {
+	r.entityID = entityID
+	return game.AdminEntityState{ID: entityID, DefinitionID: "tree", Values: map[string]string{"vitals.health": "500"}}, nil
+}
+
+func (r *recordingAdminTools) AdminEdit(_, entityID string, attributes map[string]string) (game.AdminEntityState, error) {
+	r.entityID = entityID
+	r.state = game.AdminEntityState{ID: entityID, DefinitionID: "tree", Values: attributes}
+	return r.state, nil
+}
+
+func (r *recordingAdminTools) AdminDelete(_, entityID string) error {
+	r.entityID = entityID
 	return nil
 }
 
@@ -260,6 +278,18 @@ func TestAdminWorldControlsRequireAdminAndCharacterOwnership(t *testing.T) {
 	attributes := request(t, mux, http.MethodPost, "/api/admin/attributes", adminToken, map[string]any{"character_id": created.ID, "attributes": map[string]float64{"speed_multiplier": 2}})
 	if attributes.Code != http.StatusNoContent || tools.attributes["speed_multiplier"] != 2 {
 		t.Fatalf("admin attributes = %d %#v", attributes.Code, tools.attributes)
+	}
+	inspect := request(t, mux, http.MethodPost, "/api/admin/entity/inspect", adminToken, map[string]any{"character_id": created.ID, "entity_id": "tree-01"})
+	if inspect.Code != http.StatusOK || tools.entityID != "tree-01" || !strings.Contains(inspect.Body.String(), `"definition_id":"tree"`) {
+		t.Fatalf("admin inspect = %d %s", inspect.Code, inspect.Body.String())
+	}
+	edit := request(t, mux, http.MethodPost, "/api/admin/entity/edit", adminToken, map[string]any{"character_id": created.ID, "entity_id": "tree-01", "attributes": map[string]string{"vitals.health": "250"}})
+	if edit.Code != http.StatusOK || tools.state.Values["vitals.health"] != "250" {
+		t.Fatalf("admin edit = %d %#v", edit.Code, tools.state)
+	}
+	removed := request(t, mux, http.MethodPost, "/api/admin/entity/delete", adminToken, map[string]any{"character_id": created.ID, "entity_id": "tree-01"})
+	if removed.Code != http.StatusNoContent || tools.entityID != "tree-01" {
+		t.Fatalf("admin delete = %d %q", removed.Code, tools.entityID)
 	}
 	player := request(t, mux, http.MethodPost, "/api/auth/register", "", map[string]string{"email": "player@example.com", "password": "long password"})
 	if got := request(t, mux, http.MethodPost, "/api/admin/spawn", tokenFrom(t, player), map[string]any{"character_id": created.ID, "spawn_id": "training-mage", "x": 0, "y": 0, "config": map[string]string{}}).Code; got != http.StatusForbidden {

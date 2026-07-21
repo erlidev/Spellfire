@@ -21,7 +21,7 @@ import (
 // SchemaVersion is the table shape this build understands. Bump it only when a
 // table changes shape, and add the matching forward migration; a plain balance
 // edit bumps Manifest.Version instead and needs no code change.
-const SchemaVersion = 10
+const SchemaVersion = 11
 
 type Manifest struct {
 	// Version is the content revision. Bump it on any balance edit; a change
@@ -37,41 +37,31 @@ type Admins struct {
 	Emails []string `json:"emails"`
 }
 
-// AdminToolField describes one editable value in the developer-mode UI. The
+// AdminField describes one editable value in the developer-mode UI. The
 // server validates every submitted value against this catalog; the browser
 // renders the same schema and never decides what an item is allowed to do.
-type AdminToolField struct {
-	ID            string  `json:"id"`
-	Label         string  `json:"label"`
-	Kind          string  `json:"kind"`
-	DefaultText   string  `json:"default_text"`
-	DefaultNumber float64 `json:"default_number"`
-	Minimum       float64 `json:"minimum"`
-	Maximum       float64 `json:"maximum"`
-	Step          float64 `json:"step"`
-	MaxLength     int     `json:"max_length"`
+type AdminField struct {
+	Attribute string        `json:"attribute"`
+	Label     string        `json:"label"`
+	Input     string        `json:"input"`
+	Scope     string        `json:"scope"`
+	Default   string        `json:"default"`
+	Minimum   *float64      `json:"min"`
+	Maximum   *float64      `json:"max"`
+	Step      *float64      `json:"step"`
+	MaxLength int           `json:"max_length"`
+	Options   []AdminOption `json:"options"`
 }
 
-// AdminSpawnable is a currently materialized world entity that developer mode
-// may place. Adding a row exposes it in the UI; adding a new Kind also needs
-// its authoritative World executor.
-type AdminSpawnable struct {
-	Name    string           `json:"name"`
-	Kind    string           `json:"kind"`
-	Class   string           `json:"class"`
-	Ability string           `json:"ability"`
-	Element string           `json:"element"`
-	Fields  []AdminToolField `json:"fields"`
+type AdminOption struct {
+	Value string `json:"value"`
+	Label string `json:"label"`
 }
 
-type AdminTools struct {
-	Spawnables map[string]AdminSpawnable `json:"spawnables"`
-	Attributes map[string]AdminToolField `json:"attributes"`
-	// MaterialGrant bounds the developer-mode material grant. Harvesting is what
-	// legitimately produces a material (Phase 4.1); until it lands this is the
-	// only way to exercise a real crafting spend, so its ceiling is data rather
-	// than a constant in the handler.
-	MaterialGrant AdminToolField `json:"material_grant"`
+type EntityAdmin struct {
+	Name      string       `json:"name"`
+	Spawnable bool         `json:"spawnable"`
+	Fields    []AdminField `json:"fields"`
 }
 
 type Simulation struct {
@@ -144,6 +134,7 @@ type EntityDefinition struct {
 	Mass             float64           `json:"mass"`
 	MaxHealth        float64           `json:"max_health"`
 	CollisionObjects []CollisionObject `json:"collision_objects"`
+	Admin            EntityAdmin       `json:"admin"`
 }
 
 // Trees drives the deterministic procedural cover generator.
@@ -604,9 +595,10 @@ type Material struct {
 }
 
 type Materials struct {
-	Grades    map[string]Grade        `json:"grades"`
-	Kinds     map[string]MaterialKind `json:"kinds"`
-	Materials map[string]Material     `json:"materials"`
+	Grades     map[string]Grade        `json:"grades"`
+	Kinds      map[string]MaterialKind `json:"kinds"`
+	Materials  map[string]Material     `json:"materials"`
+	AdminGrant AdminField              `json:"admin_grant"`
 }
 
 type Mob struct {
@@ -650,7 +642,6 @@ type Retirement struct {
 type Tables struct {
 	Manifest    Manifest
 	Admins      Admins
-	AdminTools  AdminTools
 	Simulation  Simulation
 	Session     Session
 	Entities    map[string]EntityDefinition
@@ -882,7 +873,6 @@ func Parse(fsys fs.FS) (*Tables, error) {
 	}{
 		{"manifest.json", &tables.Manifest},
 		{"admins.json", &tables.Admins},
-		{"admin_tools.json", &tables.AdminTools},
 		{"simulation.json", &tables.Simulation},
 		{"session.json", &tables.Session},
 		{"entities.json", &tables.Entities},

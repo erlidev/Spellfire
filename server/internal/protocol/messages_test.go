@@ -94,7 +94,7 @@ func TestEncodeServerCarriesExpandedEntityState(t *testing.T) {
 		Type: EntityTelegraph, ID: "warning", OwnerID: "caster", Element: "fire", SquadID: "squad-a",
 		Allegiance: AllegianceHostile, TelegraphState: TelegraphResolved, Invulnerable: true,
 		TelegraphShape: "cone", Radius: 20, Length: 200, Width: 30, AngleDegrees: 60,
-		TelegraphProgress: .75, AbilityID: "fire-cone", Lingering: true, EffectIDs: []string{"burn", "slow"}, Mass: -1,
+		TelegraphProgress: .75, AbilityID: "fire-cone", Lingering: true, EffectIDs: []string{"burn", "slow"}, Mass: -1, Deleting: true, DeleteProgress: .5,
 	}
 	encoded := EncodeServer(ServerEnvelope{Kind: ServerSnapshot, Entities: []Entity{entity}})
 	nested := firstMessageField(t, encoded, 5)
@@ -112,7 +112,7 @@ func TestEncodeServerCarriesExpandedEntityState(t *testing.T) {
 		}
 		nested = nested[n:]
 	}
-	for field := protowire.Number(17); field <= 31; field++ {
+	for field := protowire.Number(17); field <= 33; field++ {
 		if fields[field] == 0 {
 			t.Fatalf("expanded field %d missing from wire", field)
 		}

@@ -70,6 +70,20 @@ export class GameView {
     return predictor ? { x: predictor.x + point.x, y: predictor.y + point.y } : point;
   }
 
+  entityAtPointer(clientX: number, clientY: number): Entity | undefined {
+    const point = this.worldAtPointer(clientX, clientY);
+    let selected: Entity | undefined, selectedDistance = Number.POSITIVE_INFINITY;
+    for (const entity of this.latestEntities.values()) {
+      if (entity.deleting) continue;
+      const radius = Math.max(12, entity.radius, entity.length, entity.width, entity.type === EntityType.Player ? 24 : 0);
+      const x = entity.id === this.localID && this.predictor ? this.predictor.x : entity.x;
+      const y = entity.id === this.localID && this.predictor ? this.predictor.y : entity.y;
+      const distance = (x - point.x) ** 2 + (y - point.y) ** 2;
+      if (distance <= (radius + 8) ** 2 && distance < selectedDistance) { selected = entity; selectedDistance = distance; }
+    }
+    return selected;
+  }
+
   destroy(): void {
     if (!this.initialized) return;
     this.app.destroy(true, { children: true }); this.initialized = false;
@@ -109,7 +123,7 @@ export class GameView {
       (entity.type === EntityType.Telegraph ? this.telegraphLayer : this.entityLayer).addChild(view.root);
     }
     view.root.position.set(entity.x, entity.y);
-    view.root.alpha = entity.alive ? entity.lingering ? .62 : 1 : .32;
+    view.root.alpha = entity.deleting ? Math.max(0, 1 - entity.deleteProgress) : entity.alive ? entity.lingering ? .62 : 1 : .32;
     if (entity.type === EntityType.Player) {
       view.weapon.rotation = Math.atan2(entity.aimY, entity.aimX);
       view.health.clear().roundRect(-27, -39, 54, 7, 3).fill(colors.outline).roundRect(-25, -37, 50 * Math.max(0, entity.health / Math.max(1, entity.maxHealth)), 3, 2).fill(entity.health > 30 ? 0x65d89d : 0xff7f73);
@@ -199,7 +213,8 @@ function interpolate(samples: Sample[], at: number): Entity | undefined {
     if (at > next.at) continue;
     const t = Math.max(0, Math.min(1, (at - previous.at) / Math.max(1, next.at - previous.at)));
     const sameTelegraphPhase = previous.entity.telegraphState === next.entity.telegraphState;
-    return { ...next.entity, x: previous.entity.x + (next.entity.x - previous.entity.x) * t, y: previous.entity.y + (next.entity.y - previous.entity.y) * t, aimX: previous.entity.aimX + (next.entity.aimX - previous.entity.aimX) * t, aimY: previous.entity.aimY + (next.entity.aimY - previous.entity.aimY) * t, telegraphState: sameTelegraphPhase ? next.entity.telegraphState : previous.entity.telegraphState, telegraphProgress: sameTelegraphPhase ? previous.entity.telegraphProgress + (next.entity.telegraphProgress - previous.entity.telegraphProgress) * t : previous.entity.telegraphProgress };
+    const sameDeletionPhase = previous.entity.deleting === next.entity.deleting;
+    return { ...next.entity, x: previous.entity.x + (next.entity.x - previous.entity.x) * t, y: previous.entity.y + (next.entity.y - previous.entity.y) * t, aimX: previous.entity.aimX + (next.entity.aimX - previous.entity.aimX) * t, aimY: previous.entity.aimY + (next.entity.aimY - previous.entity.aimY) * t, telegraphState: sameTelegraphPhase ? next.entity.telegraphState : previous.entity.telegraphState, telegraphProgress: sameTelegraphPhase ? previous.entity.telegraphProgress + (next.entity.telegraphProgress - previous.entity.telegraphProgress) * t : previous.entity.telegraphProgress, deleteProgress: sameDeletionPhase ? previous.entity.deleteProgress + (next.entity.deleteProgress - previous.entity.deleteProgress) * t : next.entity.deleteProgress };
   }
   return samples.at(-1)?.entity;
 }

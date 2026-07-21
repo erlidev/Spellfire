@@ -34,6 +34,9 @@ type API struct {
 type AdminController interface {
 	AdminSpawn(string, game.AdminSpawn) error
 	SetAdminAttributes(string, map[string]float64) error
+	AdminInspect(string, string) (game.AdminEntityState, error)
+	AdminEdit(string, string, map[string]string) (game.AdminEntityState, error)
+	AdminDelete(string, string) error
 	GrantMaterials(string, map[string]int) error
 }
 
@@ -58,6 +61,9 @@ func (a *API) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/account", a.withAccount(a.account))
 	mux.HandleFunc("POST /api/admin/spawn", a.withAdmin(a.adminSpawn))
 	mux.HandleFunc("POST /api/admin/attributes", a.withAdmin(a.adminAttributes))
+	mux.HandleFunc("POST /api/admin/entity/inspect", a.withAdmin(a.adminEntityInspect))
+	mux.HandleFunc("POST /api/admin/entity/edit", a.withAdmin(a.adminEntityEdit))
+	mux.HandleFunc("POST /api/admin/entity/delete", a.withAdmin(a.adminEntityDelete))
 	mux.HandleFunc("POST /api/admin/materials", a.withAdmin(a.adminMaterials))
 	mux.HandleFunc("GET /api/characters", a.withAccount(a.characters))
 	mux.HandleFunc("POST /api/characters", a.withAccount(a.createCharacter))
@@ -196,6 +202,62 @@ func (a *API) adminAttributes(w http.ResponseWriter, r *http.Request, principal 
 		return
 	}
 	if err := a.adminTools.SetAdminAttributes(body.CharacterID, body.Attributes); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+type adminEntityRequest struct {
+	CharacterID string            `json:"character_id"`
+	EntityID    string            `json:"entity_id"`
+	Attributes  map[string]string `json:"attributes"`
+}
+
+func (a *API) adminEntityInspect(w http.ResponseWriter, r *http.Request, principal auth.Principal, _ string) {
+	var body adminEntityRequest
+	if !decodeJSON(w, r, &body) || !a.adminCharacter(w, r, principal, body.CharacterID) {
+		return
+	}
+	if a.adminTools == nil {
+		writeError(w, http.StatusServiceUnavailable, "Developer tools are not available.")
+		return
+	}
+	state, err := a.adminTools.AdminInspect(body.CharacterID, body.EntityID)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, state)
+}
+
+func (a *API) adminEntityEdit(w http.ResponseWriter, r *http.Request, principal auth.Principal, _ string) {
+	var body adminEntityRequest
+	if !decodeJSON(w, r, &body) || !a.adminCharacter(w, r, principal, body.CharacterID) {
+		return
+	}
+	if a.adminTools == nil {
+		writeError(w, http.StatusServiceUnavailable, "Developer tools are not available.")
+		return
+	}
+	state, err := a.adminTools.AdminEdit(body.CharacterID, body.EntityID, body.Attributes)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, state)
+}
+
+func (a *API) adminEntityDelete(w http.ResponseWriter, r *http.Request, principal auth.Principal, _ string) {
+	var body adminEntityRequest
+	if !decodeJSON(w, r, &body) || !a.adminCharacter(w, r, principal, body.CharacterID) {
+		return
+	}
+	if a.adminTools == nil {
+		writeError(w, http.StatusServiceUnavailable, "Developer tools are not available.")
+		return
+	}
+	if err := a.adminTools.AdminDelete(body.CharacterID, body.EntityID); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}

@@ -60,8 +60,14 @@ func TestShippedTablesLoadAndValidate(t *testing.T) {
 	if tables.Admins.Emails == nil {
 		t.Fatal("admins table was not loaded")
 	}
-	if len(tables.AdminTools.Spawnables) == 0 || len(tables.AdminTools.Attributes) == 0 {
-		t.Fatalf("admin tools = %#v", tables.AdminTools)
+	spawnables := 0
+	for _, definition := range tables.Entities {
+		if definition.Admin.Spawnable {
+			spawnables++
+		}
+	}
+	if spawnables == 0 || tables.Materials.AdminGrant.Attribute == "" {
+		t.Fatalf("entity admin metadata or material grant is missing")
 	}
 	if tree, wall := tables.Entities["tree"], tables.Entities["wall"]; tree.MaxHealth != 500 || wall.Mass != -1 || wall.MaxHealth != -1 || wall.CollisionObjects[0].Width != wall.CollisionObjects[0].Height {
 		t.Fatalf("world entity definitions = tree %#v wall %#v", tree, wall)
@@ -203,9 +209,9 @@ func TestValidationRejectsBrokenTables(t *testing.T) {
 			mutate: func(document map[string]any) { document["emails"] = []any{"ADMIN@example.com", " admin@example.com "} },
 		},
 		{
-			name: "admin projectile with no live executor", file: "admin_tools.json", want: "ability without a projectile",
+			name: "entity admin field with unsupported input", file: "entities.json", want: "unsupported input",
 			mutate: func(document map[string]any) {
-				document["spawnables"].(map[string]any)["rifle-projectile"].(map[string]any)["ability"] = "missing"
+				document["player"].(map[string]any)["admin"].(map[string]any)["fields"].([]any)[0].(map[string]any)["input"] = "range-knob"
 			},
 		},
 		{

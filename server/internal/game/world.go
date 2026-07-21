@@ -126,10 +126,7 @@ type Player struct {
 	Items []model.CraftedItem
 	// LingerUntil is set when the connection drops: the body stays in the world,
 	// killable and unable to act, until it passes. Zero means connected.
-	LingerUntil time.Time
-	// AdminSpawned actors are disposable developer fixtures. They participate in
-	// combat and snapshots but never become a character save or account body.
-	AdminSpawned                  bool
+	LingerUntil                   time.Time
 	SpeedMultiplier, ViewDistance float64
 }
 
@@ -182,6 +179,7 @@ type World struct {
 	nextProjectile  uint64
 	nextTelegraph   uint64
 	nextAdminPlayer uint64
+	nextAdminEntity uint64
 	combat          *combatLog
 }
 
@@ -250,6 +248,7 @@ func (w *World) AddPlayer(character model.Character, now time.Time) *Player {
 		Items:           items,
 		Cooldowns:       make(map[string]time.Time),
 		SpeedMultiplier: 1,
+		ViewDistance:    w.tuning.AOIRadius,
 		Loadout:         equipped,
 		RespecOwed:      respec,
 		Level:           max(1, character.Level),
@@ -613,14 +612,14 @@ func (w *World) GrantMaterials(id string, grants map[string]int) (map[string]int
 	if p == nil {
 		return nil, errors.New("game: player is not in the world")
 	}
-	bound := w.tuning.Tables.AdminTools.MaterialGrant
+	bound := w.tuning.Tables.Materials.AdminGrant
 	for _, material := range sortedKeys(grants) {
 		count := grants[material]
 		if !w.tuning.Tables.Live("material", material) {
 			return nil, fmt.Errorf("unknown material %q", material)
 		}
-		if float64(count) < bound.Minimum || float64(count) > bound.Maximum {
-			return nil, fmt.Errorf("grant of %d %s is outside the permitted %g to %g", count, material, bound.Minimum, bound.Maximum)
+		if bound.Minimum == nil || bound.Maximum == nil || float64(count) < *bound.Minimum || float64(count) > *bound.Maximum {
+			return nil, fmt.Errorf("grant of %d %s is outside the permitted range", count, material)
 		}
 		p.Materials[material] += count
 	}
@@ -682,6 +681,7 @@ func (w *World) Respawn(id string, now time.Time) bool {
 		return false
 	}
 	p.Position, p.Velocity, p.DashDirection, p.DashTicksLeft = Vec{}, Vec{}, Vec{}, 0
+	p.cancelDelete()
 	p.restoreHealth()
 	p.Mana = w.tuning.MaxMana
 	if weapon, ok := w.weapon(p); ok {
@@ -705,9 +705,34 @@ func (w *World) Step(now time.Time) {
 	}
 	w.stepTelegraphs(now)
 	w.stepProjectiles(now, dt)
+	w.reapDeleted(now)
 	for _, id := range ids {
 		if p := w.players[id]; p != nil {
 			w.recordHistory(p, now)
+		}
+	}
+}
+
+func (w *World) reapDeleted(now time.Time) {
+	for id, projectile := range w.projectiles {
+		if projectile.deleteComplete(now) {
+			delete(w.projectiles, id)
+		}
+	}
+	for id, telegraph := range w.telegraphs {
+		if telegraph.deleteComplete(now) {
+			delete(w.telegraphs, id)
+		}
+	}
+	for index, item := range w.worldItems {
+		if item != nil && item.deleteComplete(now) {
+			w.worldItems[index] = nil
+		}
+	}
+	for id, player := range w.players {
+		// Connected characters remain as ordinary dead bodies until respawn.
+		if player.AdminSpawned && player.deleteComplete(now) {
+			w.RemovePlayer(id)
 		}
 	}
 }
@@ -802,6 +827,9 @@ func (w *World) stepProjectiles(now time.Time, dt float64) {
 	sort.Strings(ids)
 	for _, id := range ids {
 		p := w.projectiles[id]
+		if p.Deleting {
+			continue
+		}
 		p.Remaining -= dt
 		if p.Mass < 0 {
 			p.Velocity = Vec{}
@@ -815,6 +843,9 @@ func (w *World) stepProjectiles(now time.Time, dt float64) {
 func (w *World) advanceProjectile(projectile *Projectile, dt float64, at time.Time, historical bool) bool {
 	from, to := projectile.Position, projectile.Position.Add(projectile.Velocity.Mul(dt))
 	for _, item := range w.worldItems {
+		if item == nil {
+			continue
+		}
 		if item.intersectsSegment(from, to, projectile.circleRadius()) {
 			item.TakeDamage(projectile.Damage)
 			return true
@@ -946,6 +977,9 @@ func (w *World) moveCircle(from, delta Vec, radius float64) Vec {
 
 func (w *World) collides(position Vec, radius float64) bool {
 	for _, item := range w.worldItems {
+		if item == nil {
+			continue
+		}
 		if item.intersectsCircle(position, radius) {
 			return true
 		}

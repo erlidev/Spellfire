@@ -2,6 +2,7 @@ package game
 
 import (
 	"math"
+	"time"
 
 	"spellfire/server/internal/tuning"
 )
@@ -31,12 +32,34 @@ type CollisionObject struct {
 // hierarchy.
 type Entity struct {
 	ID, Kind           string
+	DefinitionID       string
 	Position, Velocity Vec
 	Mass               float64
 	Health, MaxHealth  float64
 	Alive              bool
 	CollisionObjects   []CollisionObject
+	AdminSpawned       bool
+	Deleting           bool
+	DeleteStarted      time.Time
+	DeleteEnds         time.Time
 }
+
+const (
+	entityDeleteFade      = 350 * time.Millisecond
+	entityDeleteReapDelay = 100 * time.Millisecond
+)
+
+// Deletable is the lifecycle seam shared by every entity family. Entity's
+// embedded method satisfies it today; an ECS can implement the same operation
+// by marking lifecycle components without changing callers.
+type Deletable interface{ Delete(time.Time) }
+
+var (
+	_ Deletable = (*Entity)(nil)
+	_ Deletable = (*Player)(nil)
+	_ Deletable = (*Projectile)(nil)
+	_ Deletable = (*Telegraph)(nil)
+)
 
 // EntityOverrides supplies typed per-instance values. Pointer fields preserve
 // the distinction between "not overridden" and a legitimate zero. Replacing
@@ -48,7 +71,7 @@ type EntityOverrides struct {
 
 func newEntity(id, kind string, position Vec, definition tuning.EntityDefinition, overrides EntityOverrides) Entity {
 	entity := Entity{
-		ID: id, Kind: kind, Position: position, Mass: definition.Mass,
+		ID: id, Kind: kind, DefinitionID: kind, Position: position, Mass: definition.Mass,
 		Health: definition.MaxHealth, MaxHealth: definition.MaxHealth, Alive: true,
 		CollisionObjects: collisionObjectsFromTuning(definition.CollisionObjects),
 	}
@@ -58,6 +81,33 @@ func newEntity(id, kind string, position Vec, definition tuning.EntityDefinition
 	}
 	entity.ApplyOverrides(overrides)
 	return entity
+}
+
+// Delete starts an idempotent graceful removal. It immediately leaves physics
+// and gameplay, remains in snapshots for the fade window, then becomes
+// eligible for collection by its owning world store.
+func (e *Entity) Delete(now time.Time) {
+	if e.Deleting {
+		return
+	}
+	e.Deleting, e.Alive, e.Health = true, false, 0
+	e.Velocity = Vec{}
+	e.DeleteStarted, e.DeleteEnds = now, now.Add(entityDeleteFade)
+}
+
+func (e *Entity) deleteProgress(now time.Time) float64 {
+	if !e.Deleting {
+		return 0
+	}
+	return math.Max(0, math.Min(1, float64(now.Sub(e.DeleteStarted))/float64(entityDeleteFade)))
+}
+
+func (e *Entity) deleteComplete(now time.Time) bool {
+	return e.Deleting && !now.Before(e.DeleteEnds.Add(entityDeleteReapDelay))
+}
+
+func (e *Entity) cancelDelete() {
+	e.Deleting, e.DeleteStarted, e.DeleteEnds = false, time.Time{}, time.Time{}
 }
 
 func (w *World) newProjectileEntity(id string, position, velocity Vec, radius float64) Entity {

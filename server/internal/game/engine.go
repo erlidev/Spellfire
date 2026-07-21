@@ -329,6 +329,33 @@ func (e *Engine) SetAdminAttributes(playerID string, attributes map[string]float
 	return e.world.setAdminAttributes(playerID, attributes)
 }
 
+func (e *Engine) AdminInspect(playerID, entityID string) (AdminEntityState, error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.world.players[playerID] == nil {
+		return AdminEntityState{}, errors.New("game: player is not in the world")
+	}
+	return e.world.adminInspect(entityID)
+}
+
+func (e *Engine) AdminEdit(playerID, entityID string, attributes map[string]string) (AdminEntityState, error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.world.players[playerID] == nil {
+		return AdminEntityState{}, errors.New("game: player is not in the world")
+	}
+	return e.world.adminEdit(entityID, attributes, time.Now())
+}
+
+func (e *Engine) AdminDelete(playerID, entityID string) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.world.players[playerID] == nil {
+		return errors.New("game: player is not in the world")
+	}
+	return e.world.adminDelete(entityID, time.Now())
+}
+
 // GrantMaterials is the developer-mode material source. Harvesting is what
 // legitimately produces a material; until Phase 4.1 lands this is the only way
 // to exercise a real crafting spend, so it is authorized like every other admin

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -15,7 +16,7 @@ func (t *Tables) validate() error {
 	problems := &report{}
 	t.validateManifest(problems)
 	t.validateAdmins(problems)
-	t.validateAdminTools(problems)
+	t.validateEntityAdmin(problems)
 	t.validateSimulation(problems)
 	t.validateSession(problems)
 	t.validateEntities(problems)
@@ -84,57 +85,50 @@ func (t *Tables) validateEntities(r *report) {
 	}
 }
 
-func (t *Tables) validateAdminTools(r *report) {
-	if r.require(len(t.AdminTools.Spawnables) > 0, "admin_tools: spawnables must not be empty") {
-		for _, id := range sortedKeys(t.AdminTools.Spawnables) {
-			spawnable := t.AdminTools.Spawnables[id]
-			r.require(spawnable.Name != "", "admin_tools: spawnable %q has no name", id)
-			r.require(contains([]string{"player", "projectile", "telegraph"}, spawnable.Kind),
-				"admin_tools: spawnable %q has unsupported kind %q", id, spawnable.Kind)
-			switch spawnable.Kind {
-			case "player":
-				r.require(spawnable.Class == "gunslinger" || spawnable.Class == "mage", "admin_tools: player %q has invalid class %q", id, spawnable.Class)
-				r.require(spawnable.Ability == "", "admin_tools: player %q must not declare an ability", id)
-			case "projectile":
-				ability := t.Abilities[spawnable.Ability]
-				r.require(ability.Projectile != nil, "admin_tools: projectile %q references an ability without a projectile %q", id, spawnable.Ability)
-			case "telegraph":
-				ability := t.Abilities[spawnable.Ability]
-				r.require(ability.Telegraph != nil, "admin_tools: telegraph %q references an ability without a telegraph %q", id, spawnable.Ability)
-			}
-			if spawnable.Element != "" {
-				r.require(t.Elements[spawnable.Element].Name != "", "admin_tools: spawnable %q references unknown element %q", id, spawnable.Element)
-			}
-			validateAdminFields(r, "admin_tools: spawnable "+id, spawnable.Fields)
+func (t *Tables) validateEntityAdmin(r *report) {
+	spawnables := 0
+	for _, id := range sortedKeys(t.Entities) {
+		definition := t.Entities[id]
+		if definition.Admin.Spawnable {
+			spawnables++
+			r.require(definition.Admin.Name != "", "entities: spawnable %q has no admin name", id)
 		}
+		validateAdminFields(r, "entities: "+id, definition.Admin.Fields)
 	}
-	validateAdminFields(r, "admin_tools: material_grant", []AdminToolField{t.AdminTools.MaterialGrant})
-	if r.require(len(t.AdminTools.Attributes) > 0, "admin_tools: attributes must not be empty") {
-		for _, id := range sortedKeys(t.AdminTools.Attributes) {
-			field := t.AdminTools.Attributes[id]
-			field.ID = id
-			validateAdminFields(r, "admin_tools: attribute "+id, []AdminToolField{field})
-		}
-	}
+	r.require(spawnables > 0, "entities: at least one entity must be admin spawnable")
+	validateAdminFields(r, "materials: admin_grant", []AdminField{t.Materials.AdminGrant})
+	r.require(t.Materials.AdminGrant.Attribute == "inventory.material_count" && t.Materials.AdminGrant.Input == "number", "materials: admin_grant must configure numeric inventory.material_count")
 }
 
-func validateAdminFields(r *report, prefix string, fields []AdminToolField) {
+func validateAdminFields(r *report, prefix string, fields []AdminField) {
 	seen := map[string]bool{}
 	for _, field := range fields {
-		r.require(field.ID != "", "%s has a field with no id", prefix)
-		r.require(!seen[field.ID], "%s repeats field %q", prefix, field.ID)
-		seen[field.ID] = true
-		r.require(field.Label != "", "%s field %q has no label", prefix, field.ID)
-		switch field.Kind {
+		r.require(field.Attribute != "", "%s has a field with no attribute", prefix)
+		r.require(strings.Contains(field.Attribute, "."), "%s attribute %q must be component.attribute", prefix, field.Attribute)
+		r.require(!seen[field.Attribute], "%s repeats field %q", prefix, field.Attribute)
+		seen[field.Attribute] = true
+		r.require(field.Label != "", "%s field %q has no label", prefix, field.Attribute)
+		r.require(contains([]string{"spawn", "edit", "both"}, field.Scope), "%s field %q has invalid scope %q", prefix, field.Attribute, field.Scope)
+		switch field.Input {
 		case "number":
-			r.require(field.Minimum <= field.DefaultNumber && field.DefaultNumber <= field.Maximum,
-				"%s number field %q default %g is outside [%g,%g]", prefix, field.ID, field.DefaultNumber, field.Minimum, field.Maximum)
-			r.require(field.Minimum < field.Maximum && field.Step > 0, "%s number field %q needs minimum < maximum and positive step", prefix, field.ID)
+			if r.require(field.Minimum != nil && field.Maximum != nil && field.Step != nil, "%s number field %q needs min, max, and step", prefix, field.Attribute) {
+				value, err := strconv.ParseFloat(field.Default, 64)
+				r.require(err == nil && *field.Minimum <= value && value <= *field.Maximum, "%s number field %q default is outside its bounds", prefix, field.Attribute)
+				r.require(*field.Minimum < *field.Maximum && *field.Step > 0, "%s number field %q needs min < max and positive step", prefix, field.Attribute)
+			}
 		case "text":
-			r.require(field.MaxLength > 0, "%s text field %q needs a positive max_length", prefix, field.ID)
-			r.require(len(field.DefaultText) <= field.MaxLength, "%s text field %q default exceeds max_length", prefix, field.ID)
+			r.require(field.MaxLength > 0, "%s text field %q needs a positive max_length", prefix, field.Attribute)
+			r.require(len(field.Default) <= field.MaxLength, "%s text field %q default exceeds max_length", prefix, field.Attribute)
+		case "select":
+			r.require(len(field.Options) > 0, "%s select field %q needs options", prefix, field.Attribute)
+			found := false
+			for _, option := range field.Options {
+				found = found || option.Value == field.Default
+				r.require(option.Value != "" && option.Label != "", "%s select field %q has an incomplete option", prefix, field.Attribute)
+			}
+			r.require(found, "%s select field %q default is not an option", prefix, field.Attribute)
 		default:
-			r.addf("%s field %q has unsupported kind %q", prefix, field.ID, field.Kind)
+			r.addf("%s field %q has unsupported input %q", prefix, field.Attribute, field.Input)
 		}
 	}
 }

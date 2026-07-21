@@ -78,6 +78,9 @@ func (w *World) startTelegraph(ownerID, element string, origin, direction Vec, a
 func (w *World) stepTelegraphs(now time.Time) {
 	for _, id := range sortedTelegraphIDs(w.telegraphs) {
 		telegraph := w.telegraphs[id]
+		if telegraph.Deleting {
+			continue
+		}
 		if !telegraph.Delivered && !now.Before(telegraph.PendingUntil) {
 			telegraph.Delivered = true
 			// Owner lifecycle code cancels pending warnings on death. Delivery

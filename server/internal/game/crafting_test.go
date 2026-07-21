@@ -207,11 +207,11 @@ func TestCraftedItemsRejoinWithTheCharacter(t *testing.T) {
 func TestGrantMaterialsValidatesAgainstTheCatalog(t *testing.T) {
 	world, now := testWorld()
 	world.AddPlayer(model.Character{ID: "g1", Name: "Gun", Class: model.Gunslinger}, now)
-	bound := world.tuning.Tables.AdminTools.MaterialGrant
+	bound := world.tuning.Tables.Materials.AdminGrant
 	if _, err := world.GrantMaterials("g1", map[string]int{"not-a-material": 1}); err == nil {
 		t.Fatal("an unknown material was granted")
 	}
-	if _, err := world.GrantMaterials("g1", map[string]int{"salvaged-plate": int(bound.Maximum) + 1}); err == nil {
+	if _, err := world.GrantMaterials("g1", map[string]int{"salvaged-plate": int(*bound.Maximum) + 1}); err == nil {
 		t.Fatal("a grant past the catalog bound was accepted")
 	}
 	carried, err := world.GrantMaterials("g1", map[string]int{"salvaged-plate": 5})

@@ -3,7 +3,6 @@
 // simulation, the prediction constants, and the renderer together. Nothing in
 // web/src may re-declare a balance number that exists in a table.
 import abilitiesData from "../../data/tuning/abilities.json";
-import adminToolsData from "../../data/tuning/admin_tools.json";
 import biomesData from "../../data/tuning/biomes.json";
 import combatData from "../../data/tuning/combat.json";
 import effectsData from "../../data/tuning/effects.json";
@@ -28,7 +27,9 @@ export interface SessionTable { logout_linger_seconds: number; position_expiry_s
 export interface Simulation { tick_rate: number; send_rate: number; aoi_radius: number; max_rewind_ms: number; interpolation_delay_ms: number }
 export interface DangerBand { id: string; name: string; tier: number; outer_radius: number; material_grade: string; pvp: string; shape: string; summary: string }
 export interface CollisionObject { type: "circle" | "box"; offset_x?: number; offset_y?: number; radius?: number; width?: number; height?: number }
-export interface EntityDefinition { mass: number; max_health: number; collision_objects: CollisionObject[] }
+export interface AdminOption { value: string; label: string }
+export interface AdminField { attribute: string; label: string; input: "number" | "text" | "select"; scope: "spawn" | "edit" | "both"; default: string; min?: number; max?: number; step?: number; max_length?: number; options?: AdminOption[] }
+export interface EntityDefinition { mass: number; max_health: number; collision_objects: CollisionObject[]; admin: { name: string; spawnable: boolean; fields: AdminField[] } }
 export interface Trees { count: number; seed: number; radius_spread: number; inner_margin: number; outer_margin: number; spacing: number }
 export interface Fixture { id: string; entity: string; position: [number, number] }
 export interface WorldTable { radius: number; spawn_radius: number; danger_bands: DangerBand[]; trees: Trees; fixtures: Fixture[] }
@@ -53,16 +54,10 @@ export interface ComponentsTable { blueprints: Record<string, Blueprint>; compon
 export interface Grade { name: string; tier: number }
 export interface MaterialKind { name: string; universal: boolean; source: string; summary: string }
 export interface Material { name: string; grade: string; kind: string; biome?: string }
-export interface MaterialsTable { grades: Record<string, Grade>; kinds: Record<string, MaterialKind>; materials: Record<string, Material> }
+export interface MaterialsTable { grades: Record<string, Grade>; kinds: Record<string, MaterialKind>; materials: Record<string, Material>; admin_grant: AdminField }
 export interface Mob { name: string; family: string; silhouette: string; damage_band: string; dodge_vector: string; telegraph_shape?: Telegraph["shape"]; turrets: number; behavior: string }
 export interface Biome { name: string; element: string }
-export interface AdminToolField { id: string; label: string; kind: "number" | "text"; default_text?: string; default_number?: number; minimum?: number; maximum?: number; step?: number; max_length?: number }
-export interface AdminSpawnable { name: string; kind: "player" | "projectile" | "telegraph"; class?: CharacterClass; ability?: string; element?: string; fields: AdminToolField[] }
-export type AdminAttribute = Omit<AdminToolField, "id">;
-export interface AdminTools { spawnables: Record<string, AdminSpawnable>; attributes: Record<string, AdminAttribute>; material_grant: AdminToolField }
-
 export const manifest = manifestData as Manifest;
-export const adminTools = adminToolsData as AdminTools;
 export const simulation = simulationData as Simulation;
 export const session = sessionData as SessionTable;
 export const entityDefinitions = entitiesData as Record<string, EntityDefinition>;

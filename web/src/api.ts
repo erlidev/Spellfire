@@ -18,6 +18,8 @@ export interface AdminSpawnRequest {
   config: Record<string, string>;
 }
 
+export interface AdminEntityState { id: string; definition_id: string; values: Record<string, string> }
+
 const tokenKey = "spellfire-session";
 
 export class API {
@@ -60,6 +62,18 @@ export class API {
 
   adminAttributes(characterID: string, attributes: Record<string, number>): Promise<void> {
     return this.request<void>("/api/admin/attributes", { method: "POST", body: JSON.stringify({ character_id: characterID, attributes }) });
+  }
+
+  adminEntityInspect(characterID: string, entityID: string): Promise<AdminEntityState> {
+    return this.request<AdminEntityState>("/api/admin/entity/inspect", { method: "POST", body: JSON.stringify({ character_id: characterID, entity_id: entityID }) });
+  }
+
+  adminEntityEdit(characterID: string, entityID: string, attributes: Record<string, string>): Promise<AdminEntityState> {
+    return this.request<AdminEntityState>("/api/admin/entity/edit", { method: "POST", body: JSON.stringify({ character_id: characterID, entity_id: entityID, attributes }) });
+  }
+
+  adminEntityDelete(characterID: string, entityID: string): Promise<void> {
+    return this.request<void>("/api/admin/entity/delete", { method: "POST", body: JSON.stringify({ character_id: characterID, entity_id: entityID }) });
   }
 
   adminMaterials(characterID: string, materials: Record<string, number>): Promise<void> {

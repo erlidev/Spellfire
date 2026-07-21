@@ -1,8 +1,8 @@
 # In-game menu
 
-The menu opens from a persistent control and conventional keyboard/controller binding. It overlays desktop and may fill mobile. The shared world **does not pause**.
+The menu opens from a persistent control as a non-modal floating panel. It stays compact on desktop and becomes a bounded floating sheet on mobile rather than taking over the game. The shared world **does not pause**.
 
-State this explicitly and preserve danger awareness where possible. Menu interaction suspends movement/combat input unless a specific non-blocking panel says otherwise.
+State this explicitly and preserve danger awareness. Movement, slot selection, aiming, and combat remain active while the panel is open; typing in a form field suppresses only the keys consumed by that field.
 
 ## Information architecture
 
@@ -17,19 +17,18 @@ State this explicitly and preserve danger awareness where possible. Menu interac
 | Activity | Boss rank/contribution and contextual progress | Conditional |
 | Reference | Combat resources, death, loot, danger, controls | Always |
 | Settings | Input, audio, graphics, UI, accessibility, account-safe preferences | Always |
-| Admin | Developer-mode placement catalog, selected-entity configuration, and temporary player overrides | Configured administrators only |
+| Admin | Tuning-driven entity placement, selection/editing, graceful delete mode, and material grants | Configured administrators only |
 
 Marketplace, guild/territory, monetization, and onboarding are deferred. Add them only when their game rules exist, following the [`README`](README.md#extension-contract) extension contract.
 
 ## Administrator developer mode
 
 An administrator sees an Admin tab only after the server has confirmed their
-account role. It contains a searchable, selectable catalog with per-item fields
-defined by data, plus bounded speed and view-distance controls for the current
-administrator body. The panel explains that the shared world continues and
-that enabling developer mode replaces primary fire with pointer placement after
-the menu closes. A persistent but compact HUD names the selected spawnable and
-offers an immediate exit from the mode.
+account role. It contains a searchable spawn catalog and generic selected-entity
+editor built from each archetype's admin metadata. Off, spawn, select, and delete
+pointer modes are explicit toggles. The menu stays open during pointer actions;
+a compact HUD states the current mode and offers an immediate exit. Delete mode
+fades every entity and keeps connected players compatible with death/respawn.
 
 The client may never treat the tab or HUD as authority: the server verifies the
 administrator session, character ownership, catalog row, field values, and

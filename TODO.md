@@ -94,7 +94,8 @@ while Sentry cadence, projectile values, and full AI remain deliberately deferre
 - [x] Configure administrator accounts by normalized email in [`admins.json`](data/tuning/admins.json), with load-time validation and an empty secure default
 - [x] Derive admin status from the persisted account on every authenticated HTTP request; expose the informational role through auth responses and `GET /api/account`
 - [x] Provide and test an opt-in server-side admin wrapper (`401` unauthenticated, `403` non-admin) for future privileged features ([administration.md](docs/administration.md))
-- [x] Data-driven developer-mode catalog for currently materialized players, projectiles, and telegraphs; protected pointer placement and typed selected-entity configuration (`admin_tools.json`, `World.adminSpawn`)
+- [x] Entity-owned admin metadata with spawnability, generic input schemas, and explicit ECS-ready `component.attribute` adapters; pointer spawn/select/edit/delete for every live entity family, death-compatible player removal, and graceful frontend fades ([entities.json](data/tuning/entities.json), [admin.go](server/internal/game/admin.go))
+- [x] Non-modal floating Field menu keeps movement/combat control while open and supports live admin pointer tools ([game-menu.md](docs/game/ui/game-menu.md), [main.ts](web/src/main.ts))
 - [x] Conditional in-game Admin tab with searchable catalog, persistent placement HUD, and bounded self speed/view-distance overrides
 
 Developer fixtures and overrides are intentionally in-memory and reset with the

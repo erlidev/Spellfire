@@ -140,6 +140,8 @@ message Entity {
   bool lingering = 29;
   repeated string effect_ids = 30;
   float mass = 31; // -1 means immovable
+  bool deleting = 32; // entity has left gameplay and is fading from the world
+  float delete_progress = 33; // normalized graceful-removal fade progress
 }
 
 message CollisionObject {

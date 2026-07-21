@@ -1,4 +1,5 @@
 {
+  "admin_grant": { "attribute": "inventory.material_count", "label": "Grant count", "input": "number", "scope": "edit", "default": "10", "min": 1, "max": 500, "step": 1 },
   "grades": {
     "common": { "name": "Common", "tier": 1 },
     "uncommon": { "name": "Uncommon", "tier": 2 },
