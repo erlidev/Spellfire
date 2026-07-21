@@ -7,6 +7,8 @@ These rules apply everywhere. Breaking one breaks a [design pillar](pillars.md).
 - Specific materials may be biome-gated; common structural materials are universal.
 - Breadth matters only during safe-zone preparation. Loadouts lock in the open world.
 - Every damaging tool has a dodge vector and a punish window. Reload/recoil and mana/cooldowns create symmetric downtime.
+- Safety is never an offensive tool. No-PvP zones and exit invulnerability may only cover disengagement and travel, never let a player win or continue a fight they could not otherwise.
+- Death costs the haul and the position, nothing else. No respawn fee, durability loss, or stacked penalty.
 - Saves store references; versioned tuning tables derive values.
 - Earned progress is never confiscated retroactively.
 - Incentives reward cooperation; no mechanic taxes group size.

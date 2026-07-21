@@ -28,7 +28,7 @@ The riot shield blocks only a frontal arc, slows its user, and prevents firing w
 
 The Gunslinger has no skill tree or handling attributes. A flat permanent ledger records gun-part and blueprint unlocks earned through level or discovery.
 
-Rare materials gate heavy weapons economically. Heavy weapons remain situational loadout choices and must share the starter weapon's effective damage band; rarity buys commitment and skill ceiling. Without a skill-tree gate, progression pace depends almost entirely on material drop rates, making [economy pacing](open-decisions.md#critical-tuning-problem-progression-pacing) a critical tuning problem.
+Rare materials gate heavy weapons economically. Heavy weapons remain situational loadout choices and must share the starter weapon's effective damage band; rarity buys commitment and skill ceiling. Without a skill-tree gate, progression pace depends almost entirely on material drop rates, making [economy pacing](progression-and-crafting.md#progression-pacing) a critical tuning problem.
 
 Gun assembly uses the shared [`progression-and-crafting.md`](progression-and-crafting.md#slotted-blueprint-crafting) system.
 

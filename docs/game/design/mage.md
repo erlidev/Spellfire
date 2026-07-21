@@ -25,7 +25,7 @@ Each school owns a primary role and enough secondary utility to support speciali
 | Arcane | Sustain and utility | Shields, dispel, teleport, mana | Support and enablement |
 | Earth / Stone | Zoning and heavy mitigation | Walls, knockback, armor | Anchoring and denial |
 
-**Open:** no element owns pure ranged poke. Decide whether that absence is intentional before finalizing the set.
+No element owns pure ranged poke, and the set is finalized without one. Poke rewards attrition at a distance where neither player is committed, which works against the class's timing-and-prediction identity and against the [combat pillars](combat.md). The Gunslinger already holds sustained ranged pressure; duplicating it on the Mage would blur the matchup contract. If playtesting shows the Mage lacks a way to open a fight at range, a poke tool can be added later as a secondary on an existing element rather than a sixth school.
 
 ## Element affinity
 

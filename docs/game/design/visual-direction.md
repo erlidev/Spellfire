@@ -97,5 +97,7 @@ The rules assume fast per-frame primitive drawing, independent of renderer. Effe
 
 ## Open values
 
-The primitive grammar, outline, procedural boundary, palette model, hue set, channel split, and telegraph system are locked. Exact colors, saturation curves, silhouettes, grid dimensions, effect density, and colorblind-validated palette remain open.
+The primitive grammar, outline, procedural boundary, palette model, hue set, channel split, and telegraph system are locked. Exact colors, saturation curves, silhouettes, grid dimensions, and effect density remain open.
+
+**Open:** the colorblind-validated palette. Hues are chosen and validated iteratively against real fights rather than picked up front, and the art style itself may shift as the game finds its look. The requirement that survives any style change is the redundant non-color channel above: no distinction may depend on hue alone, so a palette revision can never be the thing that breaks readability.
 

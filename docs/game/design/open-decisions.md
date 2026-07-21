@@ -6,17 +6,9 @@ These items are unresolved by design, not omissions. Resolve each in its owning 
 
 | Area | Question | Direction |
 |---|---|---|
-| Mage range | Should an element own pure ranged poke? | Decide before finalizing the element set |
-| Outposts | How is exit camping prevented? | Exit protection, multiple exits, or both |
-| Respawn | Timer and rim walk-back cost? | Position loss is the main geared-player penalty |
-| Sentry AI | Aggro, leash/reset, speed, cadence, turret tiers? | Behavior shape is locked; tune values |
-| Starter kit | What does a zero-material player receive? | Defines the compressed power floor |
-| Palette | Which exact hues pass colorblind validation? | Separate by value and shape, not hue alone |
-| Rendering | Which 2D backend meets 100-player density? | Architecture owns the choice and effect ceiling |
+| Palette | Which exact hues pass colorblind validation? | Separate by value and shape, not hue alone. Deferred: the art style may still shift, and hues are validated against real fights rather than chosen up front. See [`visual-direction.md`](visual-direction.md#open-values) |
 
-## Critical tuning problem: progression pacing
-
-Material acquisition is the only gate between a new Gunslinger and every weapon, and a major Mage gate too. Set rough targets for the first coherent crafted build and for rim viability before tuning drop rates. The system shape is fixed; its pace is not.
+Recently resolved, now owned by their topic documents: outpost exit camping and player influence ([`world.md`](world.md#outpost-safety)), respawn timer, destinations, and cost ([`economy-death-and-pve.md`](economy-death-and-pve.md#respawn)), Sentry values and variants ([`economy-death-and-pve.md`](economy-death-and-pve.md#sentry)), Mage ranged poke ([`mage.md`](mage.md)), starter kit and progression pacing ([`progression-and-crafting.md`](progression-and-crafting.md#starter-kit)), and renderer choice ([`../../architecture.md`](../../architecture.md#rendering-and-interface)).
 
 ## Deferred systems
 

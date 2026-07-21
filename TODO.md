@@ -1,7 +1,9 @@
 # SpellFire — Implementation Gap Ledger
 
-Everything the GDD (`docs/gdd.md`) specifies that is **absent** or **only partially present** in the
-code as of v0.1. Ordered by GDD section. This is a gap list, not a schedule; §14 proposes phasing.
+Everything the game design ([`docs/game/design/`](docs/game/design/README.md)) specifies that is
+**absent** or **only partially present** in the code as of v0.1. Section numbers below predate the
+split of the single GDD into topic files; each section links to its current owner. This is a gap list,
+not a schedule; §14 proposes phasing.
 
 Legend:
 
@@ -78,8 +80,9 @@ a procedural Pixi renderer (grid, bodies, held weapon, health bar, name).
 - ✗ **Unlock ledger of gun parts and blueprints (§4.4).** `model.Character` holds only `Level`/`XP`
   ([model.go:18-25](server/internal/model/model.go#L18-L25)). No unlocks table, no blueprint IDs.
 - ✗ **Material-gated heavy weapons.** No materials, no gate.
-- ⚠ **Starter kit definition** (§12.1 OPEN) — what a zero-material new player spawns with is undecided;
-  the code currently hardcodes an implicit one.
+- ✗ **Starter kit.** Now specified: one random basic class weapon plus a small random set of low-tier
+  unlocks ([progression-and-crafting.md](docs/game/design/progression-and-crafting.md#starter-kit)).
+  The code hardcodes a single implicit kit and has no unlock ledger or randomisation to draw from.
 
 ## 4. Mage (GDD §5)
 
@@ -102,8 +105,9 @@ a procedural Pixi renderer (grid, bodies, held weapon, health bar, name).
 - ✗ **Staffs (§5.4).** The rendered staff is a fixed decorative shape
   ([view.ts:122](web/src/game/view.ts#L122)) with no components, no core/focus/conduit slots, and no
   effect on spell behaviour.
-- ⚠ **Ranged-poke role gap** (§5.2 / §12.1 OPEN) — decide sixth element vs poke sub-branch vs
-  intentional absence *before* building the element table.
+- ✓ **Ranged-poke role gap — resolved as intentional absence.** The five-element table is final; a poke
+  tool, if ever needed, becomes a secondary on an existing element, not a sixth school. No longer
+  blocks §5.2.
 
 ## 5. Progression & crafting (GDD §6)
 
@@ -147,8 +151,12 @@ a procedural Pixi renderer (grid, bodies, held weapon, health bar, name).
 - ✗ **Travel & spawn choice.** Respawn is hardcoded to the origin
   ([world.go:134-144](server/internal/game/world.go#L134-L144)).
 - ✗ **Mounts/vehicles**, and the "no fast-travel while carrying raw materials" rule.
-- ⚠ **Outpost blockading** (§7.3 / §12.1 OPEN) — exit-invulnerability and/or multiple exits must be
-  decided before outposts ship, or the first outpost is a spawn camp.
+- ✗ **Outpost safety rules.** Now specified
+  ([world.md](docs/game/design/world.md#outpost-safety)): a no-PvP radius around every outpost plus
+  brief exit invulnerability that breaks on the player's own hostile action. The hub/fringe PvP
+  protection is radius-from-origin only ([world.go](server/internal/game/world.go)); there is no
+  per-outpost zone, no invulnerability state on `Player`, and no protocol field to render either.
+  Outposts are also fixed and unaffectable, so no capture/damage surface is needed.
 
 ## 7. Economy, death & PvP (GDD §8)
 
@@ -157,8 +165,12 @@ a procedural Pixi renderer (grid, bodies, held weapon, health bar, name).
 - ✗ **Carried-material inventory.** No inventory on `Player` or `Character`.
 - ✗ **Death penalty (§8.2).** Death currently costs nothing but position: no material loss, no drops.
 - ✗ **Tier-scaled insurance.** Requires danger-tier lookup + inventory.
-- ◐ **Respawn.** Instant, free, at origin. Missing: respawn timer, outpost selection, and the
-  long-walk-back cost. ⚠ Timer length and rim-death behaviour are **OPEN** (§12.1).
+- ◐ **Respawn.** Instant, free, at origin. Now specified
+  ([economy-death-and-pve.md](docs/game/design/economy-death-and-pve.md#respawn)): a ~5 s timer and a
+  free choice among every discovered outpost plus the hub, defaulting to the nearest, with no respawn
+  cost. Missing: the timer, per-character outpost discovery, the nearest-outpost default, a scannable
+  destination list with distance and danger band, and timer-expiry fallback to the default. Rim deaths
+  need no special case — the Deadlands has no outposts.
 - ✗ **Dropped materials (§8.3):** ground drops, 30 s killer-squad exclusivity, free-for-all after,
   15 min despawn, and pickup-is-free/crafting-is-gated. Needs a world-entity type for drops plus
   ownership/timer state, and a protocol entity type to render them.
@@ -173,8 +185,11 @@ a procedural Pixi renderer (grid, bodies, held weapon, health bar, name).
   turret count), chokepoint and node-cluster placement, biome tint + hostility ring. Also needs:
   a `MOB` entity type in the protocol, an AI tick in the world step, and a mob-turret render path
   distinct from the player held-weapon path.
-- ⚠ **Sentry values** (§12.1 OPEN) — aggro radius, leash range, reset rule, move/turn speed, shot
-  cadence, turret count per tier. Behaviour shape is locked; numbers are not.
+- ✗ **Sentry values — deliberately unspecified.** Aggro radius, leash range, reset rule, move/turn
+  speed, cadence, and turret count carry no design numbers and will not get them before a Sentry
+  exists in the build; they are set at implementation and fixed by playtesting, per variant. Sentry is
+  a family, so the AI and tuning must be data-driven per variant from the start rather than one
+  hardcoded mob. This is no longer a design blocker.
 - ✗ **Kill credit by most-damage-dealt (§9.1).** No damage attribution is recorded; the projectile
   resolver applies damage without tracking a per-target contribution ledger
   ([world.go:299-306](server/internal/game/world.go#L299-L306)).
@@ -230,7 +245,10 @@ a procedural Pixi renderer (grid, bodies, held weapon, health bar, name).
   ([world.go:38](server/internal/game/world.go#L38)) while the gunslinger is drawn as a ~35×33 quad
   ([view.ts:124](web/src/game/view.ts#L124)) — the drawn shape and the hitbox do not match. Either
   reconcile the shapes or render an explicit hitbox-matching silhouette.
-- ⚠ **Palette validation** (§12.1 OPEN) — exact element hues and a colourblind-safe pass.
+- ⚠ **Palette validation** (still OPEN) — exact element hues and a colourblind-safe pass. Deferred
+  deliberately: the art style may still shift, so hues get validated against real fights rather than
+  chosen up front. Build the palette module with swappable values so a later revision is a data
+  change, and enforce the redundant non-hue cue regardless of which hues win.
 
 ## 10. Cross-cutting invariants (GDD §11)
 
@@ -252,20 +270,26 @@ lint-style checks as the systems they govern land, not prose:
 - ✗ "Form encodes function" — mostly unrealised (see §9 above).
 - ✗ "Every hue-coded distinction carries a redundant non-hue cue."
 
-## 11. OPEN design decisions to resolve (GDD §12.1)
+## 11. OPEN design decisions to resolve
 
-These block or shape implementation and are *design* work, not code:
+One design decision still blocks code:
 
 | Area | Blocks |
 |---|---|
-| Ranged-poke role — gap or intentional? | The element table; decide before building §5.2 |
-| Outpost blockading mitigation | Shipping more than one outpost (§7.3) |
-| Respawn timer / rim-death distance | Death penalty implementation (§8.2) |
-| Mob leash / aggro / kite rules | Sentry AI (§8.5) |
-| Sentry numeric values per tier | Sentry tuning table |
-| Starter kit contents | The floor of the compressed power band; currently hardcoded implicitly |
-| Palette validation (hues + colourblind pass) | The palette module (§10.4) |
-| Progression pacing targets (§12.2) | Every drop rate in the economy |
+| Palette validation (hues + colourblind pass) | The palette module (§10.4) — build it swappable and ship without final hues |
+
+Resolved, now implementation work tracked in the sections above:
+
+| Area | Resolution |
+|---|---|
+| Ranged-poke role | Intentional absence; five elements are final |
+| Outpost blockading | No-PvP radius per outpost + brief exit invulnerability; outposts are unaffectable |
+| Respawn | ~5 s timer; free choice of any discovered outpost or the hub, nearest preselected; no respawn cost |
+| Mob aggro / leash / kite | Per-mob-class contract, not a shared template |
+| Sentry values | Deferred to implementation and playtesting, per variant |
+| Starter kit | Random basic class weapon + random low-tier unlocks |
+| Progression pacing | ~1 h to a coherent build, ~10 h to rim viability, mastery beyond |
+| Renderer | Pixi.js, kept behind `view.ts` |
 
 ## 12. Deferred by choice (GDD §12.3) — not gaps, but tracked
 

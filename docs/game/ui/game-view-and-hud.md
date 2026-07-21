@@ -50,6 +50,8 @@ Combat feedback covers damage, healing/shields, status, unavailable cooldown/man
 - Explain material loss/insurance when carrying value into higher danger.
 - Show when safe-zone crafting, loadout, and travel services become available.
 - Explain travel restrictions at the disabled control.
+- Show the [outpost no-PvP radius](../design/world.md#outpost-safety) as a visible boundary, not an invisible rule, so both a player retreating to it and a player chasing them read the same line.
+- Show exit invulnerability as a persistent self state with its remaining duration, and state that acting hostilely ends it. It must be legible to attackers too, so a protected player is never mistaken for a valid target.
 
 Warnings teach once and then condense. Reduced warnings must retain persistent danger and PvP state.
 

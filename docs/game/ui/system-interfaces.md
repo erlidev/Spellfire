@@ -24,10 +24,15 @@ Death replaces combat controls with a focused summary of:
 - gear and weapons kept;
 - insured materials kept;
 - raw materials dropped;
-- death location and eligible outposts;
-- timer/availability when defined.
+- death location;
+- respawn destinations;
+- the remaining respawn timer.
 
-Players may select only discovered eligible outposts. Explain unavailable locations and walk-back cost without implying level gates. Timer and rim restrictions remain **Open** in [game design](../design/economy-death-and-pve.md#death).
+Respawn is a free choice among every discovered outpost plus the central hub, per [game design](../design/economy-death-and-pve.md#respawn). The nearest outpost to the death location is preselected so the common case — get back to the fight and contest the drop — needs no interaction. Each destination shows its distance from the death location and its danger band, since redeploying to an unfamiliar band is the main way this menu goes wrong.
+
+The list grows over a character's lifetime, so it must stay scannable rather than becoming a wall of names: order by distance from the death location, keep the hub distinctly separated as the reset option, and group or collapse by region once the count is large. Undiscovered outposts are never shown as locked rows — an undiscovered outpost is unknown, not withheld, and rendering it as a locked entry implies a level gate that does not exist.
+
+The five-second timer counts down visibly. Selection is allowed during it, and confirming early does not skip it; the summary stays readable for the full duration so a player is never forced to choose before reading what they lost. If the timer expires without a choice, the preselected nearest outpost is used.
 
 ## Squads, loot, and bosses
 
