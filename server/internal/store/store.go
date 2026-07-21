@@ -22,5 +22,12 @@ type Store interface {
 	Characters(context.Context, string) ([]model.Character, error)
 	CreateCharacter(context.Context, model.Character) error
 	Character(context.Context, string, string) (model.Character, error)
+	// SaveCharacterState persists the world state a character keeps across a
+	// disconnect: last position, carried materials, and unlocked outposts.
+	SaveCharacterState(context.Context, string, model.CharacterState) error
+	// CraftedItems and CreateCraftedItem store owned items as blueprint and
+	// component references. Nothing here records a computed stat.
+	CraftedItems(context.Context, string) ([]model.CraftedItem, error)
+	CreateCraftedItem(context.Context, model.CraftedItem) error
 	Close() error
 }

@@ -1,0 +1,4 @@
+{
+  "logout_linger_seconds": 10,
+  "position_expiry_seconds": 1800
+}

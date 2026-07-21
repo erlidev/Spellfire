@@ -189,6 +189,20 @@ func TestValidationRejectsBrokenTables(t *testing.T) {
 			},
 		},
 		{
+			name: "a logout window that lets a body vanish", file: "session.json", want: "combat logging free",
+			mutate: func(document map[string]any) { document["logout_linger_seconds"] = 0.0 },
+		},
+		{
+			name: "a position expiring before the body it belongs to", file: "session.json", want: "must exceed logout_linger_seconds",
+			mutate: func(document map[string]any) { document["position_expiry_seconds"] = 5.0 },
+		},
+		{
+			name: "an outpost outside the world", file: "outposts.json", want: "outside the",
+			mutate: func(document map[string]any) {
+				document["adrift"] = map[string]any{"name": "Adrift", "position": []any{99000.0, 0.0}}
+			},
+		},
+		{
 			name: "snapshot rate that does not divide the tick rate", file: "simulation.json", want: "whole multiple",
 			mutate: func(document map[string]any) { document["send_rate"] = 7.0 },
 		},
@@ -233,5 +247,119 @@ func TestBandAtResolvesEveryRadius(t *testing.T) {
 	}
 	if world.SafeRadius() != 430 || world.PvPRadius() != 1000 {
 		t.Fatalf("derived radii = %g / %g", world.SafeRadius(), world.PvPRadius())
+	}
+}
+
+// withMaterial adds one live material row so a retirement test has something to
+// resolve to. Materials arrive with Phase 4.1; the retirement contract does not
+// wait for them.
+func withMaterial(t *testing.T, files fstest.MapFS, id string) fstest.MapFS {
+	t.Helper()
+	return edit(t, files, "materials.json", func(document map[string]any) {
+		document["materials"].(map[string]any)[id] = map[string]any{
+			"name": "Scrap " + id, "grade": "common", "kind": "structural",
+		}
+	})
+}
+
+func retire(t *testing.T, files fstest.MapFS, rows map[string]any) fstest.MapFS {
+	t.Helper()
+	return edit(t, files, "retired.json", func(document map[string]any) {
+		for id, row := range rows {
+			document[id] = row
+		}
+	})
+}
+
+// A retired ID must stay resolvable forever: content is withdrawn by pointing
+// it at a replacement or a refund, never by deleting it out from under a save.
+func TestRetiredIDsResolveToAReplacementOrARefund(t *testing.T) {
+	files := withMaterial(t, shipped(t), "iron")
+	files = retire(t, files, map[string]any{
+		"old-iron": map[string]any{"kind": "material", "replacement": "older-iron", "note": "renamed twice"},
+		// A chain must be followed to the end, not one hop.
+		"older-iron": map[string]any{"kind": "material", "replacement": "iron", "note": "renamed"},
+		"lost-alloy": map[string]any{"kind": "material", "refund": map[string]any{"iron": 2.0}, "note": "recipe withdrawn"},
+		"old-rifle":  map[string]any{"kind": "weapon", "replacement": "starter-rifle", "note": "superseded"},
+	})
+	tables, err := Parse(files)
+	if err != nil {
+		t.Fatalf("valid retirements rejected: %v", err)
+	}
+
+	if resolved, ok := tables.Resolve("material", "iron"); !ok || resolved.ID != "iron" {
+		t.Fatalf("live material = %#v, %v", resolved, ok)
+	}
+	if resolved, ok := tables.Resolve("material", "old-iron"); !ok || resolved.ID != "iron" {
+		t.Fatalf("retirement chain = %#v, %v", resolved, ok)
+	}
+	if resolved, ok := tables.Resolve("weapon", "old-rifle"); !ok || resolved.ID != "starter-rifle" {
+		t.Fatalf("retired weapon = %#v, %v", resolved, ok)
+	}
+	resolved, ok := tables.Resolve("material", "lost-alloy")
+	if !ok || resolved.ID != "" || resolved.Refund["iron"] != 2 {
+		t.Fatalf("refund = %#v, %v", resolved, ok)
+	}
+	// Retirement never crosses tables, and an ID from no build at all is the
+	// only reference a caller may drop.
+	if _, ok := tables.Resolve("weapon", "old-iron"); ok {
+		t.Fatal("a retired material resolved as a weapon")
+	}
+	if _, ok := tables.Resolve("material", "never-shipped"); ok {
+		t.Fatal("an unknown id resolved")
+	}
+}
+
+func TestValidationRejectsBrokenRetirements(t *testing.T) {
+	cases := []struct {
+		name, want string
+		rows       map[string]any
+	}{
+		{
+			name: "chain that reaches nothing", want: "reaches neither a live",
+			rows: map[string]any{"gone": map[string]any{"kind": "material", "replacement": "vapour", "note": "n"}},
+		},
+		{
+			name: "cycle", want: "reaches neither a live",
+			rows: map[string]any{
+				"a": map[string]any{"kind": "material", "replacement": "b", "note": "n"},
+				"b": map[string]any{"kind": "material", "replacement": "a", "note": "n"},
+			},
+		},
+		{
+			name: "retiring a live id", want: "either current or retired",
+			rows: map[string]any{"starter-rifle": map[string]any{"kind": "weapon", "replacement": "starter-rifle", "note": "n"}},
+		},
+		{
+			name: "neither replacement nor refund", want: "exactly one of replacement or refund",
+			rows: map[string]any{"gone": map[string]any{"kind": "material", "note": "n"}},
+		},
+		{
+			name: "both replacement and refund", want: "exactly one of replacement or refund",
+			rows: map[string]any{"gone": map[string]any{"kind": "material", "replacement": "iron", "refund": map[string]any{"iron": 1.0}, "note": "n"}},
+		},
+		{
+			name: "refund of unknown material", want: "refunds unknown material",
+			rows: map[string]any{"gone": map[string]any{"kind": "material", "refund": map[string]any{"vapour": 1.0}, "note": "n"}},
+		},
+		{
+			name: "unknown kind", want: "unknown kind",
+			rows: map[string]any{"gone": map[string]any{"kind": "outpost", "replacement": "iron", "note": "n"}},
+		},
+		{
+			name: "no reason recorded", want: "must record why",
+			rows: map[string]any{"gone": map[string]any{"kind": "material", "replacement": "iron"}},
+		},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			_, err := Parse(retire(t, withMaterial(t, shipped(t), "iron"), testCase.rows))
+			if err == nil {
+				t.Fatal("invalid retirements were accepted")
+			}
+			if !strings.Contains(err.Error(), testCase.want) {
+				t.Fatalf("error %q does not mention %q", err, testCase.want)
+			}
+		})
 	}
 }

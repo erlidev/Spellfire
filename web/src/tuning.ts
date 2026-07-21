@@ -9,6 +9,7 @@ import elementsData from "../../data/tuning/elements.json";
 import manifestData from "../../data/tuning/manifest.json";
 import materialsData from "../../data/tuning/materials.json";
 import mobsData from "../../data/tuning/mobs.json";
+import sessionData from "../../data/tuning/session.json";
 import simulationData from "../../data/tuning/simulation.json";
 import spellsData from "../../data/tuning/spells.json";
 import weaponsData from "../../data/tuning/weapons.json";
@@ -16,6 +17,7 @@ import worldData from "../../data/tuning/world.json";
 import type { CharacterClass } from "./types";
 
 export interface Manifest { version: number; schema_version: number }
+export interface SessionTable { logout_linger_seconds: number; position_expiry_seconds: number }
 export interface Simulation { tick_rate: number; send_rate: number; aoi_radius: number; max_rewind_ms: number; interpolation_delay_ms: number }
 export interface DangerBand { id: string; name: string; tier: number; outer_radius: number; material_grade: string; pvp: string; shape: string; summary: string }
 export interface Trees { count: number; seed: number; min_radius: number; radius_spread: number; inner_margin: number; outer_margin: number; spacing: number }
@@ -40,6 +42,7 @@ export interface Biome { name: string; element: string }
 
 export const manifest = manifestData as Manifest;
 export const simulation = simulationData as Simulation;
+export const session = sessionData as SessionTable;
 export const world = worldData as WorldTable;
 export const combat = combatData as CombatTable;
 export const elements = elementsData as Record<string, Element>;

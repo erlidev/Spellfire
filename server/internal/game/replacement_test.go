@@ -8,7 +8,7 @@ import (
 )
 
 func TestReplacementKicksOldConnection(t *testing.T) {
-	engine := NewEngine(DefaultTuning())
+	engine := NewEngine(DefaultTuning(), nil)
 	character := model.Character{ID: "same-character", Name: "Hero", Class: model.Gunslinger}
 	old := engine.Join(character, time.Now())
 	engine.Join(character, time.Now())

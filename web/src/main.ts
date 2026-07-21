@@ -2,7 +2,7 @@ import { API } from "./api";
 import { Predictor } from "./game/prediction";
 import { GameView } from "./game/view";
 import { GameSocket } from "./net/socket";
-import { damageBandFor, dangerBandAt, resourceMax, spells, starterWeapon, world } from "./tuning";
+import { damageBandFor, dangerBandAt, resourceMax, session, spells, starterWeapon, world } from "./tuning";
 import { Buttons, ServerKind, type Character, type CharacterClass, type Entity, type ServerMessage } from "./types";
 
 function element<T extends HTMLElement>(id: string): T {
@@ -70,7 +70,7 @@ class SpellFire {
     element<HTMLFormElement>("character-form").addEventListener("submit", (event) => void this.createCharacter(event));
     element("menu-button").addEventListener("click", () => { this.renderMenu("character"); element<HTMLDialogElement>("menu-dialog").showModal(); });
     element("menu-tabs").addEventListener("click", (event) => { const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-tab]"); if (button) this.renderMenu(button.dataset.tab ?? "character"); });
-    element("exit-button").addEventListener("click", () => { if (confirm("Exit to Home? Your character disconnects immediately.")) this.exitGame(); });
+    element("exit-button").addEventListener("click", () => { if (confirm(`Exit to Home? Your body stays in the world for ${session.logout_linger_seconds} seconds after you leave and can still be attacked.`)) this.exitGame(); });
     element("connection-cancel").addEventListener("click", () => this.exitGame());
     element("respawn-button").addEventListener("click", () => this.socket?.respawn());
   }

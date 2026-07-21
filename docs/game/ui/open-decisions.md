@@ -7,7 +7,7 @@ These choices require a game-rule decision or focused feature specification befo
 - onboarding and tutorial flow;
 - minimap, compass, discovery, and permissible world information;
 - combat floating text and target inspection;
-- logout delay, combat logging, and disconnect grace;
+- exit, reconnect, and logging-out presentation: how the ten-second [logout linger](../design/economy-death-and-pve.md#logging-out) is shown to the player leaving and to everyone watching the body, and how a recall on login is explained;
 - mobile orientation, touch model, and assistance limits;
 - controller support and live-combat screen-reader scope;
 - marketplace/trading, guild/territory, cosmetics/monetization, and navigation;

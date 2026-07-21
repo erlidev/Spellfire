@@ -19,7 +19,7 @@ import (
 // SchemaVersion is the table shape this build understands. Bump it only when a
 // table changes shape, and add the matching forward migration; a plain balance
 // edit bumps Manifest.Version instead and needs no code change.
-const SchemaVersion = 1
+const SchemaVersion = 3
 
 type Manifest struct {
 	// Version is the content revision. Bump it on any balance edit; a change
@@ -38,6 +38,34 @@ type Simulation struct {
 
 func (s Simulation) MaxRewind() time.Duration {
 	return time.Duration(s.MaxRewindMS) * time.Millisecond
+}
+
+// Session governs a character's presence around a disconnect: how long the body
+// stays behind, and how long the position it was left at remains honoured.
+type Session struct {
+	// LogoutLingerSeconds keeps the body in the world after the connection
+	// drops, so disconnecting is not an escape from a fight.
+	LogoutLingerSeconds int `json:"logout_linger_seconds"`
+	// PositionExpirySeconds is how long an offline character keeps the spot it
+	// logged out at. Past it, the next login recalls it to safety.
+	PositionExpirySeconds int `json:"position_expiry_seconds"`
+}
+
+func (s Session) LogoutLinger() time.Duration {
+	return time.Duration(s.LogoutLingerSeconds) * time.Second
+}
+
+func (s Session) PositionExpiry() time.Duration {
+	return time.Duration(s.PositionExpirySeconds) * time.Second
+}
+
+// Outpost is a fixed safe fixture a character can be recalled to. Positions are
+// Phase 3 geography; the table ships empty and every lookup falls back to the
+// central hub until it is filled.
+type Outpost struct {
+	ID       string     `json:"-"`
+	Name     string     `json:"name"`
+	Position [2]float64 `json:"position"`
 }
 
 type DangerBand struct {
@@ -256,10 +284,32 @@ type Biome struct {
 	Element string `json:"element"`
 }
 
+// RetiredKinds are the tables a retirement may name. A retired ID resolves
+// within its own kind; nothing is ever retired across tables.
+var RetiredKinds = []string{"weapon", "spell", "component", "blueprint", "material", "element", "biome", "mob"}
+
+// maxRetirementHops bounds a replacement chain. Validation rejects cycles, so
+// this only guards a table that somehow reached the resolver unvalidated.
+const maxRetirementHops = 8
+
+// Retirement records what a withdrawn content ID resolves to. Content changes
+// are additive: an ID is never deleted from the tables, it is retired here and
+// points at either a live replacement or a material refund, so a save that
+// still names it stays resolvable forever.
+type Retirement struct {
+	ID          string         `json:"-"`
+	Kind        string         `json:"kind"`
+	Replacement string         `json:"replacement"`
+	Refund      map[string]int `json:"refund"`
+	Note        string         `json:"note"`
+}
+
 type Tables struct {
 	Manifest   Manifest
 	Simulation Simulation
+	Session    Session
 	World      World
+	Outposts   map[string]Outpost
 	Combat     Combat
 	Elements   map[string]Element
 	Weapons    map[string]Weapon
@@ -268,6 +318,59 @@ type Tables struct {
 	Materials  Materials
 	Mobs       map[string]Mob
 	Biomes     map[string]Biome
+	Retired    map[string]Retirement
+}
+
+// Resolution is what a persisted reference resolves to against today's tables:
+// either a live row, or the materials refunded for a retired one.
+type Resolution struct {
+	// ID is the live row the reference resolves to, empty when it was refunded.
+	ID string
+	// Refund is the material ID → count owed per retired unit held.
+	Refund map[string]int
+}
+
+// Resolve maps a persisted reference of a kind onto live content, following
+// retirement chains. It reports false only for an ID this build has never heard
+// of — neither live nor retired — which is the one case a caller may drop.
+func (t *Tables) Resolve(kind, id string) (Resolution, bool) {
+	for hop := 0; hop <= maxRetirementHops; hop++ {
+		if t.Live(kind, id) {
+			return Resolution{ID: id}, true
+		}
+		retirement, ok := t.Retired[id]
+		if !ok || retirement.Kind != kind {
+			return Resolution{}, false
+		}
+		if retirement.Replacement == "" {
+			return Resolution{Refund: retirement.Refund}, true
+		}
+		id = retirement.Replacement
+	}
+	return Resolution{}, false
+}
+
+// Live reports whether an ID names a current row of the kind.
+func (t *Tables) Live(kind, id string) bool {
+	switch kind {
+	case "weapon":
+		return t.Weapons[id].Name != ""
+	case "spell":
+		return t.Spells[id].Name != ""
+	case "component":
+		return t.Components.Components[id].Name != ""
+	case "blueprint":
+		return t.Components.Blueprints[id].Name != ""
+	case "material":
+		return t.Materials.Materials[id].Name != ""
+	case "element":
+		return t.Elements[id].Name != ""
+	case "biome":
+		return t.Biomes[id].Name != ""
+	case "mob":
+		return t.Mobs[id].Name != ""
+	}
+	return false
 }
 
 // Shot is a weapon's resolved firing profile. Damage always comes from the
@@ -340,7 +443,9 @@ func Parse(fsys fs.FS) (*Tables, error) {
 	}{
 		{"manifest.json", &tables.Manifest},
 		{"simulation.json", &tables.Simulation},
+		{"session.json", &tables.Session},
 		{"world.json", &tables.World},
+		{"outposts.json", &tables.Outposts},
 		{"combat.json", &tables.Combat},
 		{"elements.json", &tables.Elements},
 		{"weapons.json", &tables.Weapons},
@@ -349,6 +454,7 @@ func Parse(fsys fs.FS) (*Tables, error) {
 		{"materials.json", &tables.Materials},
 		{"mobs.json", &tables.Mobs},
 		{"biomes.json", &tables.Biomes},
+		{"retired.json", &tables.Retired},
 	}
 	for _, file := range files {
 		raw, err := fs.ReadFile(fsys, "tuning/"+file.name)
@@ -415,6 +521,14 @@ func (t *Tables) stampIDs() {
 	for id, biome := range t.Biomes {
 		biome.ID = id
 		t.Biomes[id] = biome
+	}
+	for id, outpost := range t.Outposts {
+		outpost.ID = id
+		t.Outposts[id] = outpost
+	}
+	for id, retirement := range t.Retired {
+		retirement.ID = id
+		t.Retired[id] = retirement
 	}
 }
 

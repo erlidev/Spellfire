@@ -36,7 +36,7 @@ func main() {
 	authService := auth.New(data, cfg.SessionLifetime)
 	balance := game.FromTables(tables)
 	balance.TickRate, balance.SendRate, balance.AOIRadius, balance.MaxRewind = cfg.TickRate, cfg.SendRate, cfg.AOIRadius, cfg.MaxRewind
-	engine := game.NewEngine(balance)
+	engine := game.NewEngine(balance, data)
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	go engine.Run(ctx)

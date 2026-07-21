@@ -39,6 +39,12 @@ Free-choice respawn makes dying the fastest way to cross the map, which brushes 
 
 A player carrying nothing may treat death as transit. That is acceptable: an empty-handed player carries nothing the economy protects, and the five-second timer plus the walk out from the chosen outpost keeps it from being frictionless.
 
+## Logging out
+
+Disconnecting is not an escape. The body stays in the world for ten seconds after the connection drops: it holds its ground, cannot move, dash, or fire, and remains a legitimate target the whole time. Someone who pulls the plug mid-fight can still be killed and still drops their haul, so combat logging saves nothing it would not have saved by standing still. Reconnecting inside the window resumes that same body wherever the fight has moved it.
+
+The position a character logs out at is honoured for thirty minutes. Past that, the next login recalls it to the nearest safe fixture — an [unlocked outpost](world.md#outposts-and-travel), or the central hub when that is closer. The haul is untouched by the recall: a stale position costs the walk back out, never the materials, which keeps this a convenience rule rather than a second death penalty.
+
 ## Dropped materials
 
 Materials are exclusive to the killer's squad for 30 seconds, then free-for-all until they despawn after 15 minutes. Exclusivity protects the squad from outside scavengers, never one squadmate from another. Pickup is unrestricted by unlocks; crafting still enforces blueprint requirements.

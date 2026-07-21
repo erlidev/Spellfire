@@ -3,6 +3,7 @@ package tuning
 import (
 	"errors"
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 )
@@ -14,7 +15,9 @@ func (t *Tables) validate() error {
 	problems := &report{}
 	t.validateManifest(problems)
 	t.validateSimulation(problems)
+	t.validateSession(problems)
 	t.validateWorld(problems)
+	t.validateOutposts(problems)
 	t.validateCombat(problems)
 	t.validateElements(problems)
 	t.validateComponents(problems)
@@ -23,6 +26,7 @@ func (t *Tables) validate() error {
 	t.validateSpells(problems)
 	t.validateWeapons(problems)
 	t.validateMobs(problems)
+	t.validateRetired(problems)
 	t.validateProjectileKinds(problems)
 	return problems.err()
 }
@@ -68,6 +72,28 @@ func (t *Tables) validateSimulation(r *report) {
 	r.require(s.AOIRadius > 0, "simulation: aoi_radius must be positive")
 	r.require(s.MaxRewindMS > 0, "simulation: max_rewind_ms must be positive")
 	r.require(s.InterpolationDelayMS > 0, "simulation: interpolation_delay_ms must be positive")
+}
+
+func (t *Tables) validateSession(r *report) {
+	s := t.Session
+	// A zero linger would make disconnecting an escape from a fight, which the
+	// safety invariant forbids as much as any offensive use of a safe zone.
+	r.require(s.LogoutLingerSeconds > 0, "session: logout_linger_seconds must be positive; a body that vanishes on disconnect makes combat logging free")
+	r.require(s.PositionExpirySeconds > 0, "session: position_expiry_seconds must be positive")
+	r.require(s.PositionExpirySeconds > s.LogoutLingerSeconds,
+		"session: position_expiry_seconds %d must exceed logout_linger_seconds %d, or a position expires before the body it belongs to is gone",
+		s.PositionExpirySeconds, s.LogoutLingerSeconds)
+}
+
+// validateOutposts keeps every recall destination inside the world. The table
+// ships empty; Phase 3 owns where outposts actually sit.
+func (t *Tables) validateOutposts(r *report) {
+	for _, id := range sortedKeys(t.Outposts) {
+		outpost := t.Outposts[id]
+		r.require(outpost.Name != "", "outposts: %q has no name", id)
+		distance := math.Hypot(outpost.Position[0], outpost.Position[1])
+		r.require(distance <= t.World.Radius, "outposts: %q sits %g from the origin, outside the %g world radius", id, distance, t.World.Radius)
+	}
 }
 
 func (t *Tables) validateWorld(r *report) {
@@ -250,6 +276,35 @@ func (t *Tables) validateMobs(r *report) {
 		r.require(mob.Turrets >= 1, "mobs: %q must have at least one turret", id)
 		r.require(t.Combat.DamageBands[mob.DamageBand].Name != "", "mobs: %q references unknown damage band %q", id, mob.DamageBand)
 		r.require(contains(t.Combat.DodgeVectors, mob.DodgeVector), "mobs: %q declares no valid dodge vector; every damaging tool needs one", id)
+	}
+}
+
+// validateRetired keeps every withdrawn ID resolvable. A save may name an ID
+// this build no longer ships, so the retirement must terminate on live content
+// or on a refund; a dangling or circular chain would silently confiscate
+// earned progress.
+func (t *Tables) validateRetired(r *report) {
+	for _, id := range sortedKeys(t.Retired) {
+		retirement := t.Retired[id]
+		if !r.require(contains(RetiredKinds, retirement.Kind), "retired: %q has unknown kind %q", id, retirement.Kind) {
+			continue
+		}
+		r.require(!t.Live(retirement.Kind, id), "retired: %q is still a live %s row; an ID is either current or retired, never both", id, retirement.Kind)
+		r.require(retirement.Note != "", "retired: %q must record why it was retired", id)
+		replaced, refunded := retirement.Replacement != "", len(retirement.Refund) > 0
+		if !r.require(replaced != refunded, "retired: %q must declare exactly one of replacement or refund", id) {
+			continue
+		}
+		if refunded {
+			for _, material := range sortedKeys(retirement.Refund) {
+				r.require(retirement.Refund[material] > 0, "retired: %q refunds a non-positive count of %q", id, material)
+				r.require(t.Live("material", material), "retired: %q refunds unknown material %q", id, material)
+			}
+			continue
+		}
+		if _, ok := t.Resolve(retirement.Kind, retirement.Replacement); !ok {
+			r.addf("retired: %q replaces %q, which reaches neither a live %s nor a refund", id, retirement.Replacement, retirement.Kind)
+		}
 	}
 }
 

@@ -11,7 +11,7 @@ import (
 
 func TestEngineJoinInputSnapshotAndLeave(t *testing.T) {
 	tuning := DefaultTuning()
-	engine := NewEngine(tuning)
+	engine := NewEngine(tuning, nil)
 	now := time.Now()
 	client := engine.Join(model.Character{ID: "p", Name: "Player", Class: model.Gunslinger}, now)
 	select {
@@ -38,15 +38,19 @@ func TestEngineJoinInputSnapshotAndLeave(t *testing.T) {
 	engine.Leave(client)
 	engine.mu.Lock()
 	_, clientExists := engine.clients["p"]
-	_, playerExists := engine.world.players["p"]
+	player := engine.world.players["p"]
 	engine.mu.Unlock()
-	if clientExists || playerExists {
-		t.Fatal("leave retained client or player")
+	// The client goes immediately; the body stays for the logout window.
+	if clientExists {
+		t.Fatal("leave retained the client")
+	}
+	if player == nil || !player.Lingering() {
+		t.Fatalf("player = %#v, want a lingering body", player)
 	}
 }
 
 func TestEngineOldConnectionCannotRemoveReplacement(t *testing.T) {
-	engine := NewEngine(DefaultTuning())
+	engine := NewEngine(DefaultTuning(), nil)
 	character := model.Character{ID: "p", Name: "Player", Class: model.Mage}
 	old := engine.Join(character, time.Now())
 	replacement := engine.Join(character, time.Now())

@@ -34,6 +34,7 @@ Rules, from [`invariants.md`](../../docs/game/design/invariants.md) and
 |---|---|
 | `manifest.json` | Content and schema versions |
 | `simulation.json` | Tick/send rates, AOI radius, rewind window, interpolation delay |
+| `session.json` | Logout linger window and saved-position expiry |
 | `world.json` | World radius, spawn radius, danger bands, procedural tree parameters |
 | `combat.json` | Role and dodge-vector vocabularies, player body, universal dash, damage bands |
 | `elements.json` | The five Mage elements and their roles |
@@ -43,6 +44,8 @@ Rules, from [`invariants.md`](../../docs/game/design/invariants.md) and
 | `materials.json` | Material grades, kinds, and rows |
 | `mobs.json` | Mob contracts |
 | `biomes.json` | Biomes and the element they align to |
+| `outposts.json` | Recall destinations: outpost names and world positions |
+| `retired.json` | Withdrawn IDs and the replacement or refund each resolves to |
 
 ## Deliberately empty and deliberately absent
 
@@ -57,6 +60,32 @@ Rows are populated only where a design document has settled them.
   defers those to implementation and playtesting; writing numbers now would be
   false precision.
 - `biomes` carry no placement. Biome geography is Phase 3.
+- `outposts` is empty. Outpost geography is Phase 3; the recall search is
+  written against the table and resolves to the central hub until it has rows.
+- `retired` is empty because nothing has been withdrawn yet. It is the only
+  correct way to remove content once a save can name it.
+
+## Retiring content
+
+Never delete an ID from a table. Move it to `retired.json` instead, keyed by the
+ID it had, and give it exactly one destination:
+
+```json
+{
+  "old-iron":   { "kind": "material", "replacement": "iron", "note": "renamed" },
+  "lost-alloy": { "kind": "material", "refund": { "iron": 2 }, "note": "recipe withdrawn" }
+}
+```
+
+`kind` names the table the ID belonged to; retirement never crosses tables.
+`replacement` may point at another retired ID, so a chain of renames stays
+resolvable. `refund` is the materials owed per unit held, and is the terminal
+option when nothing replaces the row. `note` records why.
+
+The loader rejects a retirement that is also a live row, one that declares
+neither or both destinations, a refund of an unknown material, and a chain that
+dangles or loops. `Tables.Resolve` follows the chain, so the only reference a
+caller may drop is an ID no build ever shipped.
 
 ## Validation
 

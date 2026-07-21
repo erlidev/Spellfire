@@ -38,6 +38,7 @@ type Tuning struct {
 	DashDistance                       float64
 	DashDuration, DashCooldown         time.Duration
 	MaxHealth, MaxMana, ManaRegen      float64
+	LogoutLinger, PositionExpiry       time.Duration
 }
 
 func FromTables(tables *tuning.Tables) Tuning {
@@ -50,6 +51,7 @@ func FromTables(tables *tuning.Tables) Tuning {
 		PlayerRadius: body.Radius, PlayerSpeed: body.Speed,
 		DashDistance: dash.Distance, DashDuration: dash.Duration(), DashCooldown: dash.Cooldown(),
 		MaxHealth: body.MaxHealth, MaxMana: body.MaxMana, ManaRegen: body.ManaRegen,
+		LogoutLinger: tables.Session.LogoutLinger(), PositionExpiry: tables.Session.PositionExpiry(),
 	}
 }
 
@@ -83,7 +85,19 @@ type Player struct {
 	Ammo                            int
 	DashDirection                   Vec
 	DashTicksLeft                   int
+	// Carried materials and unlocked outposts are persisted references, held
+	// here so they survive a disconnect. Harvesting (Phase 4.1) and outpost
+	// discovery (Phase 3) are what will mutate them.
+	Materials map[string]int
+	Outposts  []string
+	// LingerUntil is set when the connection drops: the body stays in the world,
+	// killable and unable to act, until it passes. Zero means connected.
+	LingerUntil time.Time
 }
+
+// Lingering reports whether the body is present only because its owner
+// disconnected. A lingering player takes damage but cannot act.
+func (p *Player) Lingering() bool { return !p.LingerUntil.IsZero() }
 
 // A dash covers DashDistance over DashDuration, quantized to whole ticks so the
 // client's fixed-rate prediction reproduces it exactly.
@@ -138,14 +152,17 @@ func NewWorld(t Tuning) *World {
 
 func (w *World) AddPlayer(character model.Character, now time.Time) *Player {
 	if existing := w.players[character.ID]; existing != nil {
+		// Reconnecting inside the logout window resumes the body that stayed
+		// behind, wherever the fight has since moved it.
+		existing.LingerUntil = time.Time{}
 		return existing
 	}
-	angle := float64(hash(character.ID)%628) / 100
-	spawn := w.tuning.Tables.World.SpawnRadius
 	p := &Player{
 		ID: character.ID, Name: character.Name, Class: character.Class,
-		Position: Vec{math.Cos(angle) * spawn, math.Sin(angle) * spawn}, Aim: Vec{1, 0},
+		Position: w.entryPosition(character, now), Aim: Vec{1, 0},
 		Health: w.tuning.MaxHealth, Mana: w.tuning.MaxMana, Alive: true,
+		Materials: w.carriedMaterials(character.State.Materials),
+		Outposts:  append([]string(nil), character.State.Outposts...),
 	}
 	// Until the Phase 2 loadout lands, the equipped weapon is the class starter
 	// row. It is a table reference, never a copy of its stats.
@@ -155,6 +172,155 @@ func (w *World) AddPlayer(character model.Character, now time.Time) *Player {
 	w.players[p.ID] = p
 	w.recordHistory(p, now)
 	return p
+}
+
+// entryPosition decides where a character re-enters the world. A recent save is
+// honoured exactly, so a disconnect costs the session rather than the walk back
+// out. Once the save has gone stale — or the world has moved under it — the
+// character is recalled to safety near where it left off instead.
+func (w *World) entryPosition(character model.Character, now time.Time) Vec {
+	if !character.State.Placed {
+		return w.hubSpawn(character.ID)
+	}
+	position := Vec{character.State.Position.X, character.State.Position.Y}
+	if math.IsNaN(position.X) || math.IsNaN(position.Y) {
+		return w.hubSpawn(character.ID)
+	}
+	if !w.positionExpired(character.State.LastSeen, now) && w.standable(position) {
+		return position
+	}
+	return w.recallDestination(character, position)
+}
+
+// positionExpired reports whether a saved position is too old to honour. An
+// unstamped save is expired: it may be arbitrarily old, and honouring it would
+// drop a character into whatever the world has become since.
+func (w *World) positionExpired(lastSeen, now time.Time) bool {
+	return lastSeen.IsZero() || now.Sub(lastSeen) >= w.tuning.PositionExpiry
+}
+
+// standable rejects a saved position the current world can no longer accept:
+// outside the rim, or inside cover that did not exist when it was written.
+func (w *World) standable(position Vec) bool {
+	limit := w.tuning.WorldRadius - w.tuning.PlayerRadius
+	return position.LengthSq() <= limit*limit && !w.collides(position, w.tuning.PlayerRadius)
+}
+
+// recallDestination picks the safe fixture nearest to where the character left
+// off: any outpost it has unlocked, or the central hub. Outposts have no
+// geography until Phase 3 fills the table, so today this always resolves to the
+// hub — the fallback the design already guarantees exists.
+func (w *World) recallDestination(character model.Character, from Vec) Vec {
+	best := w.hubSpawn(character.ID)
+	nearest := best.Sub(from).LengthSq()
+	for _, id := range character.State.Outposts {
+		outpost, ok := w.tuning.Tables.Outposts[id]
+		if !ok {
+			continue
+		}
+		position := Vec{outpost.Position[0], outpost.Position[1]}
+		if distance := position.Sub(from).LengthSq(); distance < nearest && w.standable(position) {
+			best, nearest = position, distance
+		}
+	}
+	return best
+}
+
+// hubSpawn is the character's deterministic point on the central spawn ring.
+func (w *World) hubSpawn(id string) Vec {
+	angle := float64(hash(id)%628) / 100
+	spawn := w.tuning.Tables.World.SpawnRadius
+	return Vec{math.Cos(angle) * spawn, math.Sin(angle) * spawn}
+}
+
+// carriedMaterials maps a saved inventory through the retirement table. A
+// material the content has since retired resolves to its replacement or to its
+// refund rather than vanishing; only an ID this build has never heard of is
+// dropped, because there is nothing left to honour it with.
+func (w *World) carriedMaterials(saved map[string]int) map[string]int {
+	carried := make(map[string]int, len(saved))
+	ids := make([]string, 0, len(saved))
+	for id := range saved {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	for _, id := range ids {
+		count := saved[id]
+		if count <= 0 {
+			continue
+		}
+		resolved, ok := w.tuning.Tables.Resolve("material", id)
+		if !ok {
+			continue
+		}
+		if resolved.ID != "" {
+			carried[resolved.ID] += count
+			continue
+		}
+		for material, per := range resolved.Refund {
+			carried[material] += per * count
+		}
+	}
+	return carried
+}
+
+// BeginLinger leaves a disconnected player's body in the world until the logout
+// window closes. It stays a valid target the whole time, so dropping the
+// connection is not an escape from a fight.
+func (w *World) BeginLinger(id string, now time.Time) bool {
+	p := w.players[id]
+	if p == nil {
+		return false
+	}
+	p.LingerUntil = now.Add(w.tuning.LogoutLinger)
+	p.Input.Buttons, p.PreviousButtons = 0, 0
+	p.Velocity, p.DashTicksLeft = Vec{}, 0
+	return true
+}
+
+// ExpiredLingering lists the bodies whose logout window has closed, in
+// deterministic order. The caller saves each before removing it.
+func (w *World) ExpiredLingering(now time.Time) []string {
+	expired := make([]string, 0)
+	for _, id := range sortedPlayerIDs(w.players) {
+		if p := w.players[id]; p.Lingering() && !now.Before(p.LingerUntil) {
+			expired = append(expired, id)
+		}
+	}
+	return expired
+}
+
+// StateOf captures what must survive a disconnect. A dead player is saved
+// unplaced, so the next join enters at the hub spawn — the same destination the
+// current instant respawn uses; Phase 4.2 replaces both with a chosen outpost.
+func (w *World) StateOf(id string, now time.Time) (model.CharacterState, bool) {
+	p := w.players[id]
+	if p == nil {
+		return model.CharacterState{}, false
+	}
+	materials := make(map[string]int, len(p.Materials))
+	for material, count := range p.Materials {
+		materials[material] = count
+	}
+	return model.CharacterState{
+		Position:  model.Point{X: p.Position.X, Y: p.Position.Y},
+		Placed:    p.Alive,
+		LastSeen:  now,
+		Materials: materials,
+		Outposts:  append([]string(nil), p.Outposts...),
+	}, true
+}
+
+// States captures every present player's persistable state for one save pass,
+// lingering bodies included — their position is the one that must be kept.
+func (w *World) States(now time.Time) map[string]model.CharacterState {
+	states := make(map[string]model.CharacterState, len(w.players))
+	for _, id := range sortedPlayerIDs(w.players) {
+		if state, ok := w.StateOf(id, now); ok {
+			states[id] = state
+		}
+	}
+	return states
 }
 
 // weapon resolves the player's equipped row from the tables each time it is
@@ -209,7 +375,9 @@ func (w *World) Step(now time.Time) {
 }
 
 func (w *World) stepPlayer(p *Player, now time.Time, dt float64) {
-	if !p.Alive {
+	// A lingering body is a target, not an actor: it holds its ground, takes
+	// damage, and neither moves nor fires until the logout window closes.
+	if !p.Alive || p.Lingering() {
 		p.Velocity, p.DashTicksLeft = Vec{}, 0
 		p.Acknowledged = p.Input.Sequence
 		return

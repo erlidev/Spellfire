@@ -42,10 +42,14 @@ Nothing else in this file can be built cleanly without these. Land them first.
 Component, material, and biome-placement rows are intentionally empty until the phases that consume them; the Sentry row carries its settled contract without the values [economy-death-and-pve.md](docs/game/design/economy-death-and-pve.md#sentry) defers to implementation. Runtime table delivery to a live client stays in Phase 8.
 
 ### 1.2 Persistence & migration
-- [ ] Read `schema_version` and run sequential forward migrations (currently written and never read, [sqlite.go:45-50](server/internal/store/sqlite.go#L45-L50))
-- [ ] Retired-ID → replacement/refund resolution map; never delete an ID ([invariants.md](docs/game/design/invariants.md))
-- [ ] Persist character position, carried inventory, and unlocked outposts; a disconnect currently resets to the hub
-- [ ] Store crafted items as recipe + component IDs, never a stat snapshot
+- [x] Read `schema_version` and run sequential forward migrations — `PRAGMA user_version` for the database schema, `characters.schema_version` for the record shape ([sqlite.go](server/internal/store/sqlite.go), [model.go](server/internal/model/model.go), [architecture.md](docs/architecture.md#persistence-and-migration))
+- [x] Retired-ID → replacement/refund resolution map; never delete an ID ([retired.json](data/tuning/retired.json), `Tables.Resolve` in [tuning.go](server/internal/tuning/tuning.go), [invariants.md](docs/game/design/invariants.md))
+- [x] Persist character position, carried inventory, and unlocked outposts; saved every 15 s, at logout, and at shutdown, restored and re-validated on join ([engine.go](server/internal/game/engine.go), [world.go](server/internal/game/world.go))
+- [x] Store crafted items as recipe + component IDs, never a stat snapshot (`crafted_items`; `model.CraftedItem`)
+- [x] 10 s logout linger: the body stays in the world, killable and unable to act, so disconnecting is not an escape ([session.json](data/tuning/session.json), [engine.go](server/internal/game/engine.go))
+- [x] Saved position expires after 30 min offline and recalls to the nearest unlocked outpost or the hub ([outposts.json](data/tuning/outposts.json), `World.recallDestination`)
+
+Carried materials and unlocked outposts round-trip through the world but nothing mutates them yet: harvesting is Phase 4.1, outpost discovery is Phase 3, and crafting is Phase 2.3. `outposts.json` ships empty, so every recall resolves to the hub until Phase 3 places them. A lingering body is not flagged on the wire, so it reads as a motionless player rather than one visibly logging out — the field belongs with the Phase 1.5 per-entity state expansion.
 
 ### 1.3 Server-side ability/effect framework
 - [ ] One authoritative ability system replacing the ad-hoc branches in `stepPlayer`/`tryFire` ([world.go:161-233](server/internal/game/world.go#L161-L233))
@@ -131,7 +135,7 @@ Component, material, and biome-placement rows are intentionally empty until the 
 - [ ] Material grade by radius, with a convex reward curve pulling veterans to the rim
 - [ ] Biome map crossed with radius (type × grade), plus a biome lookup by position ([world.md](docs/game/design/world.md#biomes-type--grade))
 - [ ] Universal structural materials everywhere; element-aligned materials biome-gated
-- [ ] Multiple outposts with services; discover-to-unlock; per-character unlocked list ([world.md](docs/game/design/world.md#outposts-and-travel))
+- [ ] Multiple outposts with services; discover-to-unlock ([world.md](docs/game/design/world.md#outposts-and-travel)) — the [outposts table](data/tuning/outposts.json) and the per-character unlocked list already exist and need rows plus a discovery trigger
 - [ ] Per-outpost no-PvP radius replacing radius-from-origin protection ([world.md](docs/game/design/world.md#outpost-safety))
 - [ ] Exit invulnerability state on `Player`, broken by the player's own hostile action, with a protocol field so attackers see it too
 - [ ] Mounts/vehicles and the "no fast travel while carrying raw materials" rule
@@ -216,7 +220,7 @@ Component, material, and biome-placement rows are intentionally empty until the 
 - [ ] Contextual prompts in one consistent interaction area covering harvest, loot priority, safe-zone transitions, and actionable failures
 - [ ] Boundary-crossing announcements that teach once and then condense to persistent state
 - [ ] Menu sections still missing: Crafting, World, Squad, Activity ([game-menu.md](docs/game/ui/game-menu.md#information-architecture))
-- [ ] Exit game: explain vulnerability/material/position consequences and confirm when leaving creates risk ([game-menu.md](docs/game/ui/game-menu.md#exit-and-session-actions)) — currently a bare `confirm()` ([main.ts:72](web/src/main.ts#L72))
+- [ ] Exit game: explain vulnerability/material/position consequences and confirm when leaving creates risk ([game-menu.md](docs/game/ui/game-menu.md#exit-and-session-actions)) — still a bare `confirm()` ([main.ts:73](web/src/main.ts#L73)), though it now states the logout linger
 - [ ] Shared network states on every remote-data surface: loading, empty, unavailable/locked, error, stale/conflict, offline/reconnecting ([shared-states.md](docs/game/ui/shared-states.md))
 - [ ] Idempotent retries; success shown only after server confirmation; never claim an unconfirmed spend, craft, pickup, or loadout change
 - [ ] Account overlays: focus trap and restore, Escape handling, pending-submission state, duplicate rejection, field vs. form error placement ([home.md](docs/game/ui/home.md#account-flows))
@@ -250,7 +254,7 @@ Blocking work is tracked with **⚠** above. Resolve each in its owning document
 | Guest play, character slots, naming, first-time class choice | [ui/open-decisions.md](docs/game/ui/open-decisions.md) | Home play panel |
 | Minimap, compass, and permissible world information | [ui/open-decisions.md](docs/game/ui/open-decisions.md) | Phase 3 HUD location module |
 | Floating combat text and target inspection | [ui/open-decisions.md](docs/game/ui/open-decisions.md) | Phase 6 feedback |
-| Logout delay, combat logging, disconnect grace | [ui/open-decisions.md](docs/game/ui/open-decisions.md) | Phase 7 exit and reconnect |
+| Logout/recall *presentation* — the rule itself is settled in [economy-death-and-pve.md](docs/game/design/economy-death-and-pve.md#logging-out) | [ui/open-decisions.md](docs/game/ui/open-decisions.md) | Phase 7 exit and reconnect |
 | Mobile orientation, touch model, assistance limits | [ui/open-decisions.md](docs/game/ui/open-decisions.md) | Phase 7 mobile |
 | Controller support, live-combat screen-reader scope, high-contrast mode | [ui/open-decisions.md](docs/game/ui/open-decisions.md) | Phase 7 accessibility |
 
