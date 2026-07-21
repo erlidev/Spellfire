@@ -215,6 +215,35 @@ func TestLingeringBodyCannotActButCanStillBeKilled(t *testing.T) {
 	}
 }
 
+// Being killed while logged out must cost the position. Reconnecting inside the
+// window re-enters at the hub rather than resuming the corpse where it fell.
+func TestReconnectingToABodyKilledWhileLoggedOutEntersAtTheHub(t *testing.T) {
+	engine := NewEngine(DefaultTuning(), nil)
+	character := placed("p", 1500, -200)
+	now := time.Now()
+
+	client := engine.Join(character, now)
+	engine.Leave(client)
+	engine.mu.Lock()
+	killed := engine.world.players["p"]
+	killed.Health, killed.Alive = 0, false
+	engine.mu.Unlock()
+
+	engine.Join(character, now.Add(time.Second))
+	engine.mu.Lock()
+	back := engine.world.players["p"]
+	engine.mu.Unlock()
+	if !back.Alive || back.Health != engine.world.tuning.MaxHealth {
+		t.Fatalf("rejoined body = alive %v, health %v; the corpse was resumed", back.Alive, back.Health)
+	}
+	if back.Position != engine.world.hubSpawn("p") {
+		t.Fatalf("rejoined at %#v; a death while logged out kept its position", back.Position)
+	}
+	if back.Lingering() {
+		t.Fatal("the replacement body is still inside a logout window")
+	}
+}
+
 func TestReconnectingInsideTheLogoutWindowResumesTheSameBody(t *testing.T) {
 	store := newRecorder()
 	engine := NewEngine(DefaultTuning(), store)
@@ -242,6 +271,33 @@ func TestReconnectingInsideTheLogoutWindowResumesTheSameBody(t *testing.T) {
 	}
 	if _, ok := store.saved("p"); ok {
 		t.Fatal("a resumed session was saved as if it had ended")
+	}
+}
+
+// A reconnected client counts its inputs from zero again. The resumed body must
+// accept them, or the player is stuck in place unable to act.
+func TestAResumedBodyAcceptsInputFromTheNewConnection(t *testing.T) {
+	engine := NewEngine(DefaultTuning(), nil)
+	character := placed("p", 1500, -200)
+	now := time.Now()
+
+	client := engine.Join(character, now)
+	engine.Input("p", protocol.Input{Sequence: 40, Buttons: ButtonRight, AimX: 1})
+	engine.Leave(client)
+	engine.Join(character, now.Add(time.Second))
+
+	engine.Input("p", protocol.Input{Sequence: 1, Buttons: ButtonRight, AimX: 1})
+	engine.mu.Lock()
+	resumed := engine.world.players["p"]
+	engine.mu.Unlock()
+	if resumed.Input.Sequence != 1 {
+		t.Fatalf("input sequence after reconnect = %d; the new connection's input was rejected", resumed.Input.Sequence)
+	}
+
+	before := resumed.Position
+	engine.world.Step(now.Add(time.Second))
+	if engine.world.players["p"].Position == before {
+		t.Fatal("a resumed player could not move")
 	}
 }
 

@@ -151,11 +151,23 @@ func NewWorld(t Tuning) *World {
 }
 
 func (w *World) AddPlayer(character model.Character, now time.Time) *Player {
-	if existing := w.players[character.ID]; existing != nil {
+	if existing := w.players[character.ID]; existing != nil && existing.Alive {
 		// Reconnecting inside the logout window resumes the body that stayed
-		// behind, wherever the fight has since moved it.
+		// behind, wherever the fight has since moved it. The input sequence
+		// belongs to the connection, not the body: a new client counts from
+		// zero again, so the old high-water mark must go or every input it
+		// sends is rejected as stale.
 		existing.LingerUntil = time.Time{}
+		existing.Input, existing.Acknowledged, existing.PreviousButtons = protocol.Input{}, 0, 0
 		return existing
+	} else if existing != nil {
+		// A body killed inside its logout window is a corpse, not a session to
+		// resume: dropping the connection must not park the death at the spot
+		// it happened. The corpse goes and the character re-enters at the hub,
+		// the same place the saved-as-unplaced record would have sent it had
+		// the window closed first.
+		w.RemovePlayer(character.ID)
+		character.State.Placed = false
 	}
 	p := &Player{
 		ID: character.ID, Name: character.Name, Class: character.Class,
