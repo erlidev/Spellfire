@@ -9,6 +9,7 @@ import combatData from "../../data/tuning/combat.json";
 import effectsData from "../../data/tuning/effects.json";
 import componentsData from "../../data/tuning/components.json";
 import elementsData from "../../data/tuning/elements.json";
+import entitiesData from "../../data/tuning/entities.json";
 import gadgetsData from "../../data/tuning/gadgets.json";
 import loadoutData from "../../data/tuning/loadout.json";
 import manifestData from "../../data/tuning/manifest.json";
@@ -26,9 +27,12 @@ export interface Manifest { version: number; schema_version: number }
 export interface SessionTable { logout_linger_seconds: number; position_expiry_seconds: number }
 export interface Simulation { tick_rate: number; send_rate: number; aoi_radius: number; max_rewind_ms: number; interpolation_delay_ms: number }
 export interface DangerBand { id: string; name: string; tier: number; outer_radius: number; material_grade: string; pvp: string; shape: string; summary: string }
-export interface Trees { count: number; seed: number; min_radius: number; radius_spread: number; inner_margin: number; outer_margin: number; spacing: number }
-export interface WorldTable { radius: number; spawn_radius: number; danger_bands: DangerBand[]; trees: Trees }
-export interface PlayerBody { radius: number; speed: number; max_health: number; max_mana: number; mana_regen: number }
+export interface CollisionObject { type: "circle" | "box"; offset_x?: number; offset_y?: number; radius?: number; width?: number; height?: number }
+export interface EntityDefinition { mass: number; max_health: number; collision_objects: CollisionObject[] }
+export interface Trees { count: number; seed: number; radius_spread: number; inner_margin: number; outer_margin: number; spacing: number }
+export interface Fixture { id: string; entity: string; position: [number, number] }
+export interface WorldTable { radius: number; spawn_radius: number; danger_bands: DangerBand[]; trees: Trees; fixtures: Fixture[] }
+export interface PlayerBody { speed: number; max_mana: number; mana_regen: number }
 export interface Dash { distance: number; duration_ms: number; cooldown_ms: number }
 export interface DamageBand { name: string; damage_per_hit: number; target_ttk_seconds: number; ttk_tolerance_seconds: number }
 export interface CombatTable { roles: string[]; dodge_vectors: string[]; player: PlayerBody; dash: Dash; damage_bands: Record<string, DamageBand> }
@@ -61,6 +65,7 @@ export const manifest = manifestData as Manifest;
 export const adminTools = adminToolsData as AdminTools;
 export const simulation = simulationData as Simulation;
 export const session = sessionData as SessionTable;
+export const entityDefinitions = entitiesData as Record<string, EntityDefinition>;
 export const world = worldData as WorldTable;
 export const combat = combatData as CombatTable;
 export const elements = elementsData as Record<string, Element>;

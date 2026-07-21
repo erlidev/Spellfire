@@ -31,13 +31,23 @@ describe("protobuf wire codec", () => {
       ...stringField(18, "squad-a"), ...uintField(19, 4), ...uintField(20, 3), ...uintField(21, 1),
       ...stringField(22, "ring"), ...floatField(23, 120), ...floatField(25, 20), ...floatField(27, .75),
       ...stringField(28, "fire-ring"), ...uintField(29, 1), ...stringField(30, "burn"), ...stringField(30, "slow"),
+      ...floatField(31, -1),
     ];
     const envelope = Uint8Array.from([...uintField(1, 2), ...messageField(5, entity)]).buffer;
     expect(decodeServer(envelope).entities[0]).toMatchObject({
       type: 6, id: "warning", ownerID: "caster", element: "fire", squadID: "squad-a", allegiance: 4,
       telegraphState: 3, invulnerable: true, telegraphShape: "ring", radius: 120, width: 20,
-      telegraphProgress: .75, abilityID: "fire-ring", lingering: true, effectIDs: ["burn", "slow"],
+      telegraphProgress: .75, abilityID: "fire-ring", lingering: true, effectIDs: ["burn", "slow"], mass: -1,
     });
+  });
+
+  it("decodes box collision components", () => {
+    const collider = [
+      ...stringField(1, "wall:0"), ...floatField(2, 10), ...floatField(3, 20), ...stringField(5, "wall"),
+      ...stringField(6, "box"), ...floatField(7, 96), ...floatField(8, 96), ...stringField(9, "wall"),
+    ];
+    const envelope = Uint8Array.from([...uintField(1, 2), ...messageField(6, collider)]).buffer;
+    expect(decodeServer(envelope).colliders[0]).toMatchObject({ id: "wall:0", entityID: "wall", shape: "box", x: 10, y: 20, width: 96, height: 96 });
   });
 
   it("rejects truncated messages", () => {

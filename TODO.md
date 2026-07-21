@@ -15,7 +15,7 @@ explicit note in [`docs/architecture.md`](docs/architecture.md). Update the docs
 
 - [x] Accounts, opaque sessions, bcrypt hashing, character CRUD on SQLite
 - [x] One shared 60 Hz authoritative world; engine serialises joins/inputs/steps
-- [x] Eight-direction normalised movement, circular world bound, static tree collision
+- [x] Eight-direction normalised movement, circular world bound, circle/box world-item collision
 - [x] Universal dash — fixed distance, 2.2 s cooldown, no i-frames ([combat.md](docs/game/design/combat.md#universal-dash), [world.go:187](server/internal/game/world.go#L187))
 - [x] One starter projectile attack per class; mana regen; magazine + reload
 - [x] ~3 s raw TTK from a single 100 HP / 10 dmg / 300 ms tuning band ([combat.md](docs/game/design/combat.md#time-to-kill))
@@ -38,6 +38,7 @@ Nothing else in this file can be built cleanly without these. Land them first.
 - [x] Define the table schema for weapons, spells, components, materials, mobs, biomes ([progression-and-crafting.md](docs/game/design/progression-and-crafting.md#persistence-and-versioning), [tuning.go](server/internal/tuning/tuning.go), [validate.go](server/internal/tuning/validate.go))
 - [x] Load the same tables in the client so the renderer derives from balance data, not TS literals ([tuning.ts](web/src/tuning.ts))
 - [x] Verify the invariant in a test: editing one row changes every dependent item with no character migration ([game/tuning_test.go](server/internal/game/tuning_test.go), [tuning/tuning_test.go](server/internal/tuning/tuning_test.go))
+- [x] Common typed entity base for every materialized world family, with tuning defaults and per-instance overrides; 500-health circular trees and an immovable/undestroyable square wall fixture ([entity.go](server/internal/game/entity.go), [entities.json](data/tuning/entities.json))
 
 Component, material, and biome-placement rows are intentionally empty until the phases that consume them; the Sentry row carries its settled contract without the values [economy-death-and-pve.md](docs/game/design/economy-death-and-pve.md#sentry) defers to implementation. Runtime table delivery to a live client stays in Phase 8.
 
@@ -74,7 +75,7 @@ bounded stream after that reset, so Phase 4 drops and Phase 5 boss consumers can
 cursors without retaining pointers into mutable `World` state.
 
 ### 1.5 Protocol expansion
-- [x] Extend `Entity.Type` beyond `PLAYER`/`PROJECTILE` ([game.proto](proto/game.proto)): mob, drop, node, telegraph, deployable, boss
+- [x] Extend `Entity.Type` beyond `PLAYER`/`PROJECTILE` ([game.proto](proto/game.proto)): mob, drop, node, telegraph, deployable, boss, world item
 - [x] Per-entity fields for element, allegiance/squad, telegraph state/geometry, invulnerability, logout linger, and active effect IDs
 - [x] Add an interact button to the input bitfield and bind it to E / touch Use ([types.ts](web/src/types.ts), [main.ts](web/src/main.ts))
 - [x] Measure snapshot size before and after; enforce and record the bandwidth budget in [`docs/architecture.md`](docs/architecture.md#snapshot-bandwidth-budget)
@@ -153,7 +154,7 @@ Only `player_kill` has a trigger: mob kills, harvesting, and outpost discovery a
 - [ ] Five elements as data and behaviour: Fire, Frost, Storm, Arcane, Earth ([mage.md](docs/game/design/mage.md#elements))
 - [ ] Element secondaries: burn/DoT, light mitigation, blink-on-hit, shields/dispel/teleport, walls/knockback/armor
 - [ ] Author the settled 5 × 4 spell grid — all twenty rows, every element to tier 4 so affinity's 4 + 2 build is satisfiable ([mage.md](docs/game/design/mage.md#the-spell-grid))
-- [ ] Stone wall: dynamic destructible collider, one per caster, placement rules, and lifetime carried in the rewind history ([mage.md](docs/game/design/mage.md#stone-wall)) — sequence after 2.6 so it ships blocking line of sight
+- [ ] Stone wall: dynamic destructible collider, one per caster, placement rules, and lifetime carried in the rewind history ([mage.md](docs/game/design/mage.md#stone-wall)) — common entity and box-collision substrate exists; sequence behavior after 2.6 so it ships blocking line of sight
 - [ ] Spell tiers 1–4 scaling mana, cooldown, telegraph, payoff, and whiff punishment
 - [ ] Staff components alter cast speed, mana cost, projectile/area shape, and element bias without touching the damage band
 - [ ] Test: no spell delivers instant point-and-click damage
@@ -279,7 +280,7 @@ Only `player_kill` has a trigger: mob kills, harvesting, and outpost discovery a
 
 ## Phase 8 — Scale & operations
 
-- [ ] Spatial hash or quadtree replacing the O(players + projectiles + colliders) per-client snapshot path ([snapshot.go](server/internal/game/snapshot.go))
+- [ ] Spatial hash or quadtree replacing the O(players + projectiles + telegraphs + world items) per-client snapshot path ([snapshot.go](server/internal/game/snapshot.go))
 - [ ] Snapshot deltas and an enforced bandwidth budget
 - [ ] Load test against the 100+ concurrent design target ([world.md](docs/game/design/world.md))
 - [ ] Versioned welcome/tuning message so simulation constants can move without desyncing client prediction

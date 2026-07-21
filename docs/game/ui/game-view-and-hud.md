@@ -22,6 +22,8 @@ Plates simplify with zoom and density. Names may truncate if an accessible full-
 
 Fill identifies class/element; outline and overhead ring identify allegiance. Color is never the sole channel.
 
+World items use geometry matching their authoritative collision shape. Damaged destructible items show a compact health bar; full-health terrain stays quiet, and items with undestroyable health show no misleading empty bar.
+
 ## Persistent HUD
 
 | Region | Required state | Behavior |

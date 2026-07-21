@@ -57,7 +57,7 @@ Each row carries at least one counterplay vector — travel time, cast time, tel
 
 ### Stone wall
 
-The wall is the only spell that is not just a table row. It creates the first dynamic, player-authored collider in a world that otherwise holds only static trees, and it carries obligations the rest of the grid does not:
+The wall is the only spell that is not just a table row. It creates the first dynamic, player-authored collider, building on the common entity/collision substrate already used by destructible trees and fixed walls, and it carries obligations the rest of the grid does not:
 
 - It is a **short-lived, destructible** span of segments placed perpendicular to the caster's aim. Damage destroys it early; it expires on its own otherwise.
 - It blocks movement and projectiles. It blocks line of sight once that [exists as a system](combat.md#time-to-kill), and it never blocks ground-placed area effects — the same exemption the [riot shield](gunslinger.md#defense) carries.
@@ -67,4 +67,3 @@ The wall is the only spell that is not just a table row. It creates the first dy
 ## Staffs
 
 Staffs use the shared [slotted-blueprint system](progression-and-crafting.md#slotted-blueprint-crafting), with components such as core, focus, and conduit. Components alter behavior—cast speed, mana cost, projectile or area shape, element bias, or keystone-like tradeoffs—without inflating the damage band.
-

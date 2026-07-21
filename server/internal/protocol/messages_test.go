@@ -94,7 +94,7 @@ func TestEncodeServerCarriesExpandedEntityState(t *testing.T) {
 		Type: EntityTelegraph, ID: "warning", OwnerID: "caster", Element: "fire", SquadID: "squad-a",
 		Allegiance: AllegianceHostile, TelegraphState: TelegraphResolved, Invulnerable: true,
 		TelegraphShape: "cone", Radius: 20, Length: 200, Width: 30, AngleDegrees: 60,
-		TelegraphProgress: .75, AbilityID: "fire-cone", Lingering: true, EffectIDs: []string{"burn", "slow"},
+		TelegraphProgress: .75, AbilityID: "fire-cone", Lingering: true, EffectIDs: []string{"burn", "slow"}, Mass: -1,
 	}
 	encoded := EncodeServer(ServerEnvelope{Kind: ServerSnapshot, Entities: []Entity{entity}})
 	nested := firstMessageField(t, encoded, 5)
@@ -112,13 +112,37 @@ func TestEncodeServerCarriesExpandedEntityState(t *testing.T) {
 		}
 		nested = nested[n:]
 	}
-	for field := protowire.Number(17); field <= 30; field++ {
+	for field := protowire.Number(17); field <= 31; field++ {
 		if fields[field] == 0 {
 			t.Fatalf("expanded field %d missing from wire", field)
 		}
 	}
 	if fields[30] != 2 {
 		t.Fatalf("effect_ids occurrences = %d, want 2", fields[30])
+	}
+}
+
+func TestEncodeServerCarriesBoxCollisionComponent(t *testing.T) {
+	collider := Collider{ID: "wall:0", EntityID: "wall", Kind: "wall", Shape: "box", X: 10, Y: 20, Width: 96, Height: 96}
+	nested := firstMessageField(t, EncodeServer(ServerEnvelope{Kind: ServerSnapshot, Colliders: []Collider{collider}}), 6)
+	fields := map[protowire.Number]bool{}
+	for len(nested) > 0 {
+		number, wire, n := protowire.ConsumeTag(nested)
+		if n < 0 {
+			t.Fatal("bad collision tag")
+		}
+		nested = nested[n:]
+		fields[number] = true
+		n = protowire.ConsumeFieldValue(number, wire, nested)
+		if n < 0 {
+			t.Fatalf("bad collision field %d", number)
+		}
+		nested = nested[n:]
+	}
+	for _, field := range []protowire.Number{1, 2, 3, 5, 6, 7, 8, 9} {
+		if !fields[field] {
+			t.Fatalf("collision field %d missing", field)
+		}
 	}
 }
 
@@ -199,7 +223,9 @@ func bandwidthFixture(players, projectiles, telegraphs, colliders int, expanded 
 		})
 	}
 	for index := 0; index < colliders; index++ {
-		message.Colliders = append(message.Colliders, Collider{ID: fmt.Sprintf("tree-%03d", index), X: float32(index * 31), Y: float32(index * -23), Radius: 37, Kind: "tree"})
+		id := fmt.Sprintf("tree-%03d", index)
+		message.Entities = append(message.Entities, Entity{Type: EntityWorldItem, ID: id, ClassName: "tree", X: float32(index * 31), Y: float32(index * -23), Health: 500, MaxHealth: 500, Alive: true, Mass: -1, Radius: 37, Allegiance: AllegianceNeutral})
+		message.Colliders = append(message.Colliders, Collider{ID: id + ":0", EntityID: id, X: float32(index * 31), Y: float32(index * -23), Radius: 37, Kind: "tree", Shape: "circle"})
 	}
 	return message
 }

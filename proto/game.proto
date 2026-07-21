@@ -38,7 +38,7 @@ message ServerEnvelope {
   uint64 server_time_ms = 3;
   string player_id = 4;
   repeated Entity entities = 5;
-  repeated StaticCollider colliders = 6;
+  repeated CollisionObject colliders = 6;
   string error = 7; // on LOADOUT this is a rejection reason, not a terminal error
   uint64 echoed_client_time_ms = 8;
   Loadout loadout = 9;        // WELCOME and LOADOUT only, never on a snapshot
@@ -63,6 +63,7 @@ message Entity {
     TELEGRAPH = 6;
     DEPLOYABLE = 7;
     BOSS = 8;
+    WORLD_ITEM = 9;
   }
   enum Allegiance {
     ALLEGIANCE_UNKNOWN = 0;
@@ -107,12 +108,17 @@ message Entity {
   string ability_id = 28;
   bool lingering = 29;
   repeated string effect_ids = 30;
+  float mass = 31; // -1 means immovable
 }
 
-message StaticCollider {
+message CollisionObject {
   string id = 1;
   float x = 2;
   float y = 3;
   float radius = 4;
   string kind = 5;
+  string shape = 6;
+  float width = 7;
+  float height = 8;
+  string entity_id = 9;
 }

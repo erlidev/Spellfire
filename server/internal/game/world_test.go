@@ -14,8 +14,23 @@ func testWorld() (*World, time.Time) {
 	tuning := DefaultTuning()
 	tuning.AOIRadius = 500
 	world := NewWorld(tuning)
-	world.colliders = nil
+	world.worldItems = nil
 	return world, time.Unix(1_700_000_000, 0)
+}
+
+func testWorldItem(w *World, id, kind string, position Vec, object CollisionObject) *Entity {
+	objects := []CollisionObject{object}
+	entity := newEntity(id, kind, position, w.tuning.Tables.Entities[kind], EntityOverrides{CollisionObjects: &objects})
+	return &entity
+}
+
+func worldItemByKind(w *World, kind string) *Entity {
+	for _, item := range w.worldItems {
+		if item.Kind == kind {
+			return item
+		}
+	}
+	return nil
 }
 
 // starterWeapon and starterAbility resolve what a fresh character of the class
@@ -131,7 +146,7 @@ func TestDashCarriesPlayerAgainstMovementInput(t *testing.T) {
 
 func TestPlayerCannotMoveThroughTreeOrWorldBoundary(t *testing.T) {
 	w, now := testWorld()
-	w.colliders = []Collider{{ID: "tree", Kind: "tree", Position: Vec{50, 0}, Radius: 20}}
+	w.worldItems = []*Entity{testWorldItem(w, "tree", "tree", Vec{50, 0}, CollisionObject{Type: CollisionCircle, Radius: 20})}
 	p := addTestPlayer(w, "p", model.Gunslinger, Vec{}, now)
 	for i := 1; i <= 30; i++ {
 		w.ApplyInput(p.ID, protocol.Input{Sequence: uint32(i), Buttons: ButtonRight, AimX: 1})
@@ -253,17 +268,20 @@ func TestResourcesEnforceReloadAndManaCosts(t *testing.T) {
 	}
 }
 
-func TestSnapshotAppliesAreaOfInterestAndIncludesColliders(t *testing.T) {
+func TestSnapshotAppliesAreaOfInterestAndIncludesWorldItems(t *testing.T) {
 	w, now := testWorld()
 	addTestPlayer(w, "viewer", model.Gunslinger, Vec{}, now)
 	addTestPlayer(w, "near", model.Mage, Vec{100, 0}, now)
 	addTestPlayer(w, "far", model.Mage, Vec{800, 0}, now)
-	w.colliders = []Collider{{ID: "near-tree", Kind: "tree", Position: Vec{200, 0}, Radius: 30}, {ID: "far-tree", Kind: "tree", Position: Vec{900, 0}, Radius: 30}}
+	w.worldItems = []*Entity{
+		testWorldItem(w, "near-tree", "tree", Vec{200, 0}, CollisionObject{Type: CollisionCircle, Radius: 30}),
+		testWorldItem(w, "far-tree", "tree", Vec{900, 0}, CollisionObject{Type: CollisionCircle, Radius: 30}),
+	}
 	snapshot := w.SnapshotFor("viewer", now, protocol.ServerSnapshot)
-	if len(snapshot.Entities) != 2 {
+	if len(snapshot.Entities) != 3 || snapshot.Entities[2].ID != "near-tree" || snapshot.Entities[2].Type != protocol.EntityWorldItem {
 		t.Fatalf("AOI entities = %#v", snapshot.Entities)
 	}
-	if len(snapshot.Colliders) != 1 || snapshot.Colliders[0].ID != "near-tree" {
+	if len(snapshot.Colliders) != 1 || snapshot.Colliders[0].EntityID != "near-tree" {
 		t.Fatalf("AOI colliders = %#v", snapshot.Colliders)
 	}
 }

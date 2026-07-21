@@ -18,6 +18,7 @@ func (t *Tables) validate() error {
 	t.validateAdminTools(problems)
 	t.validateSimulation(problems)
 	t.validateSession(problems)
+	t.validateEntities(problems)
 	t.validateWorld(problems)
 	t.validateOutposts(problems)
 	t.validateCombat(problems)
@@ -37,6 +38,50 @@ func (t *Tables) validate() error {
 	t.validateRetired(problems)
 	t.validateProjectileKinds(problems)
 	return problems.err()
+}
+
+func (t *Tables) validateEntities(r *report) {
+	for _, id := range sortedKeys(t.Entities) {
+		definition := t.Entities[id]
+		prefix := fmt.Sprintf("entities: %s", id)
+		r.require(definition.Mass == -1 || definition.Mass >= 0, "%s mass must be -1 or non-negative", prefix)
+		r.require(definition.MaxHealth == -1 || definition.MaxHealth > 0, "%s max_health must be -1 or positive", prefix)
+		for index, object := range definition.CollisionObjects {
+			objectPrefix := fmt.Sprintf("%s collision object %d", prefix, index)
+			switch object.Type {
+			case "circle":
+				r.require(object.Radius > 0, "%s circle needs a positive radius", objectPrefix)
+				r.require(object.Width == 0 && object.Height == 0, "%s circle must not declare width or height", objectPrefix)
+			case "box":
+				r.require(object.Width > 0 && object.Height > 0, "%s box needs positive width and height", objectPrefix)
+				r.require(object.Radius == 0, "%s box must not declare a radius", objectPrefix)
+			default:
+				r.addf("%s has unsupported type %q", objectPrefix, object.Type)
+			}
+		}
+	}
+	for _, id := range []string{"player", "projectile", "telegraph", "tree", "wall"} {
+		_, ok := t.Entities[id]
+		r.require(ok, "entities: missing required definition %q", id)
+	}
+	if player, ok := t.Entities["player"]; ok {
+		r.require(len(player.CollisionObjects) == 1 && player.CollisionObjects[0].Type == "circle", "entities: player must have one circle collision object")
+	}
+	if tree, ok := t.Entities["tree"]; ok {
+		r.require(len(tree.CollisionObjects) == 1 && tree.CollisionObjects[0].Type == "circle", "entities: tree must have one circle collision object")
+	}
+	if projectile, ok := t.Entities["projectile"]; ok {
+		r.require(len(projectile.CollisionObjects) == 1 && projectile.CollisionObjects[0].Type == "circle", "entities: projectile must have one circle collision object")
+	}
+	if telegraph, ok := t.Entities["telegraph"]; ok {
+		r.require(len(telegraph.CollisionObjects) == 0, "entities: telegraph must not have collision objects")
+	}
+	if wall, ok := t.Entities["wall"]; ok {
+		r.require(len(wall.CollisionObjects) == 1 && wall.CollisionObjects[0].Type == "box", "entities: wall must have one box collision object")
+		if len(wall.CollisionObjects) == 1 {
+			r.require(wall.CollisionObjects[0].Width == wall.CollisionObjects[0].Height, "entities: wall collision box must be square")
+		}
+	}
 }
 
 func (t *Tables) validateAdminTools(r *report) {
@@ -202,18 +247,46 @@ func (t *Tables) validateWorld(r *report) {
 	r.require(w.PvPRadius() >= w.SafeRadius(), "world: PvP-protected radius must contain the safe radius")
 	trees := w.Trees
 	r.require(trees.Count >= 0, "world: trees.count must not be negative")
-	r.require(trees.MinRadius > 0 && trees.RadiusSpread > 0, "world: trees need a positive min_radius and radius_spread")
+	r.require(trees.RadiusSpread > 0, "world: trees need a positive radius_spread")
 	r.require(trees.Spacing >= 0, "world: trees.spacing must not be negative")
 	r.require(w.SafeRadius()+trees.InnerMargin+trees.OuterMargin < w.Radius, "world: tree margins leave no room between the safe radius and the rim")
+	seenFixtures := map[string]bool{}
+	generatedTreeIDs := map[string]bool{}
+	for index := 0; index < trees.Count; index++ {
+		generatedTreeIDs[fmt.Sprintf("tree-%02d", index)] = true
+	}
+	for index, fixture := range w.Fixtures {
+		r.require(fixture.ID != "", "world: fixture %d has no id", index)
+		r.require(!seenFixtures[fixture.ID], "world: duplicate fixture id %q", fixture.ID)
+		seenFixtures[fixture.ID] = true
+		r.require(!generatedTreeIDs[fixture.ID], "world: fixture id %q collides with a generated tree id", fixture.ID)
+		definition, ok := t.Entities[fixture.Entity]
+		r.require(ok, "world: fixture %q references unknown entity %q", fixture.ID, fixture.Entity)
+		distance := math.Hypot(fixture.Position[0], fixture.Position[1])
+		r.require(distance+entityExtent(definition) <= w.Radius, "world: fixture %q extends outside the world", fixture.ID)
+	}
+}
+
+func entityExtent(definition EntityDefinition) float64 {
+	extent := 0.0
+	for _, object := range definition.CollisionObjects {
+		local := math.Hypot(object.OffsetX, object.OffsetY)
+		switch object.Type {
+		case "circle":
+			local += object.Radius
+		case "box":
+			local += math.Hypot(object.Width/2, object.Height/2)
+		}
+		extent = math.Max(extent, local)
+	}
+	return extent
 }
 
 func (t *Tables) validateCombat(r *report) {
 	c := t.Combat
 	r.require(len(c.Roles) > 0, "combat: roles must not be empty")
 	r.require(len(c.DodgeVectors) > 0, "combat: dodge_vectors must not be empty")
-	r.require(c.Player.Radius > 0, "combat: player.radius must be positive")
 	r.require(c.Player.Speed > 0, "combat: player.speed must be positive")
-	r.require(c.Player.MaxHealth > 0, "combat: player.max_health must be positive")
 	r.require(c.Player.MaxMana > 0, "combat: player.max_mana must be positive")
 	r.require(c.Player.ManaRegen > 0, "combat: player.mana_regen must be positive")
 	r.require(c.Dash.Distance > 0, "combat: dash.distance must be positive")

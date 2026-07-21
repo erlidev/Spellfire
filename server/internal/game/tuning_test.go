@@ -70,7 +70,7 @@ func damageDealt(t *testing.T, tables *tuning.Tables, shooter, target model.Char
 	balance := FromTables(tables)
 	balance.AOIRadius = 500
 	world := NewWorld(balance)
-	world.colliders = nil
+	world.worldItems = nil
 	now := time.Unix(1_700_000_000, 0)
 	attacker := world.AddPlayer(shooter, now)
 	victim := world.AddPlayer(target, now)

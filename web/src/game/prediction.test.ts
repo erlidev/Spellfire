@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { combat, simulation } from "../tuning";
+import { combat, entityDefinitions, simulation } from "../tuning";
 import { Buttons, type Entity } from "../types";
 import { Predictor } from "./prediction";
 
@@ -17,6 +17,7 @@ function entity(overrides: Partial<Entity> = {}): Entity {
     health: 100, maxHealth: 100, mana: 10, acknowledgedInput: 0, alive: true, ownerID: "",
     element: "", squadID: "", allegiance: 1, telegraphState: 0, invulnerable: false, telegraphShape: "",
     radius: 0, length: 0, width: 0, angleDegrees: 0, telegraphProgress: 0, abilityID: "", lingering: false, effectIDs: [],
+    mass: 1,
     ...overrides,
   };
 }
@@ -53,8 +54,32 @@ describe("client prediction", () => {
   });
 
   it("uses authoritative tree circles during prediction", () => {
-    const predictor = new Predictor(); predictor.initialize(entity()); predictor.setColliders([{ id: "tree", kind: "tree", x: 42, y: 0, radius: 20 }]);
+    const predictor = new Predictor(); predictor.initialize(entity()); predictor.setColliders([{ id: "tree:0", entityID: "tree", kind: "tree", shape: "circle", x: 42, y: 0, radius: 20, width: 0, height: 0 }]);
     for (let index = 0; index < 20; index++) predictor.step(Buttons.Right, 1, 0, 0, index * tickMS);
-    expect(predictor.x).toBeLessThanOrEqual(42 - 20 - combat.player.radius + 0.01);
+    const playerRadius = entityDefinitions.player!.collision_objects[0]!.radius!;
+    expect(predictor.x).toBeLessThanOrEqual(42 - 20 - playerRadius + 0.01);
+  });
+
+  it("uses authoritative box collision and replaces removed components", () => {
+    const predictor = new Predictor(); predictor.initialize(entity());
+    predictor.setColliders([{ id: "wall:0", entityID: "wall", kind: "wall", shape: "box", x: 42, y: 0, radius: 0, width: 20, height: 80 }]);
+    for (let index = 0; index < 20; index++) predictor.step(Buttons.Right, 1, 0, 0, index * tickMS);
+    const blocked = predictor.x;
+    predictor.setColliders([]);
+    for (let index = 20; index < 40; index++) predictor.step(Buttons.Right, 1, 0, 0, index * tickMS);
+    expect(predictor.x).toBeGreaterThan(blocked);
+  });
+
+  it("uses an authoritative per-entity radius override", () => {
+    const predictor = new Predictor(); predictor.initialize(entity({ radius: 30 }));
+    predictor.setColliders([{ id: "tree:0", entityID: "tree", kind: "tree", shape: "circle", x: 60, y: 0, radius: 10, width: 0, height: 0 }]);
+    for (let index = 0; index < 20; index++) predictor.step(Buttons.Right, 1, 0, 0, index * tickMS);
+    expect(predictor.x).toBeLessThanOrEqual(20.01);
+  });
+
+  it("does not predict movement for an immovable entity override", () => {
+    const predictor = new Predictor(); predictor.initialize(entity({ mass: -1 }));
+    predictor.step(Buttons.Right | Buttons.Dash, 1, 0, 0, 0);
+    expect(predictor.x).toBe(0); expect(predictor.y).toBe(0);
   });
 });

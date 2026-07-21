@@ -137,7 +137,10 @@ func TestRecallPrefersTheNearestUnlockedOutpost(t *testing.T) {
 func TestUnplacedAndUnusableSavesFallBackToTheHubSpawn(t *testing.T) {
 	world := NewWorld(DefaultTuning())
 	spawn := world.tuning.Tables.World.SpawnRadius
-	tree := world.colliders[0]
+	tree := worldItemByKind(world, "tree")
+	if tree == nil {
+		t.Fatal("generated world has no tree")
+	}
 	cases := map[string]model.Character{
 		"never placed":      {ID: "a", Name: "A", Class: model.Gunslinger, SchemaVersion: model.CharacterSchemaVersion},
 		"outside the rim":   placed("b", world.tuning.WorldRadius+500, 0),
@@ -203,7 +206,7 @@ func TestStateOfCapturesCarriedStateAndUnplacesTheDead(t *testing.T) {
 // ground, stops acting, and stays killable until the logout window closes.
 func TestLingeringBodyCannotActButCanStillBeKilled(t *testing.T) {
 	world := NewWorld(DefaultTuning())
-	world.colliders = nil
+	world.worldItems = nil
 	now := time.Unix(1_700_000_000, 0)
 	victim := world.AddPlayer(placed("victim", 1500, 0), now)
 	attacker := world.AddPlayer(placed("attacker", 1400, 0), now)

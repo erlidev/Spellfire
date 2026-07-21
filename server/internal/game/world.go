@@ -47,14 +47,15 @@ type Tuning struct {
 
 func FromTables(tables *tuning.Tables) Tuning {
 	body, dash := tables.Combat.Player, tables.Combat.Dash
+	player := newEntity("", "player", Vec{}, tables.Entities["player"], EntityOverrides{})
 	return Tuning{
 		Tables:   tables,
 		TickRate: tables.Simulation.TickRate, SendRate: tables.Simulation.SendRate,
 		AOIRadius: tables.Simulation.AOIRadius, MaxRewind: tables.Simulation.MaxRewind(),
 		WorldRadius: tables.World.Radius, SafeRadius: tables.World.SafeRadius(), PvPRadius: tables.World.PvPRadius(),
-		PlayerRadius: body.Radius, PlayerSpeed: body.Speed,
+		PlayerRadius: player.circleRadius(), PlayerSpeed: body.Speed,
 		DashDistance: dash.Distance, DashDuration: dash.Duration(), DashCooldown: dash.Cooldown(),
-		MaxHealth: body.MaxHealth, MaxMana: body.MaxMana, ManaRegen: body.ManaRegen,
+		MaxHealth: player.MaxHealth, MaxMana: body.MaxMana, ManaRegen: body.ManaRegen,
 		LogoutLinger: tables.Session.LogoutLinger(), PositionExpiry: tables.Session.PositionExpiry(),
 	}
 }
@@ -76,8 +77,9 @@ func (v Vec) Normalized() Vec {
 }
 
 type Player struct {
-	ID, AccountID, Name string
-	Class               model.Class
+	Entity
+	AccountID, Name string
+	Class           model.Class
 	// Loadout is the equipped set — content IDs by slot, resolved against the
 	// tables on every use, never a copy of what those rows hold. Selected is
 	// the action-bar slot the use button acts through, bound to 1–6.
@@ -96,9 +98,8 @@ type Player struct {
 	// SquadID is empty until Phase 5 forms squads. It lives on the actor now so
 	// snapshots and future attribution code do not need a protocol migration.
 	SquadID                         string
-	Position, Velocity, Aim         Vec
-	Health, Mana                    float64
-	Alive                           bool
+	Aim                             Vec
+	Mana                            float64
 	Input                           protocol.Input
 	Acknowledged                    uint32
 	PreviousButtons                 uint32
@@ -144,18 +145,12 @@ func (t Tuning) dashSpeed() float64 {
 }
 
 type Projectile struct {
-	ID, OwnerID, Kind, Element string
-	Position, Velocity         Vec
-	Radius, Damage, Remaining  float64
+	Entity
+	OwnerID, Element  string
+	Damage, Remaining float64
 	// Effects are the statuses a hit applies, carried from the ability that
 	// launched it so the resolver needs no lookup back to the shooter's kit.
 	Effects []string
-}
-
-type Collider struct {
-	ID, Kind string
-	Position Vec
-	Radius   float64
 }
 
 type historySample struct {
@@ -169,8 +164,11 @@ type World struct {
 	players     map[string]*Player
 	projectiles map[string]*Projectile
 	telegraphs  map[string]*Telegraph
-	colliders   []Collider
-	history     map[string][]historySample
+	// worldItems is a dense component-friendly slice for authored fixtures and
+	// procedural terrain. Dead entries remain as inactive slots, avoiding map
+	// iteration and compaction in hot collision paths.
+	worldItems []*Entity
+	history    map[string][]historySample
 	// occupants maps an account to the one character it has a body for, so the
 	// one-body-per-account rule is a lookup rather than a scan of the world.
 	occupants       map[string]string
@@ -186,7 +184,7 @@ func NewWorld(t Tuning) *World {
 	}
 	return &World{
 		tuning: t, players: make(map[string]*Player), projectiles: make(map[string]*Projectile), telegraphs: make(map[string]*Telegraph),
-		colliders: generateTrees(t.Tables.World), history: make(map[string][]historySample),
+		worldItems: generateWorldItems(t.Tables), history: make(map[string][]historySample),
 		occupants: make(map[string]string), combat: newCombatLog(combatEventCapacity),
 	}
 }
@@ -233,9 +231,9 @@ func (w *World) AddPlayer(character model.Character, now time.Time) *Player {
 	// never enters the world holding a set the rules would refuse.
 	equipped, respec := loadout.Resolve(w.tuning.Tables, character.Class, ledger, character.State.Loadout)
 	p := &Player{
-		ID: character.ID, AccountID: character.AccountID, Name: character.Name, Class: character.Class,
-		Position: w.entryPosition(character, now), Aim: Vec{1, 0},
-		Health: w.tuning.MaxHealth, Mana: w.tuning.MaxMana, Alive: true,
+		Entity:    newEntity(character.ID, "player", w.entryPosition(character, now), w.tuning.Tables.Entities["player"], EntityOverrides{}),
+		AccountID: character.AccountID, Name: character.Name, Class: character.Class,
+		Aim: Vec{1, 0}, Mana: w.tuning.MaxMana,
 		Materials:       w.carriedMaterials(character.State.Materials),
 		Outposts:        append([]string(nil), character.State.Outposts...),
 		Cooldowns:       make(map[string]time.Time),
@@ -520,7 +518,8 @@ func (w *World) Respawn(id string, now time.Time) bool {
 		return false
 	}
 	p.Position, p.Velocity, p.DashDirection, p.DashTicksLeft = Vec{}, Vec{}, Vec{}, 0
-	p.Health, p.Mana, p.Alive = w.tuning.MaxHealth, w.tuning.MaxMana, true
+	p.restoreHealth()
+	p.Mana = w.tuning.MaxMana
 	if weapon, ok := w.weapon(p); ok {
 		p.Ammo = weapon.MagazineSize
 	}
@@ -587,7 +586,7 @@ func (w *World) stepPlayer(p *Player, now time.Time, dt float64) {
 	// A stun suppresses everything the body does; a root only takes its
 	// movement, leaving it able to aim, reload, and act.
 	stunned, rooted := w.stunned(p), w.rooted(p)
-	if p.Input.Buttons&ButtonDash != 0 && p.PreviousButtons&ButtonDash == 0 && !now.Before(p.DashReady) && !stunned && !rooted {
+	if p.Input.Buttons&ButtonDash != 0 && p.PreviousButtons&ButtonDash == 0 && !now.Before(p.DashReady) && !stunned && !rooted && p.Mass >= 0 {
 		p.DashDirection = move
 		if p.DashDirection.LengthSq() == 0 {
 			p.DashDirection = p.Aim
@@ -596,6 +595,8 @@ func (w *World) stepPlayer(p *Player, now time.Time, dt float64) {
 		p.DashReady = now.Add(w.tuning.DashCooldown)
 	}
 	switch knocked, knockedBack := w.knockback(p); {
+	case p.Mass < 0:
+		p.Velocity, p.DashTicksLeft = Vec{}, 0
 	case knockedBack:
 		// A knockback overrides input and cancels an in-flight dash: control
 		// beats mobility for as long as it runs.
@@ -608,7 +609,7 @@ func (w *World) stepPlayer(p *Player, now time.Time, dt float64) {
 	default:
 		p.Velocity = move.Mul(w.tuning.PlayerSpeed * p.SpeedMultiplier * w.movementScale(p))
 	}
-	p.Position = w.moveCircle(p.Position, p.Velocity.Mul(dt), w.tuning.PlayerRadius)
+	p.Position = w.moveCircle(p.Position, p.Velocity.Mul(dt), p.circleRadius())
 	if p.Class == model.Mage {
 		p.Mana = math.Min(w.tuning.MaxMana, p.Mana+w.tuning.ManaRegen*dt)
 	}
@@ -638,6 +639,9 @@ func (w *World) stepProjectiles(now time.Time, dt float64) {
 	for _, id := range ids {
 		p := w.projectiles[id]
 		p.Remaining -= dt
+		if p.Mass < 0 {
+			p.Velocity = Vec{}
+		}
 		if p.Remaining <= 0 || w.advanceProjectile(p, dt, now, false) {
 			delete(w.projectiles, id)
 		}
@@ -646,8 +650,9 @@ func (w *World) stepProjectiles(now time.Time, dt float64) {
 
 func (w *World) advanceProjectile(projectile *Projectile, dt float64, at time.Time, historical bool) bool {
 	from, to := projectile.Position, projectile.Position.Add(projectile.Velocity.Mul(dt))
-	for _, tree := range w.colliders {
-		if segmentCircle(from, to, tree.Position, projectile.Radius+tree.Radius) {
+	for _, item := range w.worldItems {
+		if item.intersectsSegment(from, to, projectile.circleRadius()) {
+			item.TakeDamage(projectile.Damage)
 			return true
 		}
 	}
@@ -660,7 +665,7 @@ func (w *World) advanceProjectile(projectile *Projectile, dt float64, at time.Ti
 		if historical {
 			position = w.positionAt(id, at)
 		}
-		if !segmentCircle(from, to, position, projectile.Radius+w.tuning.PlayerRadius) {
+		if !segmentCircle(from, to, position, projectile.circleRadius()+target.circleRadius()) {
 			continue
 		}
 		// PvP protection covers the hit whole: no damage, and no status either.
@@ -688,11 +693,10 @@ func (w *World) damage(target *Player, amount float64, sourceID string, at time.
 	if amount <= 0 {
 		return
 	}
-	applied := math.Min(target.Health, amount)
-	target.Health = math.Max(0, target.Health-applied)
-	w.combat.recordDamage(at, sourceID, target.ID, applied, target.Health == 0)
-	if target.Health == 0 {
-		target.Alive, target.Velocity, target.Effects, target.DashTicksLeft = false, Vec{}, nil, 0
+	applied, destroyed := target.TakeDamage(amount)
+	w.combat.recordDamage(at, sourceID, target.ID, applied, destroyed)
+	if destroyed {
+		target.Velocity, target.Effects, target.DashTicksLeft = Vec{}, nil, 0
 		w.cancelTelegraphs(target.ID, at)
 		w.creditKill(target)
 	}
@@ -777,8 +781,8 @@ func (w *World) moveCircle(from, delta Vec, radius float64) Vec {
 }
 
 func (w *World) collides(position Vec, radius float64) bool {
-	for _, collider := range w.colliders {
-		if position.Sub(collider.Position).LengthSq() < math.Pow(radius+collider.Radius, 2) {
+	for _, item := range w.worldItems {
+		if item.intersectsCircle(position, radius) {
 			return true
 		}
 	}
@@ -821,34 +825,48 @@ func (w *World) positionAt(id string, at time.Time) Vec {
 	return samples[len(samples)-1].position
 }
 
-// generateTrees lays out deterministic static cover from the world table. The
-// same seed and margins produce the same forest on every process start.
-func generateTrees(world tuning.World) []Collider {
-	trees, safeRadius := world.Trees, world.SafeRadius()
+// generateWorldItems materializes authored fixtures first, then lays out
+// deterministic trees around them. A dense slice is both faster than an
+// interface collection now and shaped like a future ECS component column.
+func generateWorldItems(tables *tuning.Tables) []*Entity {
+	world, trees := tables.World, tables.World.Trees
+	result := make([]*Entity, 0, len(world.Fixtures)+trees.Count)
+	for _, fixture := range world.Fixtures {
+		entity := newEntity(fixture.ID, fixture.Entity, Vec{fixture.Position[0], fixture.Position[1]}, tables.Entities[fixture.Entity], EntityOverrides{})
+		result = append(result, &entity)
+	}
+	safeRadius := world.SafeRadius()
 	// Trees start InnerMargin outside the safe radius and stop OuterMargin
 	// short of the rim, so neither the hub nor the world edge is walled in.
 	reach := world.Radius - safeRadius - trees.OuterMargin
 	if trees.Count <= 0 || reach <= trees.InnerMargin || trees.RadiusSpread < 1 {
-		return nil
+		return result
 	}
-	result := make([]Collider, 0, trees.Count)
+	base := tables.Entities["tree"]
+	baseEntity := newEntity("", "tree", Vec{}, base, EntityOverrides{})
+	baseRadius := baseEntity.circleRadius()
 	state := trees.Seed
-	for len(result) < trees.Count {
+	placed := 0
+	for placed < trees.Count {
 		state = state*6364136223846793005 + 1442695040888963407
 		a := float64(state%62832) / 10000
 		state = state*6364136223846793005 + 1442695040888963407
 		r := safeRadius + trees.InnerMargin + float64(state%uint64(reach))
 		position := Vec{math.Cos(a) * r, math.Sin(a) * r}
-		radius := trees.MinRadius + float64(state%uint64(trees.RadiusSpread))
+		radius := baseRadius + float64(state%uint64(trees.RadiusSpread))
 		clear := true
 		for _, other := range result {
-			if position.Sub(other.Position).LengthSq() < math.Pow(radius+other.Radius+trees.Spacing, 2) {
+			if other.intersectsCircle(position, radius+trees.Spacing) {
 				clear = false
 				break
 			}
 		}
 		if clear {
-			result = append(result, Collider{ID: fmt.Sprintf("tree-%02d", len(result)), Kind: "tree", Position: position, Radius: radius})
+			objects := collisionObjectsFromTuning(base.CollisionObjects)
+			objects[0].Radius = radius
+			entity := newEntity(fmt.Sprintf("tree-%02d", placed), "tree", position, base, EntityOverrides{CollisionObjects: &objects})
+			result = append(result, &entity)
+			placed++
 		}
 	}
 	return result

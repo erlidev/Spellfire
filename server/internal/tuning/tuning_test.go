@@ -62,6 +62,9 @@ func TestShippedTablesLoadAndValidate(t *testing.T) {
 	if len(tables.AdminTools.Spawnables) == 0 || len(tables.AdminTools.Attributes) == 0 {
 		t.Fatalf("admin tools = %#v", tables.AdminTools)
 	}
+	if tree, wall := tables.Entities["tree"], tables.Entities["wall"]; tree.MaxHealth != 500 || wall.Mass != -1 || wall.MaxHealth != -1 || wall.CollisionObjects[0].Width != wall.CollisionObjects[0].Height {
+		t.Fatalf("world entity definitions = tree %#v wall %#v", tree, wall)
+	}
 	for _, class := range []string{"gunslinger", "mage"} {
 		weapon, ok := tables.StarterWeapon(class)
 		if !ok {
@@ -157,7 +160,7 @@ func TestStarterItemsHitTheDesignTimeToKill(t *testing.T) {
 	for _, class := range []string{"gunslinger", "mage"} {
 		weapon, _ := tables.StarterWeapon(class)
 		ability, _ := tables.WeaponAbility(weapon)
-		hits := math.Ceil(tables.Combat.Player.MaxHealth / tables.BandDamage(ability.DamageBand))
+		hits := math.Ceil(tables.Entities["player"].MaxHealth / tables.BandDamage(ability.DamageBand))
 		seconds := (hits - 1) * ability.Interval().Seconds()
 		if math.Abs(seconds-band.TargetTTKSeconds) > band.TTKToleranceSeconds {
 			t.Fatalf("%s raw TTK is %.2fs, outside %.2f±%.2fs", class, seconds, band.TargetTTKSeconds, band.TTKToleranceSeconds)
@@ -173,6 +176,22 @@ func TestValidationRejectsBrokenTables(t *testing.T) {
 		{
 			name: "unsupported schema version", file: "manifest.json", want: "forward migration",
 			mutate: func(document map[string]any) { document["schema_version"] = 99.0 },
+		},
+		{
+			name: "unknown collision type", file: "entities.json", want: "unsupported type",
+			mutate: func(document map[string]any) {
+				document["tree"].(map[string]any)["collision_objects"].([]any)[0].(map[string]any)["type"] = "capsule"
+			},
+		},
+		{
+			name: "invalid health sentinel", file: "entities.json", want: "max_health must be -1 or positive",
+			mutate: func(document map[string]any) { document["wall"].(map[string]any)["max_health"] = -2.0 },
+		},
+		{
+			name: "wall is not square", file: "entities.json", want: "must be square",
+			mutate: func(document map[string]any) {
+				document["wall"].(map[string]any)["collision_objects"].([]any)[0].(map[string]any)["height"] = 64.0
+			},
 		},
 		{
 			name: "invalid admin email", file: "admins.json", want: "not a valid account email",

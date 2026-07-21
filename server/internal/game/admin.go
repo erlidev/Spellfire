@@ -75,10 +75,11 @@ func (w *World) adminProjectile(row tuning.AdminSpawnable, position Vec, values 
 	}
 	direction := adminDirection(values)
 	projectile := &Projectile{
-		ID: fmt.Sprintf("p-%d", w.nextProjectile), Kind: ability.Projectile.Kind, Element: row.Element,
-		Position: position, Velocity: direction.Mul(ability.Projectile.Speed), Radius: ability.Projectile.Radius,
-		Damage: w.tuning.Tables.BandDamage(ability.DamageBand), Remaining: ability.Projectile.LifeSeconds, Effects: ability.Effects,
+		Element: row.Element,
+		Damage:  w.tuning.Tables.BandDamage(ability.DamageBand), Remaining: ability.Projectile.LifeSeconds, Effects: ability.Effects,
 	}
+	projectile.Entity = w.newProjectileEntity(fmt.Sprintf("p-%d", w.nextProjectile), position, direction.Mul(ability.Projectile.Speed), ability.Projectile.Radius)
+	projectile.Kind = ability.Projectile.Kind
 	w.nextProjectile++
 	w.projectiles[projectile.ID] = projectile
 	return nil

@@ -14,15 +14,16 @@ import (
 // the action commits, so a caster cannot rotate or drag an already-readable
 // danger area over a player during the windup.
 type Telegraph struct {
-	ID, OwnerID, AbilityID, Element string
-	Position, Direction             Vec
-	Shape                           string
-	Radius, Length, Width           float64
-	AngleDegrees                    float64
-	StartedAt, PendingUntil         time.Time
-	ActiveUntil, ExpiresAt          time.Time
-	Delivered                       bool
-	ability                         tuning.Ability
+	Entity
+	OwnerID, AbilityID, Element string
+	Direction                   Vec
+	Shape                       string
+	Radius, Length, Width       float64
+	AngleDegrees                float64
+	StartedAt, PendingUntil     time.Time
+	ActiveUntil, ExpiresAt      time.Time
+	Delivered                   bool
+	ability                     tuning.Ability
 }
 
 func (t *Telegraph) state(at time.Time) uint64 {
@@ -61,8 +62,9 @@ func (w *World) startTelegraph(ownerID, element string, origin, direction Vec, a
 	}
 	direction = direction.Normalized()
 	telegraph := &Telegraph{
-		ID: fmt.Sprintf("t-%d", w.nextTelegraph), OwnerID: ownerID, AbilityID: ability.ID, Element: element,
-		Position: origin, Direction: direction, Shape: row.Shape,
+		Entity:  newEntity(fmt.Sprintf("t-%d", w.nextTelegraph), "telegraph", origin, w.tuning.Tables.Entities["telegraph"], EntityOverrides{}),
+		OwnerID: ownerID, AbilityID: ability.ID, Element: element,
+		Direction: direction, Shape: row.Shape,
 		Radius: row.Radius, Length: row.Length, Width: row.Width, AngleDegrees: row.AngleDegrees,
 		StartedAt: now, PendingUntil: now.Add(ability.Windup()), ability: ability,
 	}

@@ -47,3 +47,6 @@ Outposts are fixed world fixtures: indestructible, uncapturable, and unaffectabl
 
 World presentation is defined in [`visual-direction.md`](visual-direction.md#world-rendering); hauling consequences live in [`economy-death-and-pve.md`](economy-death-and-pve.md).
 
+## World items and fixtures
+
+World geometry uses the common entity contract: mass, health, and one or more circle/box collision objects come from tuning and become mutable per-instance state. Procedural trees are immovable circular entities with 500 health and can be destroyed by projectiles. Fixed fixture rows place singular authored geography; the initial fixture is one square, immovable, undestroyable wall. These substrate fixtures are not the Mage's Stone wall, which remains a short-lived, player-authored and destructible spell with rewind-history obligations.

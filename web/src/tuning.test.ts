@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { abilities, abilityFor, adminTools, combat, damageBandFor, dangerBandAt, damageOf, projectileByKind, pvpRadius, resourceMax, safeRadius, simulation, spells, starterWeapon, weapons, world } from "./tuning";
+import { abilities, abilityFor, adminTools, combat, damageBandFor, dangerBandAt, damageOf, entityDefinitions, projectileByKind, pvpRadius, resourceMax, safeRadius, simulation, spells, starterWeapon, weapons, world } from "./tuning";
 
 describe("shared tuning tables", () => {
   it("derives the safety radii from the danger band rows rather than literals", () => {
@@ -54,6 +54,12 @@ describe("shared tuning tables", () => {
 
   it("keeps the snapshot rate an even divisor of the tick rate", () => {
     expect(simulation.tick_rate % simulation.send_rate).toBe(0);
+  });
+
+  it("shares entity mass, health, and collision defaults with the server", () => {
+    expect(entityDefinitions.tree).toMatchObject({ mass: -1, max_health: 500, collision_objects: [{ type: "circle" }] });
+    expect(entityDefinitions.wall).toMatchObject({ mass: -1, max_health: -1, collision_objects: [{ type: "box", width: 96, height: 96 }] });
+    expect(world.fixtures).toContainEqual({ id: "wall-00", entity: "wall", position: [650, 0] });
   });
 
   it("exposes only live developer-mode entity families through data", () => {

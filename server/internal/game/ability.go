@@ -112,14 +112,15 @@ func (w *World) spawnRewoundProjectile(p *Player, ability tuning.Ability, now ti
 	}
 	origin := w.positionAt(p.ID, shotAt)
 	projectile := &Projectile{
-		ID: fmt.Sprintf("p-%d", w.nextProjectile), OwnerID: p.ID, Kind: ability.Projectile.Kind,
-		Element: w.playerElement(p),
-		Radius:  ability.Projectile.Radius, Damage: w.tuning.Tables.BandDamage(ability.DamageBand),
+		OwnerID:   p.ID,
+		Element:   w.playerElement(p),
+		Damage:    w.tuning.Tables.BandDamage(ability.DamageBand),
 		Remaining: ability.Projectile.LifeSeconds, Effects: ability.Effects,
-		Velocity: p.Aim.Mul(ability.Projectile.Speed),
 	}
+	projectile.Entity = w.newProjectileEntity(fmt.Sprintf("p-%d", w.nextProjectile), Vec{}, p.Aim.Mul(ability.Projectile.Speed), ability.Projectile.Radius)
+	projectile.Kind = ability.Projectile.Kind
 	w.nextProjectile++
-	projectile.Position = origin.Add(p.Aim.Mul(w.tuning.PlayerRadius + ability.Projectile.Radius + 2))
+	projectile.Position = origin.Add(p.Aim.Mul(p.circleRadius() + ability.Projectile.Radius + 2))
 	step := time.Second / time.Duration(w.tuning.TickRate)
 	for at := shotAt; at.Before(now); at = at.Add(step) {
 		duration := step
@@ -142,12 +143,17 @@ func (w *World) deliverAt(ownerID string, origin, direction Vec, ability tuning.
 		return
 	}
 	projectile := &Projectile{
-		ID: fmt.Sprintf("p-%d", w.nextProjectile), OwnerID: ownerID, Kind: ability.Projectile.Kind, Element: element,
-		Radius: ability.Projectile.Radius, Damage: w.tuning.Tables.BandDamage(ability.DamageBand),
+		OwnerID: ownerID, Element: element,
+		Damage:    w.tuning.Tables.BandDamage(ability.DamageBand),
 		Remaining: ability.Projectile.LifeSeconds, Effects: ability.Effects,
-		Velocity: direction.Mul(ability.Projectile.Speed),
 	}
+	projectile.Entity = w.newProjectileEntity(fmt.Sprintf("p-%d", w.nextProjectile), Vec{}, direction.Mul(ability.Projectile.Speed), ability.Projectile.Radius)
+	projectile.Kind = ability.Projectile.Kind
 	w.nextProjectile++
-	projectile.Position = origin.Add(direction.Mul(w.tuning.PlayerRadius + ability.Projectile.Radius + 2))
+	ownerRadius := w.tuning.PlayerRadius
+	if owner := w.players[ownerID]; owner != nil {
+		ownerRadius = owner.circleRadius()
+	}
+	projectile.Position = origin.Add(direction.Mul(ownerRadius + ability.Projectile.Radius + 2))
 	w.projectiles[projectile.ID] = projectile
 }

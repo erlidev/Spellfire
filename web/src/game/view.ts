@@ -2,7 +2,7 @@ import { Application, Container, Graphics, Text } from "pixi.js";
 // Install eval-free polyfills so WebGL works under a CSP without 'unsafe-eval'. Side-effect import; must run before the renderer is created.
 import "pixi.js/unsafe-eval";
 import { projectileByKind, safeRadius, simulation, world } from "../tuning";
-import type { Collider, Entity, ServerMessage } from "../types";
+import type { Entity, ServerMessage } from "../types";
 import { Allegiance, EntityType } from "../types";
 import type { Predictor } from "./prediction";
 import { telegraphStyle } from "./telegraph";
@@ -22,12 +22,10 @@ export class GameView {
   readonly app = new Application();
   private world = new Container();
   private ground = new Graphics();
-  private colliderLayer = new Container();
   private telegraphLayer = new Container();
   private entityLayer = new Container();
   private actors = new Map<string, ActorView>();
   private samples = new Map<string, Sample[]>();
-  private colliders = new Map<string, Collider>();
   private localID = "";
   private predictor?: Predictor;
   private latestEntities = new Map<string, Entity>();
@@ -36,7 +34,7 @@ export class GameView {
   async init(host: HTMLElement): Promise<void> {
     await this.app.init({ resizeTo: window, antialias: true, backgroundColor: colors.ground, resolution: Math.min(2, devicePixelRatio), autoDensity: true });
     host.replaceChildren(this.app.canvas);
-    this.world.addChild(this.ground, this.colliderLayer, this.telegraphLayer, this.entityLayer);
+    this.world.addChild(this.ground, this.telegraphLayer, this.entityLayer);
     this.app.stage.addChild(this.world);
     this.app.ticker.add(() => this.renderFrame());
     this.initialized = true;
@@ -46,10 +44,6 @@ export class GameView {
 
   apply(message: ServerMessage): void {
     this.localID = message.playerID || this.localID;
-    for (const collider of message.colliders) {
-      if (this.colliders.has(collider.id)) continue;
-      this.colliders.set(collider.id, collider); this.colliderLayer.addChild(this.createTree(collider));
-    }
     const receivedAt = performance.now();
     const present = new Set<string>();
     for (const entity of message.entities) {
@@ -107,13 +101,6 @@ export class GameView {
     this.ground.circle(0, 0, world.radius).stroke({ color: colors.rim, width: 8, alpha: .8 });
   }
 
-  private createTree(collider: Collider): Container {
-    const root = new Container(); root.position.set(collider.x, collider.y);
-    const shape = new Graphics().rect(-6, 4, 12, collider.radius).fill(colors.trunk).stroke({ color: colors.outline, width: 4 });
-    shape.circle(-collider.radius * .3, 0, collider.radius * .72).circle(collider.radius * .35, 2, collider.radius * .67).circle(0, -collider.radius * .42, collider.radius * .72).fill(colors.tree).stroke({ color: colors.outline, width: 4 });
-    root.addChild(shape); return root;
-  }
-
   private drawEntity(entity: Entity, self: boolean): void {
     let view = this.actors.get(entity.id);
     if (view && view.type !== entity.type) { this.removeActor(entity.id); view = undefined; }
@@ -128,6 +115,10 @@ export class GameView {
       view.health.clear().roundRect(-27, -39, 54, 7, 3).fill(colors.outline).roundRect(-25, -37, 50 * Math.max(0, entity.health / Math.max(1, entity.maxHealth)), 3, 2).fill(entity.health > 30 ? 0x65d89d : 0xff7f73);
       view.label.text = entity.lingering ? `${entity.name} · offline` : entity.name;
       if (entity.invulnerable) view.health.circle(0, 0, 27).stroke({ color: colors.safe, width: 3, alpha: .9 });
+    } else if (entity.type === EntityType.WorldItem && entity.maxHealth > 0) {
+      const ratio = Math.max(0, entity.health / entity.maxHealth);
+      view.health.clear();
+      if (ratio < 1) view.health.roundRect(-27, -49, 54, 7, 3).fill(colors.outline).roundRect(-25, -47, 50 * ratio, 3, 2).fill(ratio > .3 ? 0x65d89d : 0xff7f73);
     } else if (entity.type === EntityType.Mob) {
       view.weapon.rotation = Math.atan2(entity.aimY, entity.aimX);
     } else if (entity.type === EntityType.Telegraph) {
@@ -159,6 +150,13 @@ export class GameView {
       body.rect(-15, -15, 30, 30).fill(colors.gunner).stroke({ color: outline, width: 4 });
     } else if (entity.type === EntityType.Boss) {
       body.moveTo(0, -42).lineTo(38, -18).lineTo(32, 34).lineTo(-32, 34).lineTo(-38, -18).closePath().fill(0x657186).stroke({ color: outline, width: 7 });
+    } else if (entity.type === EntityType.WorldItem && entity.className === "tree") {
+      const radius = entity.radius;
+      body.rect(-6, 4, 12, radius).fill(colors.trunk).stroke({ color: colors.outline, width: 4 });
+      body.circle(-radius * .3, 0, radius * .72).circle(radius * .35, 2, radius * .67).circle(0, -radius * .42, radius * .72).fill(colors.tree).stroke({ color: colors.outline, width: 4 });
+    } else if (entity.type === EntityType.WorldItem && entity.className === "wall") {
+      body.rect(-entity.length / 2, -entity.width / 2, entity.length, entity.width).fill(0x68717d).stroke({ color: colors.outline, width: 5 });
+      body.moveTo(-entity.length / 2, 0).lineTo(entity.length / 2, 0).moveTo(0, -entity.width / 2).lineTo(0, entity.width / 2).stroke({ color: 0x8d98a6, width: 2 });
     } else if (entity.className === "mage") {
       body.circle(0, 0, 20).fill(elementColors[entity.element] ?? colors.mage).stroke({ color: outline, width: 4 });
       body.moveTo(-15, 14).lineTo(0, -23).lineTo(15, 14).closePath().fill(0xd54e64).stroke({ color: colors.outline, width: 3 });

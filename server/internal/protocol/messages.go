@@ -37,6 +37,7 @@ const (
 	EntityTelegraph  uint64 = 6
 	EntityDeployable uint64 = 7
 	EntityBoss       uint64 = 8
+	EntityWorldItem  uint64 = 9
 )
 
 const (
@@ -109,13 +110,17 @@ type Entity struct {
 	AbilityID         string
 	Lingering         bool
 	EffectIDs         []string
+	Mass              float32
 }
 
 type Collider struct {
-	ID     string
-	X, Y   float32
-	Radius float32
-	Kind   string
+	ID            string
+	X, Y          float32
+	Radius        float32
+	Kind          string
+	Shape         string
+	Width, Height float32
+	EntityID      string
 }
 
 type ServerEnvelope struct {
@@ -402,6 +407,7 @@ func encodeEntity(e Entity) []byte {
 	for _, effectID := range e.EffectIDs {
 		out = appendString(out, 30, effectID)
 	}
+	out = appendFloat(out, 31, e.Mass)
 	return out
 }
 
@@ -412,6 +418,10 @@ func encodeCollider(c Collider) []byte {
 	out = appendFloat(out, 3, c.Y)
 	out = appendFloat(out, 4, c.Radius)
 	out = appendString(out, 5, c.Kind)
+	out = appendString(out, 6, c.Shape)
+	out = appendFloat(out, 7, c.Width)
+	out = appendFloat(out, 8, c.Height)
+	out = appendString(out, 9, c.EntityID)
 	return out
 }
 

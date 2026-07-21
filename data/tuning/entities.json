@@ -1,0 +1,35 @@
+{
+  "player": {
+    "mass": 1,
+    "max_health": 100,
+    "collision_objects": [
+      { "type": "circle", "radius": 20 }
+    ]
+  },
+  "projectile": {
+    "mass": 0,
+    "max_health": -1,
+    "collision_objects": [
+      { "type": "circle", "radius": 1 }
+    ]
+  },
+  "telegraph": {
+    "mass": 0,
+    "max_health": -1,
+    "collision_objects": []
+  },
+  "tree": {
+    "mass": -1,
+    "max_health": 500,
+    "collision_objects": [
+      { "type": "circle", "radius": 27 }
+    ]
+  },
+  "wall": {
+    "mass": -1,
+    "max_health": -1,
+    "collision_objects": [
+      { "type": "box", "width": 96, "height": 96 }
+    ]
+  }
+}

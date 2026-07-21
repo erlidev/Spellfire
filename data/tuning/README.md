@@ -33,6 +33,10 @@ Rules, from [`invariants.md`](../../docs/game/design/invariants.md) and
 - **One telegraph grammar.** Windups emit an authoritative telegraph entity
   whose circle, cone, line, or ring geometry and phase durations come from the
   ability row. Owner type never changes the wire or renderer path.
+- **One entity contract.** `entities.json` supplies typed mass, maximum health,
+  and local circle/box collision defaults. Runtime instances copy those values
+  and may override mutable state or geometry without mutating the table. `-1`
+  means immovable mass or undestroyable health.
 
 ## Versioning
 
@@ -52,8 +56,9 @@ Rules, from [`invariants.md`](../../docs/game/design/invariants.md) and
 | `admin_tools.json` | Developer-mode spawn catalog, editable per-entity fields, and bounded player overrides |
 | `simulation.json` | Tick/send rates, AOI radius, rewind window, interpolation delay |
 | `session.json` | Logout linger window and saved-position expiry |
-| `world.json` | World radius, spawn radius, danger bands, procedural tree parameters |
-| `combat.json` | Role and dodge-vector vocabularies, player body, universal dash, damage bands |
+| `entities.json` | Common entity mass, health, and collision-object defaults |
+| `world.json` | World radius, spawn radius, danger bands, procedural tree parameters, fixed fixtures |
+| `combat.json` | Role and dodge-vector vocabularies, player movement/resources, universal dash, damage bands |
 | `loadout.json` | Slot counts per kind and the Mage affinity multiplier |
 | `progression.json` | XP curve, the XP each source awards, and the starter-kit draw size |
 | `elements.json` | The five Mage elements and their roles |

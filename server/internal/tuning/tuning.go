@@ -21,7 +21,7 @@ import (
 // SchemaVersion is the table shape this build understands. Bump it only when a
 // table changes shape, and add the matching forward migration; a plain balance
 // edit bumps Manifest.Version instead and needs no code change.
-const SchemaVersion = 9
+const SchemaVersion = 10
 
 type Manifest struct {
 	// Version is the content revision. Bump it on any balance edit; a change
@@ -120,15 +120,44 @@ type DangerBand struct {
 	Summary       string  `json:"summary"`
 }
 
+// CollisionObject is one entity-local collision primitive. Keeping geometry
+// as typed data instead of behavior makes the definition directly reusable by
+// a later ECS collision component. Offset is relative to the entity position.
+type CollisionObject struct {
+	Type    string  `json:"type"`
+	OffsetX float64 `json:"offset_x"`
+	OffsetY float64 `json:"offset_y"`
+	Radius  float64 `json:"radius"`
+	Width   float64 `json:"width"`
+	Height  float64 `json:"height"`
+}
+
+// EntityDefinition contains immutable defaults copied into each runtime
+// entity. Runtime state is deliberately not a pointer back to this row: health,
+// mass, and collision geometry can be overridden or changed per instance.
+type EntityDefinition struct {
+	Mass             float64           `json:"mass"`
+	MaxHealth        float64           `json:"max_health"`
+	CollisionObjects []CollisionObject `json:"collision_objects"`
+}
+
 // Trees drives the deterministic procedural cover generator.
 type Trees struct {
 	Count        int     `json:"count"`
 	Seed         uint64  `json:"seed"`
-	MinRadius    float64 `json:"min_radius"`
 	RadiusSpread float64 `json:"radius_spread"`
 	InnerMargin  float64 `json:"inner_margin"`
 	OuterMargin  float64 `json:"outer_margin"`
 	Spacing      float64 `json:"spacing"`
+}
+
+// Fixture places one entity archetype at a fixed world coordinate. Procedural
+// families such as trees remain generator-driven; singular geography such as
+// an authored wall belongs here.
+type Fixture struct {
+	ID       string     `json:"id"`
+	Entity   string     `json:"entity"`
+	Position [2]float64 `json:"position"`
 }
 
 type World struct {
@@ -136,6 +165,7 @@ type World struct {
 	SpawnRadius float64      `json:"spawn_radius"`
 	DangerBands []DangerBand `json:"danger_bands"`
 	Trees       Trees        `json:"trees"`
+	Fixtures    []Fixture    `json:"fixtures"`
 }
 
 // BandAt resolves the danger band containing a distance from the world origin.
@@ -171,9 +201,7 @@ func (w World) outerRadiusWhile(states ...string) float64 {
 }
 
 type PlayerBody struct {
-	Radius    float64 `json:"radius"`
 	Speed     float64 `json:"speed"`
-	MaxHealth float64 `json:"max_health"`
 	MaxMana   float64 `json:"max_mana"`
 	ManaRegen float64 `json:"mana_regen"`
 }
@@ -555,6 +583,7 @@ type Tables struct {
 	AdminTools  AdminTools
 	Simulation  Simulation
 	Session     Session
+	Entities    map[string]EntityDefinition
 	World       World
 	Outposts    map[string]Outpost
 	Combat      Combat
@@ -786,6 +815,7 @@ func Parse(fsys fs.FS) (*Tables, error) {
 		{"admin_tools.json", &tables.AdminTools},
 		{"simulation.json", &tables.Simulation},
 		{"session.json", &tables.Session},
+		{"entities.json", &tables.Entities},
 		{"world.json", &tables.World},
 		{"outposts.json", &tables.Outposts},
 		{"combat.json", &tables.Combat},

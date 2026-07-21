@@ -22,7 +22,7 @@ func worldFrom(t *testing.T, files fstest.MapFS) (*World, time.Time) {
 	balance := FromTables(tables)
 	balance.AOIRadius = 500
 	world := NewWorld(balance)
-	world.colliders = nil
+	world.worldItems = nil
 	return world, time.Unix(1_700_000_000, 0)
 }
 

@@ -46,10 +46,16 @@
   "trees": {
     "count": 72,
     "seed": 1592614637,
-    "min_radius": 27,
     "radius_spread": 17,
     "inner_margin": 130,
     "outer_margin": 260,
     "spacing": 55
-  }
+  },
+  "fixtures": [
+    {
+      "id": "wall-00",
+      "entity": "wall",
+      "position": [650, 0]
+    }
+  ]
 }
