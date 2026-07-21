@@ -10,8 +10,12 @@ services:
     pull_policy: build
     container_name: spellfire
     restart: unless-stopped
-    ports:
-      - "${SPELLFIRE_PORT:-8080}:8080"
+    # No host port published. The reverse proxy reaches the server over the
+    # shared external `proxy` network at http://spellfire:8080.
+    expose:
+      - "8080"
+    networks:
+      - proxy
     environment:
       # Override any of these in a .env file next to this compose file.
       SPELLFIRE_ADDRESS: ":8080"
@@ -24,6 +28,12 @@ services:
     volumes:
       # Named volume keeps the SQLite account/character data across restarts.
       - spellfire-data:/data
+
+networks:
+  # Pre-existing network shared with the reverse proxy. Create it once with
+  # `docker network create proxy` if it does not already exist.
+  proxy:
+    external: true
 
 volumes:
   spellfire-data:

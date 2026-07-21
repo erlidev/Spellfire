@@ -24,9 +24,10 @@ make build  # production frontend and Go binary
 Requirements: Docker with Compose v2. No local Go/Node toolchain needed — the image builds the client and server itself.
 
 ```sh
+docker network create proxy   # once, if it doesn't exist
 docker compose up --build -d
 ```
 
-Open `http://localhost:8080`. Set `SPELLFIRE_PORT` to publish on a different host port (e.g. `SPELLFIRE_PORT=8099 docker compose up -d`). Account and character data persists in the `spellfire-data` volume; simulation tuning is configurable via the environment variables in `compose.yaml`. Stop with `docker compose down` (add `-v` to also drop the database volume).
+The container publishes no host port; it joins the external `proxy` network and exposes port 8080 there, so a reverse proxy on the same network reaches it at `http://spellfire:8080` (forward both HTTP and the `/ws` WebSocket upgrade). To run standalone without a proxy, add a `ports:` mapping to the service in `compose.yaml`. Account and character data persists in the `spellfire-data` volume; simulation tuning is configurable via the environment variables in `compose.yaml`. Stop with `docker compose down` (add `-v` to also drop the database volume).
 
 See [the architecture](./docs/architecture.md), [game design](./docs/gdd.md), and [user-facing specification](./docs/user-facing-specification.md).

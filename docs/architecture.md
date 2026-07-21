@@ -134,7 +134,9 @@ Tick and send rates must remain evenly compatible for predictable snapshot pacin
 
 Inside the image the binary is `/app/spellfire-server`, static assets live at `/app/web` (`SPELLFIRE_WEB_ROOT`), and the SQLite database is written to `/data/spellfire.db` (`SPELLFIRE_DATABASE`) on a mounted volume so account/character data survives container replacement. A `HEALTHCHECK` polls `/api/health`.
 
-`compose.yaml` builds the image, maps `${SPELLFIRE_PORT:-8080}` to container port 8080, persists `/data` in the `spellfire-data` named volume, and exposes the tuning environment variables (overridable through a sibling `.env` file). Run with `docker compose up --build -d`.
+`compose.yaml` builds the image, persists `/data` in the `spellfire-data` named volume, and exposes the tuning environment variables (overridable through a sibling `.env` file). Run with `docker compose up --build -d`.
+
+The service publishes no host port. It attaches to an external Docker network named `proxy` (create it once with `docker network create proxy`) and only `expose`s port 8080 on that network, so a reverse proxy sharing the `proxy` network reaches the server at `http://spellfire:8080`. The proxy must forward both plain HTTP (`/`, `/api/...`) and WebSocket upgrades (`/ws`) to that address. To run standalone without a proxy, add a `ports:` mapping back to the service.
 
 ## Testing and verification
 
