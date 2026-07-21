@@ -4,6 +4,7 @@ See @README.md for a project overview. Use `/docs/architecture.md` for codebase 
 
 ## Project-Specific Instructions
 - Update the `/docs` with the appropriate information every time a feature or refactor is implemented.
+- Use `TODO.md` to keep track of the current progress on game implementation.
 
 ## Conventions
 - Follow the idioms and best practices of the libraries/frameworks actually in use in this repo.
