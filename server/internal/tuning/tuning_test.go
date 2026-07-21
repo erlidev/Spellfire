@@ -61,8 +61,8 @@ func TestShippedTablesLoadAndValidate(t *testing.T) {
 		if !ok {
 			t.Fatalf("no starter weapon for %s", class)
 		}
-		if _, ok := tables.Shot(weapon); !ok {
-			t.Fatalf("starter weapon %q does not resolve to a shot", weapon.ID)
+		if _, ok := tables.WeaponAbility(weapon); !ok {
+			t.Fatalf("starter weapon %q does not resolve to an ability", weapon.ID)
 		}
 	}
 }
@@ -83,40 +83,41 @@ func TestEditingOneBandRowMovesEveryDependentItem(t *testing.T) {
 	}
 	for _, class := range []string{"gunslinger", "mage"} {
 		weapon, _ := before.StarterWeapon(class)
-		original, _ := before.Shot(weapon)
-		edited, ok := after.Shot(weapon)
+		original, _ := before.WeaponAbility(weapon)
+		edited, ok := after.WeaponAbility(weapon)
 		if !ok {
 			t.Fatalf("%s starter weapon stopped resolving after the edit", class)
 		}
-		if original.Damage != 10 || edited.Damage != 25 {
-			t.Fatalf("%s damage did not follow the band row: %g -> %g", class, original.Damage, edited.Damage)
+		if before.BandDamage(original.DamageBand) != 10 || after.BandDamage(edited.DamageBand) != 25 {
+			t.Fatalf("%s damage did not follow the band row", class)
 		}
-		// The item row itself was untouched: only the band it points at moved.
-		if after.Weapons[weapon.ID].DamageBand != before.Weapons[weapon.ID].DamageBand {
-			t.Fatalf("%s weapon row changed; the band edit should have been enough", class)
+		// The ability row itself was untouched: only the band it points at moved.
+		if after.Abilities[edited.ID].DamageBand != before.Abilities[original.ID].DamageBand {
+			t.Fatalf("%s ability row changed; the band edit should have been enough", class)
 		}
 	}
 }
 
-// The mage's staff carries no combat numbers of its own, so retuning the spell
-// it casts retunes the staff.
-func TestEditingASpellRowMovesTheStaffThatCastsIt(t *testing.T) {
-	files := edit(t, shipped(t), "spells.json", func(document map[string]any) {
-		bolt := document["fire-bolt"].(map[string]any)
-		bolt["mana_cost"] = 30.0
-		bolt["cast_interval_ms"] = 500.0
+// The mage's staff carries no combat numbers of its own, and neither does the
+// spell it casts: both delegate to one ability row, so retuning that row retunes
+// the staff.
+func TestEditingAnAbilityRowMovesTheStaffThatReachesIt(t *testing.T) {
+	files := edit(t, shipped(t), "abilities.json", func(document map[string]any) {
+		cast := document["fire-bolt-cast"].(map[string]any)
+		cast["cost"].(map[string]any)["amount"] = 30.0
+		cast["interval_ms"] = 500.0
 	})
 	after, err := Parse(files)
 	if err != nil {
 		t.Fatalf("edited tables rejected: %v", err)
 	}
 	staff, _ := after.StarterWeapon("mage")
-	shot, ok := after.Shot(staff)
+	ability, ok := after.WeaponAbility(staff)
 	if !ok {
 		t.Fatal("staff stopped resolving")
 	}
-	if shot.ManaCost != 30 || shot.Interval.Milliseconds() != 500 {
-		t.Fatalf("staff did not follow its spell: %#v", shot)
+	if ability.Cost.Amount != 30 || ability.Interval().Milliseconds() != 500 {
+		t.Fatalf("staff did not follow its ability: %#v", ability)
 	}
 }
 
@@ -127,9 +128,9 @@ func TestStarterItemsHitTheDesignTimeToKill(t *testing.T) {
 	band := tables.Combat.DamageBands["standard"]
 	for _, class := range []string{"gunslinger", "mage"} {
 		weapon, _ := tables.StarterWeapon(class)
-		shot, _ := tables.Shot(weapon)
-		hits := math.Ceil(tables.Combat.Player.MaxHealth / shot.Damage)
-		seconds := (hits - 1) * shot.Interval.Seconds()
+		ability, _ := tables.WeaponAbility(weapon)
+		hits := math.Ceil(tables.Combat.Player.MaxHealth / tables.BandDamage(ability.DamageBand))
+		seconds := (hits - 1) * ability.Interval().Seconds()
 		if math.Abs(seconds-band.TargetTTKSeconds) > band.TTKToleranceSeconds {
 			t.Fatalf("%s raw TTK is %.2fs, outside %.2f±%.2fs", class, seconds, band.TargetTTKSeconds, band.TTKToleranceSeconds)
 		}
@@ -146,21 +147,92 @@ func TestValidationRejectsBrokenTables(t *testing.T) {
 			mutate: func(document map[string]any) { document["schema_version"] = 99.0 },
 		},
 		{
-			name: "damaging spell without a dodge vector", file: "spells.json", want: "counterplay vector",
+			name: "damaging ability without a dodge vector", file: "abilities.json", want: "counterplay vector",
 			mutate: func(document map[string]any) {
-				document["fire-bolt"].(map[string]any)["dodge_vector"] = ""
+				document["fire-bolt-cast"].(map[string]any)["dodge_vector"] = ""
 			},
 		},
 		{
-			name: "instant spell damage", file: "spells.json", want: "no travel speed",
+			name: "dodge vector the simulation does not deliver", file: "abilities.json", want: "does not yet deliver",
 			mutate: func(document map[string]any) {
-				document["fire-bolt"].(map[string]any)["projectile"].(map[string]any)["speed"] = 0.0
+				document["fire-bolt-cast"].(map[string]any)["dodge_vector"] = "cast_time"
 			},
 		},
 		{
-			name: "unknown damage band", file: "weapons.json", want: "unknown damage band",
+			name: "instant ability damage", file: "abilities.json", want: "no travel speed",
 			mutate: func(document map[string]any) {
-				document["starter-rifle"].(map[string]any)["damage_band"] = "nonexistent"
+				document["fire-bolt-cast"].(map[string]any)["projectile"].(map[string]any)["speed"] = 0.0
+			},
+		},
+		{
+			name: "unknown damage band", file: "abilities.json", want: "unknown damage band",
+			mutate: func(document map[string]any) {
+				document["rifle-shot"].(map[string]any)["damage_band"] = "nonexistent"
+			},
+		},
+		{
+			name: "a windup the simulation does not run", file: "abilities.json", want: "Phase 1.6",
+			mutate: func(document map[string]any) {
+				document["fire-bolt-cast"].(map[string]any)["windup_ms"] = 400.0
+			},
+		},
+		{
+			name: "an ability charging a resource nothing holds", file: "abilities.json", want: "unknown cost kind",
+			mutate: func(document map[string]any) {
+				document["rifle-shot"].(map[string]any)["cost"].(map[string]any)["kind"] = "stamina"
+			},
+		},
+		{
+			name: "a magazine weapon whose ability spends something else", file: "abilities.json", want: "holds a magazine but its ability",
+			mutate: func(document map[string]any) {
+				document["rifle-shot"].(map[string]any)["cost"] = map[string]any{"kind": "mana", "amount": 5.0}
+			},
+		},
+		{
+			name: "an ability applying an effect that does not exist", file: "abilities.json", want: "unknown effect",
+			mutate: func(document map[string]any) {
+				document["rifle-shot"].(map[string]any)["effects"] = []any{"ghost-burn"}
+			},
+		},
+		{
+			name: "an effect kind the simulation cannot run", file: "effects.json", want: "cannot run",
+			mutate: func(document map[string]any) {
+				document["confusion"] = map[string]any{"name": "Confusion", "kind": "confuse", "duration_ms": 1000.0, "stacking": "refresh"}
+			},
+		},
+		{
+			name: "a slow that is really a root", file: "effects.json", want: "a full stop is a root",
+			mutate: func(document map[string]any) {
+				document["glue"] = map[string]any{"name": "Glue", "kind": "slow", "duration_ms": 1000.0, "stacking": "refresh", "speed_multiplier": 0.0}
+			},
+		},
+		{
+			name: "a burn authoring damage outside the band", file: "effects.json", want: "unknown damage band",
+			mutate: func(document map[string]any) {
+				document["scorch"] = map[string]any{
+					"name": "Scorch", "kind": "burn", "duration_ms": 3000.0, "stacking": "refresh",
+					"tick_ms": 500.0, "damage_fraction": 0.2, "damage_band": "invented",
+				}
+			},
+		},
+		{
+			name: "an effect carrying a field its kind does not use", file: "effects.json", want: "declares slow's speed_multiplier",
+			mutate: func(document map[string]any) {
+				document["snare"] = map[string]any{
+					"name": "Snare", "kind": "root", "duration_ms": 1000.0, "stacking": "refresh", "speed_multiplier": 0.5,
+				}
+			},
+		},
+		{
+			name: "a spell pointing at no ability", file: "spells.json", want: "unknown ability",
+			mutate: func(document map[string]any) {
+				document["fire-bolt"].(map[string]any)["ability"] = "nonexistent"
+			},
+		},
+		{
+			name: "a weapon that both fires and casts", file: "weapons.json", want: "exactly one of ability or spell",
+			mutate: func(document map[string]any) {
+				document["starter-staff"].(map[string]any)["ability"] = "rifle-shot"
 			},
 		},
 		{

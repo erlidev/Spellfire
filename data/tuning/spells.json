@@ -4,17 +4,6 @@
     "element": "fire",
     "tier": 1,
     "starter": true,
-    "damage_band": "standard",
-    "mana_cost": 12,
-    "cast_interval_ms": 300,
-    "cooldown_ms": 0,
-    "dodge_vector": "projectile_travel",
-    "projectile": {
-      "kind": "fireball",
-      "speed": 592.8,
-      "life_seconds": 1.5,
-      "radius": 9,
-      "silhouette": "bolt"
-    }
+    "ability": "fire-bolt-cast"
   }
 }

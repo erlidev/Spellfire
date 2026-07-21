@@ -1,0 +1,32 @@
+{
+  "rifle-shot": {
+    "name": "Rifle shot",
+    "cost": { "kind": "ammo", "amount": 1 },
+    "interval_ms": 300,
+    "cooldown_ms": 0,
+    "dodge_vector": "projectile_travel",
+    "damage_band": "standard",
+    "projectile": {
+      "kind": "bullet",
+      "speed": 760,
+      "life_seconds": 1.5,
+      "radius": 5,
+      "silhouette": "round"
+    }
+  },
+  "fire-bolt-cast": {
+    "name": "Fire bolt",
+    "cost": { "kind": "mana", "amount": 12 },
+    "interval_ms": 300,
+    "cooldown_ms": 0,
+    "dodge_vector": "projectile_travel",
+    "damage_band": "standard",
+    "projectile": {
+      "kind": "fireball",
+      "speed": 592.8,
+      "life_seconds": 1.5,
+      "radius": 9,
+      "silhouette": "bolt"
+    }
+  }
+}

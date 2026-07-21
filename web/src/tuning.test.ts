@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { combat, damageBandFor, dangerBandAt, projectileByKind, pvpRadius, resourceMax, safeRadius, shotFor, simulation, spells, starterWeapon, weapons, world } from "./tuning";
+import { abilities, abilityFor, combat, damageBandFor, dangerBandAt, damageOf, projectileByKind, pvpRadius, resourceMax, safeRadius, simulation, spells, starterWeapon, weapons, world } from "./tuning";
 
 describe("shared tuning tables", () => {
   it("derives the safety radii from the danger band rows rather than literals", () => {
@@ -17,22 +17,28 @@ describe("shared tuning tables", () => {
     expect(dangerBandAt(world.radius * 2).id).toBe(world.danger_bands.at(-1)!.id);
   });
 
-  it("gives both classes a starter weapon that resolves to a dodgeable shot", () => {
+  it("gives both classes a starter weapon that resolves to a dodgeable ability", () => {
     for (const characterClass of ["gunslinger", "mage"] as const) {
       const weapon = starterWeapon(characterClass);
       expect(weapon.class).toBe(characterClass);
-      const shot = shotFor(weapon);
-      expect(shot.intervalMS).toBeGreaterThan(0);
-      expect(shot.damage).toBe(damageBandFor(weapon).damage_per_hit);
-      expect(shot.projectile.speed).toBeGreaterThan(0);
+      const ability = abilityFor(weapon);
+      expect(ability.interval_ms).toBeGreaterThan(0);
+      expect(ability.dodge_vector).toBe("projectile_travel");
+      expect(damageOf(ability.damage_band!)).toBe(damageBandFor(weapon).damage_per_hit);
+      expect(ability.projectile!.speed).toBeGreaterThan(0);
     }
   });
 
   it("puts both starter items on the same shared damage band row", () => {
-    const rifle = shotFor(starterWeapon("gunslinger"));
-    const staff = shotFor(starterWeapon("mage"));
-    expect(rifle.damage).toBe(staff.damage);
-    expect(rifle.damage).toBe(combat.damage_bands.standard!.damage_per_hit);
+    const rifle = damageBandFor(starterWeapon("gunslinger"));
+    const staff = damageBandFor(starterWeapon("mage"));
+    expect(rifle.damage_per_hit).toBe(staff.damage_per_hit);
+    expect(rifle.damage_per_hit).toBe(combat.damage_bands.standard!.damage_per_hit);
+  });
+
+  it("charges the mage mana and the gunslinger ammunition through one ability shape", () => {
+    expect(abilityFor(starterWeapon("gunslinger")).cost).toEqual({ kind: "ammo", amount: 1 });
+    expect(abilityFor(starterWeapon("mage")).cost.kind).toBe("mana");
   });
 
   it("meters the resource the equipped weapon actually spends", () => {
@@ -42,7 +48,7 @@ describe("shared tuning tables", () => {
 
   it("resolves a projectile silhouette from the kind a snapshot carries", () => {
     expect(projectileByKind("bullet")).toMatchObject({ silhouette: "round" });
-    expect(projectileByKind(spells["fire-bolt"]!.projectile.kind)).toMatchObject({ silhouette: "bolt" });
+    expect(projectileByKind(abilities[spells["fire-bolt"]!.ability]!.projectile!.kind)).toMatchObject({ silhouette: "bolt" });
     expect(projectileByKind("unknown")).toBeUndefined();
   });
 

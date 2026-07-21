@@ -16,8 +16,14 @@ Rules, from [`invariants.md`](../../docs/game/design/invariants.md) and
 - **Damage lives on the band, not the item.** Every damaging row points at a
   `combat.damage_bands` entry. That is what keeps the compressed power band from
   drifting item by item.
-- **Every damaging row declares a dodge vector**, and no projectile may have
-  zero travel speed. The loader rejects both.
+- **Every damaging ability declares a dodge vector**, and no projectile may
+  have zero travel speed. The loader rejects both, and it also rejects a dodge
+  vector the simulation does not yet deliver — a promised cast time or telegraph
+  the server never runs would leave the ability with no counterplay at all.
+- **One ability contract.** Anything that acts — a gun, a spell, and later a
+  mob or a deployable — points at an `abilities.json` row for its cost,
+  cadence, cooldown, counterplay, delivery, and effects. Weapons and spells hold
+  identity only.
 
 ## Versioning
 
@@ -38,8 +44,10 @@ Rules, from [`invariants.md`](../../docs/game/design/invariants.md) and
 | `world.json` | World radius, spawn radius, danger bands, procedural tree parameters |
 | `combat.json` | Role and dodge-vector vocabularies, player body, universal dash, damage bands |
 | `elements.json` | The five Mage elements and their roles |
-| `weapons.json` | Craftable weapons; a staff delegates its combat numbers to the spell it casts |
-| `spells.json` | Spells with element, tier, cost, cadence, dodge vector, and projectile |
+| `abilities.json` | What every action costs, how often it may be used, how it is dodged, what it delivers, and what it applies |
+| `effects.json` | Status effects: burn, slow, root, stun, knockback, shield |
+| `weapons.json` | Craftable weapons: class, blueprint, magazine, and the ability they fire or the spell they cast |
+| `spells.json` | Spells: element, tier, and the ability they cast |
 | `components.json` | Blueprint slot layouts and the components that fill them |
 | `materials.json` | Material grades, kinds, and rows |
 | `mobs.json` | Mob contracts |
@@ -51,6 +59,17 @@ Rules, from [`invariants.md`](../../docs/game/design/invariants.md) and
 
 Rows are populated only where a design document has settled them.
 
+- `effects` is empty. The simulation runs all six kinds — burn ticks from a
+  band, slows scale movement and take the strongest rather than compounding,
+  roots stop movement, stuns stop everything, knockbacks override input and
+  cancel a dash, shields absorb before health — but no design document has
+  settled a magnitude. Phase 2.4's gadgets and Phase 2.5's element secondaries
+  author the rows; the tests exercise the layer against rows they add
+  themselves.
+- No shipped ability declares a `windup_ms` or a `telegraph`. The simulation
+  delivers on use, so the loader refuses a row that declares either; Phase 1.6
+  builds the telegraph grammar and the windup that honours it in one change,
+  and relaxes `honouredDodgeVectors` in the same place.
 - `components.components` and `materials.materials` are empty. Slotted-blueprint
   crafting (Phase 2.3) and harvesting (Phase 4.1) fill them; the schemas and
   their validation exist now so those phases add data, not structure.
@@ -93,4 +112,9 @@ caller may drop is an ID no build ever shipped.
 rejected, every cross-table reference is resolved, danger bands must run
 outward from the hub to the rim with contiguous PvP protection, projectile
 kinds must be unique across tables, and each class must have exactly one starter
-weapon. Failures list every problem at once — run `go test ./server/...`.
+weapon. Abilities add their own: the cost kind must be one the simulation can
+charge, a magazine weapon's ability must spend ammunition it holds, every
+applied effect must exist, an effect must be of a kind the world can run and may
+only carry the fields its kind uses, and a damaging ability must declare a band
+and an honoured dodge vector. Failures list every problem at once — run
+`go test ./server/...`.

@@ -53,13 +53,21 @@ Component, material, and biome-placement rows are intentionally empty until the 
 Carried materials and unlocked outposts round-trip through the world but nothing mutates them yet: harvesting is Phase 4.1, outpost discovery is Phase 3, and crafting is Phase 2.3. `outposts.json` ships empty, so every recall resolves to the hub until Phase 3 places them. A lingering body is not flagged on the wire, so it reads as a motionless player rather than one visibly logging out — the field belongs with the Phase 1.5 per-entity state expansion.
 
 ### 1.3 Server-side ability/effect framework
-- [ ] One authoritative ability system replacing the ad-hoc branches in `stepPlayer`/`tryFire` ([world.go:161-233](server/internal/game/world.go#L161-L233))
-- [ ] Ability schema declares cost, cooldown, telegraph, and **a mandatory dodge vector** ([invariants.md](docs/game/design/invariants.md))
-- [ ] Status-effect layer: burn/DoT, slow, root, stun, knockback, shields
-- [ ] Reject at load any damaging ability with no declared dodge vector
+- [x] One authoritative ability system replacing the ad-hoc branches in `stepPlayer`/`tryFire` — `World.ability`/`useAbility`/`spend`/`deliver` ([ability.go](server/internal/game/ability.go), [architecture.md](docs/architecture.md#abilities-and-effects))
+- [x] Ability schema declares cost, cooldown, telegraph, and **a mandatory dodge vector**; weapons and spells hold identity and reference it ([abilities.json](data/tuning/abilities.json), [tuning.go](server/internal/tuning/tuning.go), [invariants.md](docs/game/design/invariants.md))
+- [x] Status-effect layer: burn/DoT, slow, root, stun, knockback, shields ([effects.go](server/internal/game/effects.go), [effects_test.go](server/internal/game/effects_test.go))
+- [x] Reject at load any damaging ability with no declared dodge vector — and any that claims one the simulation does not deliver ([validate.go](server/internal/tuning/validate.go))
+
+`effects.json` ships empty: the layer runs all six kinds, but no design document has settled a
+magnitude, so Phase 2.4's gadgets and Phase 2.5's element secondaries author the rows and the tests
+exercise the layer against rows they add themselves. No shipped ability applies an effect, so client
+prediction stays exact until effects reach the wire with the 1.5 state expansion. Telegraphs and
+windups are declared and validated but not run — the loader refuses a row that declares one, because
+a cast time the server never honours would leave the ability with no dodge vector; 1.6 builds the
+grammar and the windup together.
 
 ### 1.4 Damage attribution
-- [ ] Per-target contribution ledger in the projectile resolver ([world.go:299-306](server/internal/game/world.go#L299-L306))
+- [ ] Per-target contribution ledger in `World.damage`, which already takes the source ID ([world.go:549](server/internal/game/world.go#L549))
 - [ ] Kill credit by most damage dealt, not last hit ([squads-and-world-bosses.md](docs/game/design/squads-and-world-bosses.md#squads))
 - [ ] Combat log surface reusable by drop ownership and boss ranking
 
@@ -99,10 +107,10 @@ Carried materials and unlocked outposts round-trip through the world but nothing
 - [ ] Crafting UI: blueprint, slots, compatible components, owned/required materials with shortfalls, plain-language behaviour changes, spend confirmation, rejection outcomes ([system-interfaces.md](docs/game/ui/system-interfaces.md#safe-zone-loadout-and-crafting))
 
 ### 2.4 Gunslinger kit
-- [ ] Recoil model; every shot currently leaves on the exact aim vector ([world.go:249](server/internal/game/world.go#L249))
+- [ ] Recoil model; every shot currently leaves on the exact aim vector ([ability.go:101](server/internal/game/ability.go#L101))
 - [ ] Move-spread: firing while moving is currently identical to standing ([gunslinger.md](docs/game/design/gunslinger.md#gunplay))
 - [ ] Weight classes with recoil / spread / slowdown tradeoffs inside one damage band
-- [ ] Multiple guns and gun categories; magazine size becomes a weapon property (hardcoded `10` at [world.go:114](server/internal/game/world.go#L114), [:140](server/internal/game/world.go#L140), [:199](server/internal/game/world.go#L199))
+- [ ] Multiple guns and gun categories; magazine size and reload are already weapon properties ([weapons.json](data/tuning/weapons.json)), so this is rows plus the loadout that selects between them
 - [ ] Crafted special ammunition (rockets) as a finite, craftable resource
 - [ ] Snipers: hitscan to a weapon cap, then travel-time projectile with falloff and hard max range ([gunslinger.md](docs/game/design/gunslinger.md#snipers))
 - [ ] Scope mode: peripheral blackout, controllable near-area view, server-side scoped state affecting movement and spread; camera exception in [game-view-and-hud.md](docs/game/ui/game-view-and-hud.md#camera)
@@ -111,7 +119,7 @@ Carried materials and unlocked outposts round-trip through the world but nothing
 - [ ] Rare materials gate heavy weapons economically, never statistically
 
 ### 2.5 Mage kit
-- [ ] Per-spell cooldowns — the missing second resource axis alongside mana ([mage.md](docs/game/design/mage.md#mana-and-cooldowns)); cost is a hardcoded `12` ([world.go:227](server/internal/game/world.go#L227))
+- [ ] Author per-spell cooldowns and costs — the second resource axis alongside mana ([mage.md](docs/game/design/mage.md#mana-and-cooldowns)); 1.3 enforces both from `abilities.json`, and every shipped row still declares a zero cooldown
 - [ ] Five elements as data and behaviour: Fire, Frost, Storm, Arcane, Earth ([mage.md](docs/game/design/mage.md#elements))
 - [ ] Element secondaries: burn/DoT, light mitigation, blink-on-hit, shields/dispel/teleport, walls/knockback/armor
 - [ ] Spell tiers 1–4 scaling mana, cooldown, telegraph, payoff, and whiff punishment

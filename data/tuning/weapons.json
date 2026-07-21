@@ -5,17 +5,9 @@
     "blueprint": "gun",
     "category": "rifle",
     "starter": true,
-    "damage_band": "standard",
-    "fire_interval_ms": 300,
     "magazine_size": 10,
     "reload_ms": 1400,
-    "projectile": {
-      "kind": "bullet",
-      "speed": 760,
-      "life_seconds": 1.5,
-      "radius": 5,
-      "silhouette": "round"
-    }
+    "ability": "rifle-shot"
   },
   "starter-staff": {
     "name": "Apprentice staff",

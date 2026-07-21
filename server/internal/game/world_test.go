@@ -18,7 +18,7 @@ func testWorld() (*World, time.Time) {
 	return world, time.Unix(1_700_000_000, 0)
 }
 
-// starterWeapon and starterShot resolve what a fresh character of the class
+// starterWeapon and starterAbility resolve what a fresh character of the class
 // actually carries, so the tests assert against the tuning tables rather than
 // against numbers copied out of them.
 func starterWeapon(w *World, class model.Class) tuning.Weapon {
@@ -29,12 +29,17 @@ func starterWeapon(w *World, class model.Class) tuning.Weapon {
 	return weapon
 }
 
-func starterShot(w *World, class model.Class) tuning.Shot {
-	shot, ok := w.tuning.Tables.Shot(starterWeapon(w, class))
+func starterAbility(w *World, class model.Class) tuning.Ability {
+	ability, ok := w.tuning.Tables.WeaponAbility(starterWeapon(w, class))
 	if !ok {
-		panic("unresolvable starter shot for " + class)
+		panic("unresolvable starter ability for " + class)
 	}
-	return shot
+	return ability
+}
+
+// starterDamage is what one starter hit takes off, read through the shared band.
+func starterDamage(w *World, class model.Class) float64 {
+	return w.tuning.Tables.BandDamage(starterAbility(w, class).DamageBand)
 }
 
 func addTestPlayer(world *World, id string, class model.Class, position Vec, now time.Time) *Player {
@@ -152,7 +157,7 @@ func TestProjectileCombatOutsidePvPProtection(t *testing.T) {
 	for i := 1; i <= 30 && target.Health == w.tuning.MaxHealth; i++ {
 		w.Step(now.Add(time.Duration(i) * time.Second / 60))
 	}
-	if target.Health != w.tuning.MaxHealth-starterShot(w, model.Gunslinger).Damage {
+	if target.Health != w.tuning.MaxHealth-starterDamage(w, model.Gunslinger) {
 		t.Fatalf("target health = %f", target.Health)
 	}
 	if shooter.Ammo >= starterWeapon(w, model.Gunslinger).MagazineSize {
@@ -185,7 +190,7 @@ func TestServerRewindHitsHistoricalPosition(t *testing.T) {
 	w.SetPlayerPosition(target.ID, Vec{1300, 200}, now)
 	w.ApplyInput(shooter.ID, protocol.Input{Sequence: 1, Buttons: ButtonFire, AimX: 1, ClientTimeMS: uint64(shotAt.UnixMilli())})
 	w.Step(now)
-	if target.Health != w.tuning.MaxHealth-starterShot(w, model.Gunslinger).Damage {
+	if target.Health != w.tuning.MaxHealth-starterDamage(w, model.Gunslinger) {
 		t.Fatalf("rewound shot missed, health = %f", target.Health)
 	}
 }
@@ -194,7 +199,7 @@ func TestDeathAndRespawnResetAuthoritativeState(t *testing.T) {
 	w, now := testWorld()
 	shooter := addTestPlayer(w, "shooter", model.Gunslinger, Vec{1200, 0}, now)
 	target := addTestPlayer(w, "target", model.Mage, Vec{1280, 0}, now)
-	target.Health = starterShot(w, model.Gunslinger).Damage
+	target.Health = starterDamage(w, model.Gunslinger)
 	w.ApplyInput(shooter.ID, protocol.Input{Sequence: 1, Buttons: ButtonFire, AimX: 1, ClientTimeMS: uint64(now.UnixMilli())})
 	w.Step(now)
 	for i := 1; i <= 10 && target.Alive; i++ {
@@ -217,7 +222,7 @@ func TestDeathAndRespawnResetAuthoritativeState(t *testing.T) {
 func TestResourcesEnforceReloadAndManaCosts(t *testing.T) {
 	w, now := testWorld()
 	rifle := starterWeapon(w, model.Gunslinger)
-	cadence := starterShot(w, model.Gunslinger).Interval + time.Millisecond
+	cadence := starterAbility(w, model.Gunslinger).Interval() + time.Millisecond
 	gunner := addTestPlayer(w, "gunner", model.Gunslinger, Vec{1500, 0}, now)
 	for i := 0; i < rifle.MagazineSize; i++ {
 		at := now.Add(time.Duration(i) * cadence)
@@ -238,7 +243,7 @@ func TestResourcesEnforceReloadAndManaCosts(t *testing.T) {
 	if gunner.Ammo != rifle.MagazineSize {
 		t.Fatalf("reloaded ammo = %d", gunner.Ammo)
 	}
-	cost := starterShot(w, model.Mage).ManaCost
+	cost := starterAbility(w, model.Mage).Cost.Amount
 	mage := addTestPlayer(w, "mage", model.Mage, Vec{1800, 0}, now)
 	mage.Mana = cost
 	w.ApplyInput(mage.ID, protocol.Input{Sequence: 1, Buttons: ButtonFire, AimX: 1, ClientTimeMS: uint64(now.UnixMilli())})

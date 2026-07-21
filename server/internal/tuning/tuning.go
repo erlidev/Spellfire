@@ -19,7 +19,7 @@ import (
 // SchemaVersion is the table shape this build understands. Bump it only when a
 // table changes shape, and add the matching forward migration; a plain balance
 // edit bumps Manifest.Version instead and needs no code change.
-const SchemaVersion = 3
+const SchemaVersion = 4
 
 type Manifest struct {
 	// Version is the content revision. Bump it on any balance edit; a change
@@ -183,21 +183,122 @@ type Projectile struct {
 	Silhouette  string  `json:"silhouette"`
 }
 
-// Weapon is a craftable blueprint instance. A magazine weapon carries its own
-// projectile; a staff carries none and delegates to the spell it casts.
+// Cost kinds an ability may spend. A magazine weapon's ability spends ammo and
+// so drives the reload path; a spell spends mana. "none" is the free ability.
+const (
+	CostNone = "none"
+	CostAmmo = "ammo"
+	CostMana = "mana"
+)
+
+// Cost is what one use of an ability charges the actor.
+type Cost struct {
+	Kind   string  `json:"kind"`
+	Amount float64 `json:"amount"`
+}
+
+// TelegraphShapes are the standardized ground figures a windup may show. The
+// grammar is shared, so nothing hand-rolls a telegraph.
+var TelegraphShapes = []string{"circle", "cone", "line", "ring"}
+
+// Telegraph is the shape an ability shows during its windup. Declaring it is
+// what makes the "telegraph" and "ground_indicator" dodge vectors real. The
+// simulation does not yet run a windup, so the loader refuses a row that
+// declares one — see honouredDodgeVectors in validate.go.
+type Telegraph struct {
+	Shape        string  `json:"shape"`
+	Radius       float64 `json:"radius"`
+	Length       float64 `json:"length"`
+	AngleDegrees float64 `json:"angle_degrees"`
+}
+
+// Ability is the one contract every deliberate action draws from: what it
+// costs, how often it may be used, what it commits the user to, how it is
+// dodged, what it delivers, and what it leaves behind. Weapons and spells hold
+// identity and reference an ability; mobs and deployables join them in the
+// phases that build them. Damage is never authored here — it comes from the
+// shared band row, like every other damaging thing.
+type Ability struct {
+	ID          string      `json:"-"`
+	Name        string      `json:"name"`
+	Cost        Cost        `json:"cost"`
+	IntervalMS  int         `json:"interval_ms"`
+	CooldownMS  int         `json:"cooldown_ms"`
+	WindupMS    int         `json:"windup_ms"`
+	Telegraph   *Telegraph  `json:"telegraph"`
+	DodgeVector string      `json:"dodge_vector"`
+	DamageBand  string      `json:"damage_band"`
+	Projectile  *Projectile `json:"projectile"`
+	// Effects are the status effects each hit applies, resolved against the
+	// effects table.
+	Effects []string `json:"effects"`
+}
+
+// Interval is the cadence gate between uses of any ability — the global
+// cooldown. Cooldown is this ability's own lockout on top of it.
+func (a Ability) Interval() time.Duration { return time.Duration(a.IntervalMS) * time.Millisecond }
+func (a Ability) Cooldown() time.Duration { return time.Duration(a.CooldownMS) * time.Millisecond }
+func (a Ability) Windup() time.Duration   { return time.Duration(a.WindupMS) * time.Millisecond }
+
+// Damaging reports whether the ability deals damage, and therefore owes a
+// damage band and a dodge vector.
+func (a Ability) Damaging() bool { return a.DamageBand != "" || a.Projectile != nil }
+
+// EffectKinds are the status effects the simulation knows how to run. A row of
+// any other kind would be data the world silently ignores, so the loader
+// rejects it.
+var EffectKinds = []string{"burn", "slow", "root", "stun", "knockback", "shield"}
+
+// Effect stacking rules. "refresh" keeps one instance and restarts its
+// duration; "stack" runs independent instances side by side.
+const (
+	StackRefresh = "refresh"
+	StackStack   = "stack"
+)
+
+// Effect is one status the simulation can carry on a body. Every magnitude that
+// touches health is expressed against a damage band rather than authored as a
+// raw number, so the compressed power band still owns the damage axis.
+type Effect struct {
+	ID       string `json:"-"`
+	Name     string `json:"name"`
+	Kind     string `json:"kind"`
+	Stacking string `json:"stacking"`
+	// DurationMS is how long the effect lasts. Zero is rejected: an effect with
+	// no duration is either permanent or a no-op, and neither is a status.
+	DurationMS int `json:"duration_ms"`
+	// TickMS and DamageFraction belong to "burn": one tick deals the band's
+	// damage_per_hit scaled by the fraction.
+	TickMS         int     `json:"tick_ms"`
+	DamageBand     string  `json:"damage_band"`
+	DamageFraction float64 `json:"damage_fraction"`
+	// SpeedMultiplier belongs to "slow": the fraction of normal speed left.
+	SpeedMultiplier float64 `json:"speed_multiplier"`
+	// Speed belongs to "knockback": units per second along the hit direction,
+	// carried for the effect's duration and colliding like ordinary movement.
+	Speed float64 `json:"speed"`
+	// AbsorbHits belongs to "shield": the pool, in multiples of the band's
+	// damage_per_hit.
+	AbsorbHits float64 `json:"absorb_hits"`
+}
+
+func (e Effect) Duration() time.Duration { return time.Duration(e.DurationMS) * time.Millisecond }
+func (e Effect) Tick() time.Duration     { return time.Duration(e.TickMS) * time.Millisecond }
+
+// Weapon is a craftable blueprint instance. A gun points at the ability it
+// fires and owns its magazine; a staff owns neither and delegates to the spell
+// it casts, which points at an ability of its own.
 type Weapon struct {
-	ID             string      `json:"-"`
-	Name           string      `json:"name"`
-	Class          string      `json:"class"`
-	Blueprint      string      `json:"blueprint"`
-	Category       string      `json:"category"`
-	Starter        bool        `json:"starter"`
-	DamageBand     string      `json:"damage_band"`
-	FireIntervalMS int         `json:"fire_interval_ms"`
-	MagazineSize   int         `json:"magazine_size"`
-	ReloadMS       int         `json:"reload_ms"`
-	Spell          string      `json:"spell"`
-	Projectile     *Projectile `json:"projectile"`
+	ID           string `json:"-"`
+	Name         string `json:"name"`
+	Class        string `json:"class"`
+	Blueprint    string `json:"blueprint"`
+	Category     string `json:"category"`
+	Starter      bool   `json:"starter"`
+	MagazineSize int    `json:"magazine_size"`
+	ReloadMS     int    `json:"reload_ms"`
+	Ability      string `json:"ability"`
+	Spell        string `json:"spell"`
 }
 
 func (w Weapon) ReloadDuration() time.Duration {
@@ -205,17 +306,12 @@ func (w Weapon) ReloadDuration() time.Duration {
 }
 
 type Spell struct {
-	ID             string      `json:"-"`
-	Name           string      `json:"name"`
-	Element        string      `json:"element"`
-	Tier           int         `json:"tier"`
-	Starter        bool        `json:"starter"`
-	DamageBand     string      `json:"damage_band"`
-	ManaCost       float64     `json:"mana_cost"`
-	CastIntervalMS int         `json:"cast_interval_ms"`
-	CooldownMS     int         `json:"cooldown_ms"`
-	DodgeVector    string      `json:"dodge_vector"`
-	Projectile     *Projectile `json:"projectile"`
+	ID      string `json:"-"`
+	Name    string `json:"name"`
+	Element string `json:"element"`
+	Tier    int    `json:"tier"`
+	Starter bool   `json:"starter"`
+	Ability string `json:"ability"`
 }
 
 type Blueprint struct {
@@ -286,7 +382,7 @@ type Biome struct {
 
 // RetiredKinds are the tables a retirement may name. A retired ID resolves
 // within its own kind; nothing is ever retired across tables.
-var RetiredKinds = []string{"weapon", "spell", "component", "blueprint", "material", "element", "biome", "mob"}
+var RetiredKinds = []string{"weapon", "spell", "ability", "effect", "component", "blueprint", "material", "element", "biome", "mob"}
 
 // maxRetirementHops bounds a replacement chain. Validation rejects cycles, so
 // this only guards a table that somehow reached the resolver unvalidated.
@@ -312,6 +408,8 @@ type Tables struct {
 	Outposts   map[string]Outpost
 	Combat     Combat
 	Elements   map[string]Element
+	Abilities  map[string]Ability
+	Effects    map[string]Effect
 	Weapons    map[string]Weapon
 	Spells     map[string]Spell
 	Components Components
@@ -357,6 +455,10 @@ func (t *Tables) Live(kind, id string) bool {
 		return t.Weapons[id].Name != ""
 	case "spell":
 		return t.Spells[id].Name != ""
+	case "ability":
+		return t.Abilities[id].Name != ""
+	case "effect":
+		return t.Effects[id].Name != ""
 	case "component":
 		return t.Components.Components[id].Name != ""
 	case "blueprint":
@@ -373,38 +475,28 @@ func (t *Tables) Live(kind, id string) bool {
 	return false
 }
 
-// Shot is a weapon's resolved firing profile. Damage always comes from the
-// shared band row, and a staff resolves through the spell it casts, so the
-// simulation reads one shape for both classes instead of branching on class.
-type Shot struct {
-	Interval   time.Duration
-	Damage     float64
-	ManaCost   float64
-	Projectile Projectile
-}
-
-// Shot resolves a weapon into the profile the simulation fires with. It reports
-// false only for a weapon whose references no longer resolve, which validation
-// rejects at load.
-func (t *Tables) Shot(weapon Weapon) (Shot, bool) {
-	band, projectile, interval, mana := weapon.DamageBand, weapon.Projectile, weapon.FireIntervalMS, 0.0
+// WeaponAbility resolves what a weapon does when used: its own ability, or the
+// ability of the spell it casts. Both classes therefore reach the simulation as
+// one shape, and it branches on the ability's declared cost rather than on
+// class. It reports false only for references that no longer resolve, which
+// validation rejects at load.
+func (t *Tables) WeaponAbility(weapon Weapon) (Ability, bool) {
+	id := weapon.Ability
 	if weapon.Spell != "" {
 		spell, ok := t.Spells[weapon.Spell]
 		if !ok {
-			return Shot{}, false
+			return Ability{}, false
 		}
-		band, projectile, interval, mana = spell.DamageBand, spell.Projectile, spell.CastIntervalMS, spell.ManaCost
+		id = spell.Ability
 	}
-	damage, ok := t.Combat.DamageBands[band]
-	if !ok || projectile == nil {
-		return Shot{}, false
-	}
-	return Shot{
-		Interval:   time.Duration(interval) * time.Millisecond,
-		Damage:     damage.DamagePerHit,
-		ManaCost:   mana,
-		Projectile: *projectile,
-	}, true
+	ability, ok := t.Abilities[id]
+	return ability, ok
+}
+
+// BandDamage is the per-hit damage of a band row, and zero for an ability that
+// deals none.
+func (t *Tables) BandDamage(band string) float64 {
+	return t.Combat.DamageBands[band].DamagePerHit
 }
 
 // StarterWeapon returns the weapon a freshly created character of the class
@@ -448,6 +540,8 @@ func Parse(fsys fs.FS) (*Tables, error) {
 		{"outposts.json", &tables.Outposts},
 		{"combat.json", &tables.Combat},
 		{"elements.json", &tables.Elements},
+		{"abilities.json", &tables.Abilities},
+		{"effects.json", &tables.Effects},
 		{"weapons.json", &tables.Weapons},
 		{"spells.json", &tables.Spells},
 		{"components.json", &tables.Components},
@@ -485,6 +579,14 @@ func (t *Tables) stampIDs() {
 	for id, element := range t.Elements {
 		element.ID = id
 		t.Elements[id] = element
+	}
+	for id, ability := range t.Abilities {
+		ability.ID = id
+		t.Abilities[id] = ability
+	}
+	for id, effect := range t.Effects {
+		effect.ID = id
+		t.Effects[id] = effect
 	}
 	for id, weapon := range t.Weapons {
 		weapon.ID = id

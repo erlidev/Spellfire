@@ -85,6 +85,11 @@ type Player struct {
 	Ammo                            int
 	DashDirection                   Vec
 	DashTicksLeft                   int
+	// Cooldowns is each ability's own lockout, keyed by ability ID, alongside
+	// the global cadence gate NextFire holds.
+	Cooldowns map[string]time.Time
+	// Effects are the statuses running on the body, in application order.
+	Effects []ActiveEffect
 	// Carried materials and unlocked outposts are persisted references, held
 	// here so they survive a disconnect. Harvesting (Phase 4.1) and outpost
 	// discovery (Phase 3) are what will mutate them.
@@ -117,6 +122,9 @@ type Projectile struct {
 	ID, OwnerID, Kind         string
 	Position, Velocity        Vec
 	Radius, Damage, Remaining float64
+	// Effects are the statuses a hit applies, carried from the ability that
+	// launched it so the resolver needs no lookup back to the shooter's kit.
+	Effects []string
 }
 
 type Collider struct {
@@ -190,6 +198,7 @@ func (w *World) AddPlayer(character model.Character, now time.Time) *Player {
 		Health: w.tuning.MaxHealth, Mana: w.tuning.MaxMana, Alive: true,
 		Materials: w.carriedMaterials(character.State.Materials),
 		Outposts:  append([]string(nil), character.State.Outposts...),
+		Cooldowns: make(map[string]time.Time),
 	}
 	// Until the Phase 2 loadout lands, the equipped weapon is the class starter
 	// row. It is a table reference, never a copy of its stats.
@@ -390,6 +399,9 @@ func (w *World) Respawn(id string, now time.Time) bool {
 	if weapon, ok := w.weapon(p); ok {
 		p.Ammo = weapon.MagazineSize
 	}
+	// A fresh body carries neither the statuses that killed it nor the
+	// cooldowns it died holding.
+	p.Effects, p.Cooldowns = nil, make(map[string]time.Time)
 	p.NextFire, p.ReloadEnds, p.DashReady = now, now, now
 	w.recordHistory(p, now)
 	return true
@@ -411,6 +423,9 @@ func (w *World) Step(now time.Time) {
 }
 
 func (w *World) stepPlayer(p *Player, now time.Time, dt float64) {
+	// Statuses run before the body acts, and on a lingering body too: a burn
+	// left on someone who disconnects keeps burning.
+	w.stepEffects(p, now)
 	// A lingering body is a target, not an actor: it holds its ground, takes
 	// damage, and neither moves nor fires until the logout window closes.
 	if !p.Alive || p.Lingering() {
@@ -436,7 +451,10 @@ func (w *World) stepPlayer(p *Player, now time.Time, dt float64) {
 		move.X++
 	}
 	move = move.Normalized()
-	if p.Input.Buttons&ButtonDash != 0 && p.PreviousButtons&ButtonDash == 0 && !now.Before(p.DashReady) {
+	// A stun suppresses everything the body does; a root only takes its
+	// movement, leaving it able to aim, reload, and act.
+	stunned, rooted := w.stunned(p), w.rooted(p)
+	if p.Input.Buttons&ButtonDash != 0 && p.PreviousButtons&ButtonDash == 0 && !now.Before(p.DashReady) && !stunned && !rooted {
 		p.DashDirection = move
 		if p.DashDirection.LengthSq() == 0 {
 			p.DashDirection = p.Aim
@@ -444,11 +462,18 @@ func (w *World) stepPlayer(p *Player, now time.Time, dt float64) {
 		p.DashTicksLeft = w.tuning.dashTicks()
 		p.DashReady = now.Add(w.tuning.DashCooldown)
 	}
-	if p.DashTicksLeft > 0 {
+	switch knocked, knockedBack := w.knockback(p); {
+	case knockedBack:
+		// A knockback overrides input and cancels an in-flight dash: control
+		// beats mobility for as long as it runs.
+		p.Velocity, p.DashTicksLeft = knocked, 0
+	case stunned || rooted:
+		p.Velocity, p.DashTicksLeft = Vec{}, 0
+	case p.DashTicksLeft > 0:
 		p.Velocity = p.DashDirection.Mul(w.tuning.dashSpeed())
 		p.DashTicksLeft--
-	} else {
-		p.Velocity = move.Mul(w.tuning.PlayerSpeed)
+	default:
+		p.Velocity = move.Mul(w.tuning.PlayerSpeed * w.movementScale(p))
 	}
 	p.Position = w.moveCircle(p.Position, p.Velocity.Mul(dt), w.tuning.PlayerRadius)
 	if p.Class == model.Mage {
@@ -456,7 +481,7 @@ func (w *World) stepPlayer(p *Player, now time.Time, dt float64) {
 	}
 	// Magazine size and reload time are weapon properties; a weapon without a
 	// magazine (a staff) never enters the reload path.
-	if weapon, ok := w.weapon(p); ok && weapon.MagazineSize > 0 {
+	if weapon, ok := w.weapon(p); ok && weapon.MagazineSize > 0 && !stunned {
 		if !p.ReloadEnds.IsZero() && !now.Before(p.ReloadEnds) {
 			p.Ammo, p.ReloadEnds = weapon.MagazineSize, time.Time{}
 		}
@@ -464,75 +489,11 @@ func (w *World) stepPlayer(p *Player, now time.Time, dt float64) {
 			p.ReloadEnds = now.Add(weapon.ReloadDuration())
 		}
 	}
-	if p.Input.Buttons&ButtonFire != 0 {
-		w.tryFire(p, now)
+	if p.Input.Buttons&ButtonFire != 0 && !stunned {
+		w.useAbility(p, now)
 	}
 	p.PreviousButtons = p.Input.Buttons
 	p.Acknowledged = p.Input.Sequence
-}
-
-// tryFire spends the cost the equipped row declares. A weapon with a magazine
-// spends ammunition and reloads; one that casts a spell spends the spell's
-// mana. The branch is data, not class.
-func (w *World) tryFire(p *Player, now time.Time) {
-	if now.Before(p.NextFire) {
-		return
-	}
-	weapon, ok := w.weapon(p)
-	if !ok {
-		return
-	}
-	shot, ok := w.tuning.Tables.Shot(weapon)
-	if !ok {
-		return
-	}
-	if weapon.MagazineSize > 0 {
-		if !p.ReloadEnds.IsZero() {
-			return
-		}
-		if p.Ammo <= 0 {
-			p.ReloadEnds = now.Add(weapon.ReloadDuration())
-			return
-		}
-		p.Ammo--
-	} else if shot.ManaCost > 0 {
-		if p.Mana < shot.ManaCost {
-			return
-		}
-		p.Mana -= shot.ManaCost
-	}
-	p.NextFire = now.Add(shot.Interval)
-	w.spawnRewoundProjectile(p, shot, now)
-}
-
-func (w *World) spawnRewoundProjectile(p *Player, shot tuning.Shot, now time.Time) {
-	shotAt := time.UnixMilli(int64(p.Input.ClientTimeMS))
-	oldest := now.Add(-w.tuning.MaxRewind)
-	if shotAt.Before(oldest) {
-		shotAt = oldest
-	}
-	if shotAt.After(now) {
-		shotAt = now
-	}
-	origin := w.positionAt(p.ID, shotAt)
-	projectile := &Projectile{
-		ID: fmt.Sprintf("p-%d", w.nextProjectile), OwnerID: p.ID, Kind: shot.Projectile.Kind,
-		Radius: shot.Projectile.Radius, Damage: shot.Damage, Remaining: shot.Projectile.LifeSeconds,
-		Velocity: p.Aim.Mul(shot.Projectile.Speed),
-	}
-	w.nextProjectile++
-	projectile.Position = origin.Add(p.Aim.Mul(w.tuning.PlayerRadius + shot.Projectile.Radius + 2))
-	step := time.Second / time.Duration(w.tuning.TickRate)
-	for at := shotAt; at.Before(now); at = at.Add(step) {
-		duration := step
-		if at.Add(duration).After(now) {
-			duration = now.Sub(at)
-		}
-		if w.advanceProjectile(projectile, duration.Seconds(), at.Add(duration), true) {
-			return
-		}
-	}
-	w.projectiles[projectile.ID] = projectile
 }
 
 func (w *World) stepProjectiles(now time.Time, dt float64) {
@@ -569,17 +530,34 @@ func (w *World) advanceProjectile(projectile *Projectile, dt float64, at time.Ti
 		if !segmentCircle(from, to, position, projectile.Radius+w.tuning.PlayerRadius) {
 			continue
 		}
+		// PvP protection covers the hit whole: no damage, and no status either.
+		// A slow or a knockback landed from inside safety would be exactly the
+		// offensive use of a safe zone the invariant forbids.
 		if owner != nil && owner.Position.LengthSq() > w.tuning.PvPRadius*w.tuning.PvPRadius && position.LengthSq() > w.tuning.PvPRadius*w.tuning.PvPRadius {
-			target.Health = math.Max(0, target.Health-projectile.Damage)
-			if target.Health == 0 {
-				target.Alive = false
-				target.Velocity = Vec{}
-			}
+			w.damage(target, projectile.Damage, projectile.OwnerID)
+			w.applyEffects(target, projectile.Effects, projectile.OwnerID, to.Sub(from), at)
 		}
 		return true
 	}
 	projectile.Position = to
 	return to.LengthSq() > w.tuning.WorldRadius*w.tuning.WorldRadius
+}
+
+// damage is the one path health is lost through: shields absorb first, and a
+// body that reaches zero dies and drops everything it was carrying. Phase 1.4's
+// contribution ledger records the source here.
+func (w *World) damage(target *Player, amount float64, sourceID string) {
+	if !target.Alive || amount <= 0 {
+		return
+	}
+	amount = w.absorb(target, amount)
+	if amount <= 0 {
+		return
+	}
+	target.Health = math.Max(0, target.Health-amount)
+	if target.Health == 0 {
+		target.Alive, target.Velocity, target.Effects, target.DashTicksLeft = false, Vec{}, nil, 0
+	}
 }
 
 func (w *World) moveCircle(from, delta Vec, radius float64) Vec {

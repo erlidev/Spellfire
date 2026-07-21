@@ -23,6 +23,8 @@ func (t *Tables) validate() error {
 	t.validateComponents(problems)
 	t.validateMaterials(problems)
 	t.validateBiomes(problems)
+	t.validateEffects(problems)
+	t.validateAbilities(problems)
 	t.validateSpells(problems)
 	t.validateWeapons(problems)
 	t.validateMobs(problems)
@@ -223,16 +225,106 @@ func (t *Tables) validateBiomes(r *report) {
 	}
 }
 
+// honouredDodgeVectors are the counterplay vectors the simulation actually
+// delivers today. A damaging row may only claim one of these: a table that
+// promises a cast time or a telegraph the server does not run would leave the
+// ability with no dodge vector at all, which the invariant forbids. Phase 1.6
+// builds the telegraph grammar and the windup that go with the rest, and adds
+// them here in the same change.
+var honouredDodgeVectors = []string{"projectile_travel"}
+
+func (t *Tables) validateEffects(r *report) {
+	for _, id := range sortedKeys(t.Effects) {
+		effect := t.Effects[id]
+		r.require(effect.Name != "", "effects: %q has no name", id)
+		r.require(effect.DurationMS > 0, "effects: %q must declare a positive duration_ms", id)
+		r.require(effect.Stacking == StackRefresh || effect.Stacking == StackStack,
+			"effects: %q has unknown stacking %q, want %q or %q", id, effect.Stacking, StackRefresh, StackStack)
+		if !r.require(contains(EffectKinds, effect.Kind), "effects: %q has kind %q, which the simulation cannot run; want one of %v", id, effect.Kind, EffectKinds) {
+			continue
+		}
+		// Each kind owns exactly the fields it uses. Anything else set on the
+		// row is a value the world would silently ignore.
+		burn, slow, knockback, shield := effect.Kind == "burn", effect.Kind == "slow", effect.Kind == "knockback", effect.Kind == "shield"
+		if burn {
+			r.require(effect.TickMS > 0, "effects: burn %q must declare a positive tick_ms", id)
+			r.require(effect.DamageFraction > 0, "effects: burn %q must declare a positive damage_fraction of its band", id)
+			r.require(t.Combat.DamageBands[effect.DamageBand].Name != "", "effects: burn %q references unknown damage band %q", id, effect.DamageBand)
+		}
+		if shield {
+			r.require(effect.AbsorbHits > 0, "effects: shield %q must declare a positive absorb_hits", id)
+			r.require(t.Combat.DamageBands[effect.DamageBand].Name != "", "effects: shield %q references unknown damage band %q", id, effect.DamageBand)
+		}
+		if slow {
+			r.require(effect.SpeedMultiplier > 0 && effect.SpeedMultiplier < 1,
+				"effects: slow %q has speed_multiplier %g, want a fraction between 0 and 1 exclusive; a full stop is a root", id, effect.SpeedMultiplier)
+		}
+		if knockback {
+			r.require(effect.Speed > 0, "effects: knockback %q must declare a positive speed", id)
+		}
+		r.require(burn || shield || effect.DamageBand == "", "effects: %q is a %s but references a damage band, which only burn and shield use", id, effect.Kind)
+		r.require(burn || (effect.TickMS == 0 && effect.DamageFraction == 0), "effects: %q is a %s but declares burn's tick_ms/damage_fraction", id, effect.Kind)
+		r.require(slow || effect.SpeedMultiplier == 0, "effects: %q is a %s but declares slow's speed_multiplier", id, effect.Kind)
+		r.require(knockback || effect.Speed == 0, "effects: %q is a %s but declares knockback's speed", id, effect.Kind)
+		r.require(shield || effect.AbsorbHits == 0, "effects: %q is a %s but declares shield's absorb_hits", id, effect.Kind)
+	}
+}
+
+// validateAbilities holds the ability contract: every use costs something the
+// simulation knows how to charge, every damaging ability draws from a shared
+// band and offers a dodge vector the server actually delivers, and a declared
+// windup or telegraph must match the dodge vector it is there to justify.
+func (t *Tables) validateAbilities(r *report) {
+	for _, id := range sortedKeys(t.Abilities) {
+		ability := t.Abilities[id]
+		r.require(ability.Name != "", "abilities: %q has no name", id)
+		r.require(ability.IntervalMS > 0, "abilities: %q must declare a positive interval_ms", id)
+		r.require(ability.CooldownMS >= 0, "abilities: %q has a negative cooldown_ms", id)
+		r.require(ability.WindupMS >= 0, "abilities: %q has a negative windup_ms", id)
+		t.validateCost(r, id, ability.Cost)
+		for _, effect := range ability.Effects {
+			r.require(t.Effects[effect].Name != "", "abilities: %q applies unknown effect %q", id, effect)
+		}
+		if ability.Telegraph != nil {
+			r.require(contains(TelegraphShapes, ability.Telegraph.Shape),
+				"abilities: %q has telegraph shape %q, which is not one of the standardized figures %v", id, ability.Telegraph.Shape, TelegraphShapes)
+		}
+		// The simulation delivers on use; nothing runs a windup yet, so a row
+		// that declares one would commit the user to a wait that never happens.
+		r.require(ability.WindupMS == 0 && ability.Telegraph == nil,
+			"abilities: %q declares a windup or telegraph, which the simulation does not yet run; Phase 1.6 builds the telegraph grammar and the windup together", id)
+		if !ability.Damaging() {
+			r.require(ability.DodgeVector == "", "abilities: %q deals no damage, so it must not claim a dodge vector", id)
+			continue
+		}
+		t.validateDamaging(r, "abilities", id, ability.DamageBand, ability.DodgeVector, ability.Projectile)
+		r.require(contains(honouredDodgeVectors, ability.DodgeVector),
+			"abilities: %q claims dodge vector %q, which the simulation does not yet deliver; only %v are honoured today", id, ability.DodgeVector, honouredDodgeVectors)
+	}
+}
+
+func (t *Tables) validateCost(r *report, id string, cost Cost) {
+	switch cost.Kind {
+	case CostNone:
+		r.require(cost.Amount == 0, "abilities: %q costs nothing but declares an amount of %g", id, cost.Amount)
+	case CostAmmo:
+		r.require(cost.Amount >= 1 && cost.Amount == math.Trunc(cost.Amount), "abilities: %q charges %g ammunition; a magazine spends whole rounds", id, cost.Amount)
+	case CostMana:
+		r.require(cost.Amount > 0, "abilities: %q spends mana but charges %g", id, cost.Amount)
+	default:
+		r.addf("abilities: %q has unknown cost kind %q, want one of %q, %q, %q", id, cost.Kind, CostNone, CostAmmo, CostMana)
+	}
+}
+
 func (t *Tables) validateSpells(r *report) {
 	for _, id := range sortedKeys(t.Spells) {
 		spell := t.Spells[id]
 		r.require(spell.Name != "", "spells: %q has no name", id)
 		r.require(t.Elements[spell.Element].Name != "", "spells: %q references unknown element %q", id, spell.Element)
 		r.require(spell.Tier >= 1 && spell.Tier <= 4, "spells: %q has tier %d, want 1-4", id, spell.Tier)
-		r.require(spell.ManaCost >= 0, "spells: %q has a negative mana cost", id)
-		r.require(spell.CooldownMS >= 0, "spells: %q has a negative cooldown", id)
-		r.require(spell.CastIntervalMS > 0, "spells: %q must declare a positive cast_interval_ms", id)
-		t.validateDamaging(r, "spells", id, spell.DamageBand, spell.DodgeVector, spell.Projectile)
+		// A spell is identity — element, tier, unlock — over one ability. Cost,
+		// cadence, cooldown, counterplay, and delivery all live on the ability.
+		r.require(t.Abilities[spell.Ability].Name != "", "spells: %q references unknown ability %q", id, spell.Ability)
 	}
 }
 
@@ -248,20 +340,27 @@ func (t *Tables) validateWeapons(r *report) {
 			r.require(starters[weapon.Class] == "", "weapons: %q and %q are both the starter weapon for %s", starters[weapon.Class], id, weapon.Class)
 			starters[weapon.Class] = id
 		}
-		if weapon.Spell != "" {
-			// A staff delegates cadence, cost, damage band, and dodge vector to
-			// the spell it casts, so it must not also declare its own.
-			r.require(t.Spells[weapon.Spell].Name != "", "weapons: %q casts unknown spell %q", id, weapon.Spell)
-			r.require(weapon.Projectile == nil && weapon.DamageBand == "" && weapon.MagazineSize == 0 && weapon.FireIntervalMS == 0 && weapon.ReloadMS == 0,
-				"weapons: %q casts a spell, so it must not declare its own projectile, damage band, magazine, cadence, or reload", id)
+		if !r.require((weapon.Ability == "") != (weapon.Spell == ""),
+			"weapons: %q must declare exactly one of ability or spell", id) {
 			continue
 		}
-		r.require(weapon.FireIntervalMS > 0, "weapons: %q must declare a positive fire_interval_ms", id)
+		if weapon.Spell != "" {
+			// A staff delegates everything it does to the spell it casts, and a
+			// spell is never reloaded.
+			r.require(t.Spells[weapon.Spell].Name != "", "weapons: %q casts unknown spell %q", id, weapon.Spell)
+			r.require(weapon.MagazineSize == 0 && weapon.ReloadMS == 0, "weapons: %q casts a spell, so it must not declare a magazine or a reload", id)
+			continue
+		}
+		ability, ok := t.Abilities[weapon.Ability]
+		if !r.require(ok, "weapons: %q references unknown ability %q", id, weapon.Ability) {
+			continue
+		}
 		r.require(weapon.MagazineSize > 0, "weapons: %q must declare a positive magazine_size", id)
 		r.require(weapon.ReloadMS > 0, "weapons: %q must declare a positive reload_ms", id)
-		// A gun's dodge vector is its projectile travel time; hitscan weapons
-		// arrive with Phase 2.4 and will declare a scope commitment instead.
-		t.validateDamaging(r, "weapons", id, weapon.DamageBand, "projectile_travel", weapon.Projectile)
+		// The magazine is the weapon's, the round spent is the ability's: they
+		// must agree, or firing would drain a resource the weapon does not hold.
+		r.require(ability.Cost.Kind == CostAmmo, "weapons: %q holds a magazine but its ability %q spends %q", id, weapon.Ability, ability.Cost.Kind)
+		r.require(ability.Cost.Amount <= float64(weapon.MagazineSize), "weapons: %q holds %d rounds but its ability %q spends %g per use", id, weapon.MagazineSize, weapon.Ability, ability.Cost.Amount)
 	}
 	r.require(starters["gunslinger"] != "", "weapons: no starter weapon for gunslinger; a new character would be unarmed")
 	r.require(starters["mage"] != "", "weapons: no starter weapon for mage; a new character would be unarmed")
@@ -328,18 +427,13 @@ func (t *Tables) validateDamaging(r *report, table, id, band, dodge string, proj
 // from it.
 func (t *Tables) validateProjectileKinds(r *report) {
 	owners := map[string]string{}
-	claim := func(owner string, projectile *Projectile) {
+	for _, id := range sortedKeys(t.Abilities) {
+		projectile := t.Abilities[id].Projectile
 		if projectile == nil || projectile.Kind == "" {
-			return
+			continue
 		}
-		r.require(owners[projectile.Kind] == "", "projectile kind %q is claimed by both %s and %s; kinds must be unique across tables", projectile.Kind, owners[projectile.Kind], owner)
-		owners[projectile.Kind] = owner
-	}
-	for _, id := range sortedKeys(t.Weapons) {
-		claim("weapon "+id, t.Weapons[id].Projectile)
-	}
-	for _, id := range sortedKeys(t.Spells) {
-		claim("spell "+id, t.Spells[id].Projectile)
+		r.require(owners[projectile.Kind] == "", "projectile kind %q is claimed by both ability %s and ability %s; kinds must be unique across tables", projectile.Kind, owners[projectile.Kind], id)
+		owners[projectile.Kind] = id
 	}
 }
 
