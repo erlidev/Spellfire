@@ -1,5 +1,10 @@
 import type { Character, CharacterClass } from "./types";
 
+export interface BuildInfo {
+  time: string;
+  commit: string;
+}
+
 const tokenKey = "spellfire-session";
 
 export class API {
@@ -9,6 +14,10 @@ export class API {
     const result = await this.request<{ token: string }>(`/api/auth/${mode}`, { method: "POST", body: JSON.stringify({ email, password }) }, false);
     this.token = result.token;
     sessionStorage.setItem(tokenKey, result.token);
+  }
+
+  version(): Promise<BuildInfo> {
+    return this.request<BuildInfo>("/api/version", {}, false);
   }
 
   async logout(): Promise<void> {

@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"spellfire/server/internal/auth"
+	"spellfire/server/internal/build"
 	"spellfire/server/internal/model"
 	"spellfire/server/internal/store"
 )
@@ -27,6 +28,9 @@ func New(authService *auth.Service, data store.Store) *API {
 func (a *API) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	})
+	mux.HandleFunc("GET /api/version", func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, http.StatusOK, build.Get())
 	})
 	mux.HandleFunc("POST /api/auth/register", a.register)
 	mux.HandleFunc("POST /api/auth/login", a.login)

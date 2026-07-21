@@ -17,7 +17,13 @@ COPY go.mod go.sum ./
 RUN go mod download
 COPY server ./server
 COPY proto ./proto
-RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" \
+# Stamp the build time (from the build host's clock) and, if provided, the git
+# commit; the .git dir is not in the build context, so the commit comes via arg.
+ARG BUILD_COMMIT=""
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath \
+    -ldflags="-s -w \
+      -X spellfire/server/internal/build.Time=$(date -u +%Y-%m-%dT%H:%M:%SZ) \
+      -X spellfire/server/internal/build.Commit=${BUILD_COMMIT}" \
     -o /out/spellfire-server ./server/cmd/spellfire
 
 # --- Stage 3: minimal runtime image ---

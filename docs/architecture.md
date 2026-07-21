@@ -45,6 +45,7 @@ The Go process serves the built SPA, API, WebSocket endpoint, and one shared wor
 - `POST /api/auth/login` returns the same generic failure for unknown accounts and incorrect passwords.
 - `POST /api/auth/logout` revokes only the presented session.
 - `GET|POST /api/characters` lists or creates account-owned characters. Names are 3–20 characters, both GDD classes are accepted, and the initial account limit is four characters.
+- `GET /api/version` returns `{time, commit}` describing how the running binary was built. The values are stamped at link time via `-ldflags -X spellfire/server/internal/build.{Time,Commit}` (the `make build` target and the Dockerfile set these; the Docker commit comes from the `BUILD_COMMIT` build arg). For an unstamped local `go build`/`go run` in the checkout, `build.Get` falls back to Go's embedded VCS metadata. The home screen fetches this and shows the build age, so a stale deployment is visible at a glance.
 - The raw session token is shown only once to the client. SQLite stores a SHA-256 digest, so a database disclosure does not directly disclose live bearer tokens. The browser keeps the token in `sessionStorage`, preserving refreshes in the current tab without creating an indefinitely persistent browser credential.
 - A WebSocket must send a Protobuf `JOIN` as its first binary message. The server authenticates its token and verifies character ownership before inserting the player into the world.
 - A later connection for the same character replaces the active transport. The old connection cannot delete the replacement when it eventually closes.
@@ -132,7 +133,7 @@ Tick and send rates must remain evenly compatible for predictable snapshot pacin
 
 `Dockerfile` is a three-stage build: a `node:20-alpine` stage runs `npm ci && npm run build` to produce the client bundle, a `golang:1.22-alpine` stage compiles the server with `CGO_ENABLED=0` (the SQLite driver is pure Go, so no C toolchain is needed), and an `alpine:3.20` runtime stage carries only the static binary and the built assets. The result runs as a non-root user (`spellfire`, uid 10001) and is ~21 MB.
 
-Inside the image the binary is `/app/spellfire-server`, static assets live at `/app/web` (`SPELLFIRE_WEB_ROOT`), and the SQLite database is written to `/data/spellfire.db` (`SPELLFIRE_DATABASE`) on a mounted volume so account/character data survives container replacement. A `HEALTHCHECK` polls `/api/health`.
+Inside the image the binary is `/app/spellfire-server`, static assets live at `/app/web` (`SPELLFIRE_WEB_ROOT`), and the SQLite database is written to `/data/spellfire.db` (`SPELLFIRE_DATABASE`) on a mounted volume so account/character data survives container replacement. A `HEALTHCHECK` polls `/api/health`. The build stage stamps the build timestamp from the build host's clock and, if the `BUILD_COMMIT` arg is supplied, the git commit; pass it with `BUILD_COMMIT=$(git rev-parse --short HEAD) docker compose build` (the `.git` directory is not in the build context, so the commit cannot be read inside the image).
 
 `compose.yaml` builds the image, persists `/data` in the `spellfire-data` named volume, and exposes the tuning environment variables (overridable through a sibling `.env` file). Run with `docker compose up --build -d`.
 

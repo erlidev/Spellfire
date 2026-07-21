@@ -30,6 +30,8 @@ button:hover { filter: brightness(1.13); }
 .utility-button { position: fixed; z-index: 2; top: max(18px, env(safe-area-inset-top)); right: max(18px, env(safe-area-inset-right)); }
 .secondary-link { position: fixed; z-index: 2; bottom: max(16px, env(safe-area-inset-bottom)); left: max(16px, env(safe-area-inset-left)); }
 .error { color: #ff9a91; min-height: 1.25em; }
+.build-info { position: fixed; z-index: 2; bottom: max(16px, env(safe-area-inset-bottom)); right: max(16px, env(safe-area-inset-right)); margin: 0; font-size: .7rem; color: #6f819c; }
+.build-info.stale { color: #ffd166; }
 dialog { width: min(460px, calc(100% - 28px)); max-height: calc(100dvh - 28px); overflow: auto; border: 2px solid #405674; border-radius: 18px; color: inherit; background: #172238; padding: 28px; box-shadow: 0 25px 100px #000c; }
 dialog::backdrop { background: #07101dcc; backdrop-filter: blur(4px); }
 .modal-close { float: right; }.modal-close button { border: 0; background: transparent; font-size: 1.4rem; padding: 2px 8px; }

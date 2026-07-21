@@ -28,6 +28,29 @@ class SpellFire {
     if (this.api.token) await this.loadCharacters().catch(() => undefined);
     this.renderHome();
     fetch("/api/health").catch(() => { element("service-status").textContent = "World service unavailable"; element("service-status").classList.remove("good"); });
+    void this.renderBuildInfo();
+  }
+
+  // Shows when the deployed server binary was built, so a stale deployment is
+  // obvious at a glance. The build time is stamped into the binary at compile
+  // time and served from /api/version.
+  private async renderBuildInfo(): Promise<void> {
+    const target = element("build-info");
+    let info;
+    try {
+      info = await this.api.version();
+    } catch {
+      return;
+    }
+    if (!info.time) return;
+    const built = new Date(info.time);
+    if (Number.isNaN(built.getTime())) return;
+    const absolute = built.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+    const commit = info.commit ? ` · ${info.commit}` : "";
+    target.textContent = `Build ${relativeTime(built)} — ${absolute}${commit}`;
+    target.title = built.toISOString();
+    const ageDays = (Date.now() - built.getTime()) / 86_400_000;
+    target.classList.toggle("stale", ageDays > 7);
   }
 
   private bindHome(): void {
@@ -191,5 +214,14 @@ function isFormField(target: EventTarget | null): boolean { return target instan
 function messageOf(error: unknown): string { return error instanceof Error ? error.message : "Something went wrong."; }
 function titleCase(value: string): string { return value.charAt(0).toUpperCase() + value.slice(1); }
 function escapeHTML(value: string): string { const span = document.createElement("span"); span.textContent = value; return span.innerHTML; }
+function relativeTime(date: Date): string {
+  const seconds = Math.round((date.getTime() - Date.now()) / 1000);
+  const formatter = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
+  const units: [Intl.RelativeTimeFormatUnit, number][] = [["year", 31_536_000], ["month", 2_592_000], ["day", 86_400], ["hour", 3600], ["minute", 60]];
+  for (const [unit, span] of units) {
+    if (Math.abs(seconds) >= span) return formatter.format(Math.round(seconds / span), unit);
+  }
+  return formatter.format(seconds, "second");
+}
 
 void new SpellFire().init();
