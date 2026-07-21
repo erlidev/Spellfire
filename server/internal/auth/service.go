@@ -21,14 +21,28 @@ var ErrInvalidCredentials = errors.New("invalid credentials")
 type Service struct {
 	store    store.Store
 	lifetime time.Duration
+	admins   map[string]struct{}
 }
 
-func New(s store.Store, lifetime time.Duration) *Service {
-	return &Service{store: s, lifetime: lifetime}
+// Principal is the server-derived identity attached to an authenticated
+// request. Admin is recomputed from the current account email on every request;
+// clients may display it, but cannot grant it to themselves.
+type Principal struct {
+	AccountID string `json:"-"`
+	Email     string `json:"email"`
+	Admin     bool   `json:"is_admin"`
+}
+
+func New(s store.Store, lifetime time.Duration, adminEmails ...string) *Service {
+	admins := make(map[string]struct{}, len(adminEmails))
+	for _, email := range adminEmails {
+		admins[normalizeEmail(email)] = struct{}{}
+	}
+	return &Service{store: s, lifetime: lifetime, admins: admins}
 }
 
 func (s *Service) Register(ctx context.Context, email, password string) (string, error) {
-	email = strings.TrimSpace(strings.ToLower(email))
+	email = normalizeEmail(email)
 	if !strings.Contains(email, "@") || len(email) > 254 || len(password) < 8 || len(password) > 72 {
 		return "", ErrInvalidCredentials
 	}
@@ -43,7 +57,7 @@ func (s *Service) Register(ctx context.Context, email, password string) (string,
 }
 
 func (s *Service) Login(ctx context.Context, email, password string) (string, error) {
-	a, err := s.store.AccountByEmail(ctx, strings.TrimSpace(strings.ToLower(email)))
+	a, err := s.store.AccountByEmail(ctx, normalizeEmail(email))
 	if err != nil || bcrypt.CompareHashAndPassword(a.PasswordHash, []byte(password)) != nil {
 		return "", ErrInvalidCredentials
 	}
@@ -58,14 +72,20 @@ func (s *Service) Login(ctx context.Context, email, password string) (string, er
 }
 
 func (s *Service) Authenticate(ctx context.Context, token string) (string, error) {
+	principal, err := s.AuthenticatePrincipal(ctx, token)
+	return principal.AccountID, err
+}
+
+func (s *Service) AuthenticatePrincipal(ctx context.Context, token string) (Principal, error) {
 	if token == "" {
-		return "", ErrInvalidCredentials
+		return Principal{}, ErrInvalidCredentials
 	}
-	id, err := s.store.AccountIDBySession(ctx, tokenHash(token), time.Now())
+	account, err := s.store.AccountBySession(ctx, tokenHash(token), time.Now())
 	if err != nil {
-		return "", ErrInvalidCredentials
+		return Principal{}, ErrInvalidCredentials
 	}
-	return id, nil
+	_, admin := s.admins[normalizeEmail(account.Email)]
+	return Principal{AccountID: account.ID, Email: account.Email, Admin: admin}, nil
 }
 
 func (s *Service) Logout(ctx context.Context, token string) error {
@@ -91,4 +111,8 @@ func randomToken() (string, error) {
 func tokenHash(token string) string {
 	h := sha256.Sum256([]byte(token))
 	return hex.EncodeToString(h[:])
+}
+
+func normalizeEmail(email string) string {
+	return strings.ToLower(strings.TrimSpace(email))
 }

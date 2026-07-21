@@ -33,7 +33,7 @@ func main() {
 		os.Exit(1)
 	}
 	defer data.Close()
-	authService := auth.New(data, cfg.SessionLifetime)
+	authService := auth.New(data, cfg.SessionLifetime, tables.Admins.Emails...)
 	balance := game.FromTables(tables)
 	balance.TickRate, balance.SendRate, balance.AOIRadius, balance.MaxRewind = cfg.TickRate, cfg.SendRate, cfg.AOIRadius, cfg.MaxRewind
 	engine := game.NewEngine(balance, data)
@@ -41,7 +41,7 @@ func main() {
 	defer stop()
 	go engine.Run(ctx)
 	mux := http.NewServeMux()
-	api.New(authService, data).RegisterRoutes(mux)
+	api.New(authService, data, engine).RegisterRoutes(mux)
 	mux.Handle("/ws", transport.NewWebSocket(authService, data, engine))
 	mux.Handle("/", spaHandler(cfg.WebRoot))
 	server := &http.Server{Addr: cfg.Address, Handler: securityHeaders(mux), ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 60 * time.Second}

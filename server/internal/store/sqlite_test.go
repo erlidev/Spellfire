@@ -38,11 +38,17 @@ func TestSQLiteAccountSessionAndCharacterLifecycle(t *testing.T) {
 	if got, err := s.AccountIDBySession(ctx, "active", time.Now()); err != nil || got != a.ID {
 		t.Fatalf("session = %q, %v", got, err)
 	}
+	if got, err := s.AccountBySession(ctx, "active", time.Now()); err != nil || got.ID != a.ID || got.Email != "player@example.com" {
+		t.Fatalf("session account = %#v, %v", got, err)
+	}
 	if err := s.CreateSession(ctx, "expired", a.ID, time.Now().Add(-time.Hour)); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.AccountIDBySession(ctx, "expired", time.Now()); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("expired error = %v", err)
+	}
+	if _, err := s.AccountBySession(ctx, "expired", time.Now()); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("expired account error = %v", err)
 	}
 	c := model.Character{ID: "c1", AccountID: a.ID, Name: "Ember Fox", Class: model.Mage, Level: 1}
 	if err := s.CreateCharacter(ctx, c); err != nil {

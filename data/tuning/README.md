@@ -3,7 +3,8 @@
 Versioned balance data. These files are the only place a balance number is
 authored. The Go server embeds them (`data/data.go` → `server/internal/tuning`)
 and the Vite client imports the same files (`web/src/tuning.ts`), so both sides
-of the prediction loop read one source.
+of the prediction loop read one source. Server-only configuration such as the
+administrator list is embedded but intentionally not imported by the client.
 
 Rules, from [`invariants.md`](../../docs/game/design/invariants.md) and
 [`progression-and-crafting.md`](../../docs/game/design/progression-and-crafting.md#persistence-and-versioning):
@@ -42,6 +43,8 @@ Rules, from [`invariants.md`](../../docs/game/design/invariants.md) and
 | File | Contents |
 |---|---|
 | `manifest.json` | Content and schema versions |
+| `admins.json` | Normalized account emails granted administrator authorization |
+| `admin_tools.json` | Developer-mode spawn catalog, editable per-entity fields, and bounded player overrides |
 | `simulation.json` | Tick/send rates, AOI radius, rewind window, interpolation delay |
 | `session.json` | Logout linger window and saved-position expiry |
 | `world.json` | World radius, spawn radius, danger bands, procedural tree parameters |
@@ -61,6 +64,16 @@ Rules, from [`invariants.md`](../../docs/game/design/invariants.md) and
 ## Deliberately empty and deliberately absent
 
 Rows are populated only where a design document has settled them.
+
+- `admins.emails` is empty by default. Add account emails to grant the
+  server-derived administrator role, then rebuild and restart the server. Email
+  matching is case-insensitive; the loader rejects malformed or duplicate
+  normalized entries. See [`administration.md`](../../docs/administration.md).
+- `admin_tools.json` contains every entity family the live world can currently
+  materialize: temporary player fixtures, projectiles, and telegraphs. Rows are
+  rendered as a searchable admin catalog and validated again by the server;
+  adding another row of one of those kinds requires no UI code. A new entity
+  kind still needs its authoritative world executor before it can be added.
 
 - `effects` is empty. The simulation runs all six kinds — burn ticks from a
   band, slows scale movement and take the strongest rather than compounding,

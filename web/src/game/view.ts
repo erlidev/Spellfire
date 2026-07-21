@@ -69,6 +69,13 @@ export class GameView {
     return { x: clientX - this.app.screen.width / 2, y: clientY - this.app.screen.height / 2 };
   }
 
+  // Placement tools need an absolute world coordinate, unlike aiming, which
+  // deliberately uses the player-relative vector returned by pointerWorld.
+  worldAtPointer(clientX: number, clientY: number): { x: number; y: number } {
+    const point = this.pointerWorld(clientX, clientY), predictor = this.predictor;
+    return predictor ? { x: predictor.x + point.x, y: predictor.y + point.y } : point;
+  }
+
   destroy(): void {
     if (!this.initialized) return;
     this.app.destroy(true, { children: true }); this.initialized = false;

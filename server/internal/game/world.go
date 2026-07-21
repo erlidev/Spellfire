@@ -102,6 +102,10 @@ type Player struct {
 	// LingerUntil is set when the connection drops: the body stays in the world,
 	// killable and unable to act, until it passes. Zero means connected.
 	LingerUntil time.Time
+	// AdminSpawned actors are disposable developer fixtures. They participate in
+	// combat and snapshots but never become a character save or account body.
+	AdminSpawned                  bool
+	SpeedMultiplier, ViewDistance float64
 }
 
 // Lingering reports whether the body is present only because its owner
@@ -152,10 +156,11 @@ type World struct {
 	history     map[string][]historySample
 	// occupants maps an account to the one character it has a body for, so the
 	// one-body-per-account rule is a lookup rather than a scan of the world.
-	occupants      map[string]string
-	nextProjectile uint64
-	nextTelegraph  uint64
-	combat         *combatLog
+	occupants       map[string]string
+	nextProjectile  uint64
+	nextTelegraph   uint64
+	nextAdminPlayer uint64
+	combat          *combatLog
 }
 
 func NewWorld(t Tuning) *World {
@@ -203,9 +208,10 @@ func (w *World) AddPlayer(character model.Character, now time.Time) *Player {
 		ID: character.ID, AccountID: character.AccountID, Name: character.Name, Class: character.Class,
 		Position: w.entryPosition(character, now), Aim: Vec{1, 0},
 		Health: w.tuning.MaxHealth, Mana: w.tuning.MaxMana, Alive: true,
-		Materials: w.carriedMaterials(character.State.Materials),
-		Outposts:  append([]string(nil), character.State.Outposts...),
-		Cooldowns: make(map[string]time.Time),
+		Materials:       w.carriedMaterials(character.State.Materials),
+		Outposts:        append([]string(nil), character.State.Outposts...),
+		Cooldowns:       make(map[string]time.Time),
+		SpeedMultiplier: 1,
 	}
 	// Until the Phase 2 loadout lands, the equipped weapon is the class starter
 	// row. It is a table reference, never a copy of its stats.
@@ -341,7 +347,7 @@ func (w *World) ExpiredLingering(now time.Time) []string {
 // current instant respawn uses; Phase 4.2 replaces both with a chosen outpost.
 func (w *World) StateOf(id string, now time.Time) (model.CharacterState, bool) {
 	p := w.players[id]
-	if p == nil {
+	if p == nil || p.AdminSpawned {
 		return model.CharacterState{}, false
 	}
 	materials := make(map[string]int, len(p.Materials))
@@ -488,7 +494,7 @@ func (w *World) stepPlayer(p *Player, now time.Time, dt float64) {
 		p.Velocity = p.DashDirection.Mul(w.tuning.dashSpeed())
 		p.DashTicksLeft--
 	default:
-		p.Velocity = move.Mul(w.tuning.PlayerSpeed * w.movementScale(p))
+		p.Velocity = move.Mul(w.tuning.PlayerSpeed * p.SpeedMultiplier * w.movementScale(p))
 	}
 	p.Position = w.moveCircle(p.Position, p.Velocity.Mul(dt), w.tuning.PlayerRadius)
 	if p.Class == model.Mage {

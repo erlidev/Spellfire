@@ -19,6 +19,7 @@
           <p>Create an account or sign in to carry your character between sessions.</p>
         </div>
         <div id="character-state" hidden>
+          <p id="account-identity" class="account-identity"></p>
           <label for="character-select">Character</label>
           <select id="character-select"></select>
           <button id="new-character-button" class="text-button">Create character</button>
@@ -45,6 +46,7 @@
         <div><kbd>Mouse</kbd><span>Primary</span></div><div><kbd>Space</kbd><span>Dash</span></div><div><kbd>R</kbd><span>Reload</span></div><div><kbd>E</kbd><span>Interact</span></div>
       </div>
       <div id="world-notice" class="hud world-notice" role="status"></div>
+      <aside id="developer-mode-hud" class="hud developer-mode-hud" hidden><strong>Developer mode</strong><span id="developer-mode-selection"></span><button id="developer-mode-exit">Exit mode</button></aside>
       <div id="connection-overlay" class="connection-overlay" hidden><h2 id="connection-title">Connecting</h2><p id="connection-message">Joining the world…</p><button id="connection-cancel">Return home</button></div>
       <div id="death-overlay" class="connection-overlay" hidden><h2>You fell in the frontier</h2><p>Your crafted gear is safe. This foundation does not yet award carried materials.</p><button id="respawn-button" class="primary">Respawn at central hub</button></div>
       <div id="touch-controls" aria-label="Touch controls">
@@ -79,7 +81,7 @@
     <dialog id="menu-dialog" class="game-menu">
       <form method="dialog" class="modal-close"><button aria-label="Close">×</button></form>
       <h2>Field menu</h2><p class="warning">The shared world remains active. Combat input is suspended.</p>
-      <nav id="menu-tabs"><button data-tab="character" class="active">Character</button><button data-tab="loadout">Loadout</button><button data-tab="inventory">Inventory</button><button data-tab="world">World</button><button data-tab="reference">Reference</button><button data-tab="settings">Settings</button></nav>
+      <nav id="menu-tabs"><button data-tab="character" class="active">Character</button><button data-tab="loadout">Loadout</button><button data-tab="inventory">Inventory</button><button data-tab="world">World</button><button data-tab="reference">Reference</button><button data-tab="settings">Settings</button><button id="admin-menu-tab" data-tab="admin" hidden>Admin</button></nav>
       <section id="menu-content"></section>
       <button id="exit-button" class="danger-button">Exit game</button>
     </dialog>

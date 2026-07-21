@@ -56,6 +56,12 @@ func TestShippedTablesLoadAndValidate(t *testing.T) {
 	if tables.Manifest.SchemaVersion != SchemaVersion || tables.Manifest.Version < 1 {
 		t.Fatalf("manifest = %#v", tables.Manifest)
 	}
+	if tables.Admins.Emails == nil {
+		t.Fatal("admins table was not loaded")
+	}
+	if len(tables.AdminTools.Spawnables) == 0 || len(tables.AdminTools.Attributes) == 0 {
+		t.Fatalf("admin tools = %#v", tables.AdminTools)
+	}
 	for _, class := range []string{"gunslinger", "mage"} {
 		weapon, ok := tables.StarterWeapon(class)
 		if !ok {
@@ -167,6 +173,20 @@ func TestValidationRejectsBrokenTables(t *testing.T) {
 		{
 			name: "unsupported schema version", file: "manifest.json", want: "forward migration",
 			mutate: func(document map[string]any) { document["schema_version"] = 99.0 },
+		},
+		{
+			name: "invalid admin email", file: "admins.json", want: "not a valid account email",
+			mutate: func(document map[string]any) { document["emails"] = []any{"not-an-email"} },
+		},
+		{
+			name: "duplicate normalized admin email", file: "admins.json", want: "duplicate account email",
+			mutate: func(document map[string]any) { document["emails"] = []any{"ADMIN@example.com", " admin@example.com "} },
+		},
+		{
+			name: "admin projectile with no live executor", file: "admin_tools.json", want: "ability without a projectile",
+			mutate: func(document map[string]any) {
+				document["spawnables"].(map[string]any)["rifle-projectile"].(map[string]any)["ability"] = "missing"
+			},
 		},
 		{
 			name: "damaging ability without a dodge vector", file: "abilities.json", want: "counterplay vector",

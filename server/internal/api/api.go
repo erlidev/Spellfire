@@ -10,6 +10,7 @@ import (
 
 	"spellfire/server/internal/auth"
 	"spellfire/server/internal/build"
+	"spellfire/server/internal/game"
 	"spellfire/server/internal/model"
 	"spellfire/server/internal/store"
 )
@@ -17,12 +18,25 @@ import (
 var characterName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9 _-]{1,18}[A-Za-z0-9]$`)
 
 type API struct {
-	auth  *auth.Service
-	store store.Store
+	auth       *auth.Service
+	store      store.Store
+	adminTools AdminController
 }
 
-func New(authService *auth.Service, data store.Store) *API {
-	return &API{auth: authService, store: data}
+// AdminController is the narrow, server-authoritative seam the HTTP layer
+// needs for developer mode. It deliberately exposes neither World nor any
+// account/session internals to an admin request.
+type AdminController interface {
+	AdminSpawn(string, game.AdminSpawn) error
+	SetAdminAttributes(string, map[string]float64) error
+}
+
+func New(authService *auth.Service, data store.Store, adminTools ...AdminController) *API {
+	api := &API{auth: authService, store: data}
+	if len(adminTools) > 0 {
+		api.adminTools = adminTools[0]
+	}
+	return api
 }
 
 func (a *API) RegisterRoutes(mux *http.ServeMux) {
@@ -35,6 +49,9 @@ func (a *API) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/auth/register", a.register)
 	mux.HandleFunc("POST /api/auth/login", a.login)
 	mux.HandleFunc("POST /api/auth/logout", a.withAccount(a.logout))
+	mux.HandleFunc("GET /api/account", a.withAccount(a.account))
+	mux.HandleFunc("POST /api/admin/spawn", a.withAdmin(a.adminSpawn))
+	mux.HandleFunc("POST /api/admin/attributes", a.withAdmin(a.adminAttributes))
 	mux.HandleFunc("GET /api/characters", a.withAccount(a.characters))
 	mux.HandleFunc("POST /api/characters", a.withAccount(a.createCharacter))
 }
@@ -58,7 +75,7 @@ func (a *API) register(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "Use a valid email and a password of 8 to 72 characters.")
 		return
 	}
-	writeJSON(w, http.StatusCreated, map[string]string{"token": token})
+	a.writeSession(w, r, http.StatusCreated, token)
 }
 
 func (a *API) login(w http.ResponseWriter, r *http.Request) {
@@ -71,24 +88,51 @@ func (a *API) login(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "Email or password is incorrect.")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"token": token})
+	a.writeSession(w, r, http.StatusOK, token)
 }
 
-type accountHandler func(http.ResponseWriter, *http.Request, string, string)
+type accountHandler func(http.ResponseWriter, *http.Request, auth.Principal, string)
+
+type sessionResponse struct {
+	Token   string         `json:"token"`
+	Account auth.Principal `json:"account"`
+}
+
+func (a *API) writeSession(w http.ResponseWriter, r *http.Request, status int, token string) {
+	principal, err := a.auth.AuthenticatePrincipal(r.Context(), token)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "Could not start the session.")
+		return
+	}
+	writeJSON(w, status, sessionResponse{Token: token, Account: principal})
+}
 
 func (a *API) withAccount(next accountHandler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		token := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
-		accountID, err := a.auth.Authenticate(r.Context(), token)
+		principal, err := a.auth.AuthenticatePrincipal(r.Context(), token)
 		if err != nil {
 			writeError(w, http.StatusUnauthorized, "Your session has expired. Sign in again.")
 			return
 		}
-		next(w, r, accountID, token)
+		next(w, r, principal, token)
 	}
 }
 
-func (a *API) logout(w http.ResponseWriter, r *http.Request, _ string, token string) {
+// withAdmin is the opt-in authorization boundary for privileged features. A
+// future endpoint becomes admin-only by registering it through this wrapper;
+// handlers never trust a role supplied in request JSON or by the browser.
+func (a *API) withAdmin(next accountHandler) http.HandlerFunc {
+	return a.withAccount(func(w http.ResponseWriter, r *http.Request, principal auth.Principal, token string) {
+		if !principal.Admin {
+			writeError(w, http.StatusForbidden, "Administrator access is required.")
+			return
+		}
+		next(w, r, principal, token)
+	})
+}
+
+func (a *API) logout(w http.ResponseWriter, r *http.Request, _ auth.Principal, token string) {
 	if err := a.auth.Logout(r.Context(), token); err != nil {
 		writeError(w, http.StatusInternalServerError, "Could not sign out.")
 		return
@@ -96,8 +140,75 @@ func (a *API) logout(w http.ResponseWriter, r *http.Request, _ string, token str
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (a *API) characters(w http.ResponseWriter, r *http.Request, accountID, _ string) {
-	characters, err := a.store.Characters(r.Context(), accountID)
+func (a *API) account(w http.ResponseWriter, _ *http.Request, principal auth.Principal, _ string) {
+	writeJSON(w, http.StatusOK, principal)
+}
+
+type adminSpawnRequest struct {
+	CharacterID string            `json:"character_id"`
+	SpawnID     string            `json:"spawn_id"`
+	X           float64           `json:"x"`
+	Y           float64           `json:"y"`
+	Config      map[string]string `json:"config"`
+}
+
+func (a *API) adminSpawn(w http.ResponseWriter, r *http.Request, principal auth.Principal, _ string) {
+	var body adminSpawnRequest
+	if !decodeJSON(w, r, &body) {
+		return
+	}
+	if !a.adminCharacter(w, r, principal, body.CharacterID) {
+		return
+	}
+	if a.adminTools == nil {
+		writeError(w, http.StatusServiceUnavailable, "Developer tools are not available.")
+		return
+	}
+	if err := a.adminTools.AdminSpawn(body.CharacterID, game.AdminSpawn{ID: body.SpawnID, Position: game.Vec{X: body.X, Y: body.Y}, Config: body.Config}); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+type adminAttributesRequest struct {
+	CharacterID string             `json:"character_id"`
+	Attributes  map[string]float64 `json:"attributes"`
+}
+
+func (a *API) adminAttributes(w http.ResponseWriter, r *http.Request, principal auth.Principal, _ string) {
+	var body adminAttributesRequest
+	if !decodeJSON(w, r, &body) {
+		return
+	}
+	if !a.adminCharacter(w, r, principal, body.CharacterID) {
+		return
+	}
+	if a.adminTools == nil {
+		writeError(w, http.StatusServiceUnavailable, "Developer tools are not available.")
+		return
+	}
+	if err := a.adminTools.SetAdminAttributes(body.CharacterID, body.Attributes); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (a *API) adminCharacter(w http.ResponseWriter, r *http.Request, principal auth.Principal, characterID string) bool {
+	if characterID == "" {
+		writeError(w, http.StatusBadRequest, "Choose a character in the world.")
+		return false
+	}
+	if _, err := a.store.Character(r.Context(), principal.AccountID, characterID); err != nil {
+		writeError(w, http.StatusNotFound, "Character unavailable.")
+		return false
+	}
+	return true
+}
+
+func (a *API) characters(w http.ResponseWriter, r *http.Request, principal auth.Principal, _ string) {
+	characters, err := a.store.Characters(r.Context(), principal.AccountID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "Could not load characters.")
 		return
@@ -105,7 +216,7 @@ func (a *API) characters(w http.ResponseWriter, r *http.Request, accountID, _ st
 	writeJSON(w, http.StatusOK, map[string]any{"characters": characters})
 }
 
-func (a *API) createCharacter(w http.ResponseWriter, r *http.Request, accountID, _ string) {
+func (a *API) createCharacter(w http.ResponseWriter, r *http.Request, principal auth.Principal, _ string) {
 	var body struct {
 		Name  string      `json:"name"`
 		Class model.Class `json:"class"`
@@ -118,7 +229,7 @@ func (a *API) createCharacter(w http.ResponseWriter, r *http.Request, accountID,
 		writeError(w, http.StatusBadRequest, "Choose a 3–20 character name and a valid class.")
 		return
 	}
-	characters, err := a.store.Characters(r.Context(), accountID)
+	characters, err := a.store.Characters(r.Context(), principal.AccountID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "Could not validate the character.")
 		return
@@ -127,7 +238,7 @@ func (a *API) createCharacter(w http.ResponseWriter, r *http.Request, accountID,
 		writeError(w, http.StatusConflict, "This account already has four characters.")
 		return
 	}
-	character := model.Character{ID: auth.NewID(), AccountID: accountID, Name: body.Name, Class: body.Class, Level: 1}
+	character := model.Character{ID: auth.NewID(), AccountID: principal.AccountID, Name: body.Name, Class: body.Class, Level: 1}
 	if err = a.store.CreateCharacter(r.Context(), character); errors.Is(err, store.ErrConflict) {
 		writeError(w, http.StatusConflict, "That character name is already in use on this account.")
 		return

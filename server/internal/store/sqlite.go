@@ -146,6 +146,16 @@ func (s *SQLite) AccountIDBySession(ctx context.Context, tokenHash string, now t
 	return id, classify(err)
 }
 
+func (s *SQLite) AccountBySession(ctx context.Context, tokenHash string, now time.Time) (model.Account, error) {
+	var account model.Account
+	err := s.db.QueryRowContext(ctx, `
+SELECT accounts.id,accounts.email
+FROM sessions JOIN accounts ON accounts.id=sessions.account_id
+WHERE sessions.token_hash=? AND sessions.expires_at>?`, tokenHash, now.Unix()).
+		Scan(&account.ID, &account.Email)
+	return account, classify(err)
+}
+
 func (s *SQLite) DeleteSession(ctx context.Context, tokenHash string) error {
 	_, err := s.db.ExecContext(ctx, `DELETE FROM sessions WHERE token_hash=?`, tokenHash)
 	return err

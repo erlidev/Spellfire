@@ -212,6 +212,24 @@ func (e *Engine) Respawn(playerID string, now time.Time) {
 	e.world.Respawn(playerID, now)
 }
 
+// AdminSpawn and SetAdminAttributes are intentionally narrow world-control
+// seams. HTTP authenticates the caller before invoking them; the world remains
+// unaware of sessions and only executes validated catalog requests.
+func (e *Engine) AdminSpawn(playerID string, spawn AdminSpawn) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.world.players[playerID] == nil {
+		return errors.New("game: player is not in the world")
+	}
+	return e.world.adminSpawn(spawn, time.Now())
+}
+
+func (e *Engine) SetAdminAttributes(playerID string, attributes map[string]float64) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.world.setAdminAttributes(playerID, attributes)
+}
+
 func (e *Engine) Pong(playerID string, clientTime uint64, now time.Time) {
 	e.mu.Lock()
 	defer e.mu.Unlock()

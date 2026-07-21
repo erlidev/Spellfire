@@ -17,7 +17,7 @@ type Store interface {
 	CreateAccount(context.Context, model.Account) error
 	AccountByEmail(context.Context, string) (model.Account, error)
 	CreateSession(context.Context, string, string, time.Time) error
-	AccountIDBySession(context.Context, string, time.Time) (string, error)
+	AccountBySession(context.Context, string, time.Time) (model.Account, error)
 	DeleteSession(context.Context, string) error
 	Characters(context.Context, string) ([]model.Character, error)
 	CreateCharacter(context.Context, model.Character) error

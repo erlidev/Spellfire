@@ -1,0 +1,52 @@
+{
+  "spawnables": {
+    "training-gunslinger": {
+      "name": "Training Gunslinger",
+      "kind": "player",
+      "class": "gunslinger",
+      "fields": [
+        { "id": "name", "label": "Name", "kind": "text", "default_text": "Training Gunslinger", "max_length": 20 },
+        { "id": "speed_multiplier", "label": "Speed multiplier", "kind": "number", "default_number": 1, "minimum": 0.25, "maximum": 4, "step": 0.25 }
+      ]
+    },
+    "training-mage": {
+      "name": "Training Mage",
+      "kind": "player",
+      "class": "mage",
+      "fields": [
+        { "id": "name", "label": "Name", "kind": "text", "default_text": "Training Mage", "max_length": 20 },
+        { "id": "speed_multiplier", "label": "Speed multiplier", "kind": "number", "default_number": 1, "minimum": 0.25, "maximum": 4, "step": 0.25 }
+      ]
+    },
+    "rifle-projectile": {
+      "name": "Rifle projectile",
+      "kind": "projectile",
+      "ability": "rifle-shot",
+      "fields": [
+        { "id": "heading_degrees", "label": "Heading (degrees)", "kind": "number", "default_number": 0, "minimum": -360, "maximum": 360, "step": 5 }
+      ]
+    },
+    "fire-bolt-projectile": {
+      "name": "Fire bolt projectile",
+      "kind": "projectile",
+      "ability": "fire-bolt-cast",
+      "element": "fire",
+      "fields": [
+        { "id": "heading_degrees", "label": "Heading (degrees)", "kind": "number", "default_number": 0, "minimum": -360, "maximum": 360, "step": 5 }
+      ]
+    },
+    "fire-bolt-telegraph": {
+      "name": "Fire bolt telegraph",
+      "kind": "telegraph",
+      "ability": "fire-bolt-cast",
+      "element": "fire",
+      "fields": [
+        { "id": "heading_degrees", "label": "Heading (degrees)", "kind": "number", "default_number": 0, "minimum": -360, "maximum": 360, "step": 5 }
+      ]
+    }
+  },
+  "attributes": {
+    "speed_multiplier": { "label": "Movement speed", "kind": "number", "default_number": 1, "minimum": 0.25, "maximum": 4, "step": 0.25 },
+    "view_distance": { "label": "View distance", "kind": "number", "default_number": 1200, "minimum": 300, "maximum": 2000, "step": 100 }
+  }
+}

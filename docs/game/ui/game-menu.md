@@ -17,8 +17,24 @@ State this explicitly and preserve danger awareness where possible. Menu interac
 | Activity | Boss rank/contribution and contextual progress | Conditional |
 | Reference | Combat resources, death, loot, danger, controls | Always |
 | Settings | Input, audio, graphics, UI, accessibility, account-safe preferences | Always |
+| Admin | Developer-mode placement catalog, selected-entity configuration, and temporary player overrides | Configured administrators only |
 
 Marketplace, guild/territory, monetization, and onboarding are deferred. Add them only when their game rules exist, following the [`README`](README.md#extension-contract) extension contract.
+
+## Administrator developer mode
+
+An administrator sees an Admin tab only after the server has confirmed their
+account role. It contains a searchable, selectable catalog with per-item fields
+defined by data, plus bounded speed and view-distance controls for the current
+administrator body. The panel explains that the shared world continues and
+that enabling developer mode replaces primary fire with pointer placement after
+the menu closes. A persistent but compact HUD names the selected spawnable and
+offers an immediate exit from the mode.
+
+The client may never treat the tab or HUD as authority: the server verifies the
+administrator session, character ownership, catalog row, field values, and
+world coordinate for every action. Non-administrators have neither the tab nor
+the protected API capability. See [`../../administration.md`](../../administration.md).
 
 ## Exit and session actions
 

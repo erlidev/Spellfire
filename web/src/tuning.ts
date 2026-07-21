@@ -3,6 +3,7 @@
 // simulation, the prediction constants, and the renderer together. Nothing in
 // web/src may re-declare a balance number that exists in a table.
 import abilitiesData from "../../data/tuning/abilities.json";
+import adminToolsData from "../../data/tuning/admin_tools.json";
 import biomesData from "../../data/tuning/biomes.json";
 import combatData from "../../data/tuning/combat.json";
 import effectsData from "../../data/tuning/effects.json";
@@ -45,8 +46,13 @@ export interface Material { name: string; grade: string; kind: string; biome?: s
 export interface MaterialsTable { grades: Record<string, Grade>; kinds: Record<string, MaterialKind>; materials: Record<string, Material> }
 export interface Mob { name: string; family: string; silhouette: string; damage_band: string; dodge_vector: string; telegraph_shape?: Telegraph["shape"]; turrets: number; behavior: string }
 export interface Biome { name: string; element: string }
+export interface AdminToolField { id: string; label: string; kind: "number" | "text"; default_text?: string; default_number?: number; minimum?: number; maximum?: number; step?: number; max_length?: number }
+export interface AdminSpawnable { name: string; kind: "player" | "projectile" | "telegraph"; class?: CharacterClass; ability?: string; element?: string; fields: AdminToolField[] }
+export type AdminAttribute = Omit<AdminToolField, "id">;
+export interface AdminTools { spawnables: Record<string, AdminSpawnable>; attributes: Record<string, AdminAttribute> }
 
 export const manifest = manifestData as Manifest;
+export const adminTools = adminToolsData as AdminTools;
 export const simulation = simulationData as Simulation;
 export const session = sessionData as SessionTable;
 export const world = worldData as WorldTable;

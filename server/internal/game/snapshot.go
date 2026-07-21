@@ -15,7 +15,11 @@ func (w *World) SnapshotFor(playerID string, now time.Time, kind uint64) protoco
 		message.Error = "player is not in the world"
 		return message
 	}
-	radiusSq := w.tuning.AOIRadius * w.tuning.AOIRadius
+	viewDistance := w.tuning.AOIRadius
+	if viewer.ViewDistance > 0 {
+		viewDistance = viewer.ViewDistance
+	}
+	radiusSq := viewDistance * viewDistance
 	for _, id := range sortedPlayerIDs(w.players) {
 		p := w.players[id]
 		if id != playerID && p.Position.Sub(viewer.Position).LengthSq() > radiusSq {
@@ -61,7 +65,7 @@ func (w *World) SnapshotFor(playerID string, now time.Time, kind uint64) protoco
 		})
 	}
 	for _, c := range w.colliders {
-		if c.Position.Sub(viewer.Position).LengthSq() <= math.Pow(w.tuning.AOIRadius+c.Radius, 2) {
+		if c.Position.Sub(viewer.Position).LengthSq() <= math.Pow(viewDistance+c.Radius, 2) {
 			message.Colliders = append(message.Colliders, protocol.Collider{ID: c.ID, X: float32(c.Position.X), Y: float32(c.Position.Y), Radius: float32(c.Radius), Kind: c.Kind})
 		}
 	}

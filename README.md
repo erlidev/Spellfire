@@ -30,4 +30,4 @@ docker compose up --build -d
 
 The container publishes no host port; it joins the external `proxy` network and exposes port 8080 there, so a reverse proxy on the same network reaches it at `http://spellfire:8080` (forward both HTTP and the `/ws` WebSocket upgrade). To run standalone without a proxy, add a `ports:` mapping to the service in `compose.yaml`. Account and character data persists in the `spellfire-data` volume; simulation tuning is configurable via the environment variables in `compose.yaml`. Stop with `docker compose down` (add `-v` to also drop the database volume).
 
-See [the architecture](./docs/architecture.md), [game design](./docs/game/design/README.md), and [user-facing specification](./docs/game/ui/README.md).
+See [the architecture](./docs/architecture.md), [administrator configuration](./docs/administration.md), [game design](./docs/game/design/README.md), and [user-facing specification](./docs/game/ui/README.md).

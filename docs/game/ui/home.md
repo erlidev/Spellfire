@@ -26,6 +26,11 @@ Reading and focus order is:
 
 Play is disabled only for an explained blocking requirement. Activation moves in place to [connection feedback](connection-and-recovery.md) and prevents duplicate attempts.
 
+The signed-in identity uses the account email. Administrator accounts append a
+plain “Administrator” label so privileged surfaces added later have visible
+role context. The label reflects server-provided account state and never acts
+as an authorization check; the server still gates every privileged operation.
+
 **Open:** guest play, character slots, naming, region/server selection, and where first-time class choice occurs. Reserve one compact prerequisite control without implying every system exists.
 
 ## Account flows
@@ -49,4 +54,3 @@ External identity providers may require a new window or redirect. Preserve pendi
 Settings, credits, privacy/legal, accessibility, and patch/news content use secondary overlays where practical. Long legal documents may use dedicated pages but never interrupt the normal play or authentication path.
 
 Responsive rules live in [`responsive-and-mobile.md#home-and-overlays`](responsive-and-mobile.md#home-and-overlays); generic remote-data states live in [`shared-states.md`](shared-states.md).
-

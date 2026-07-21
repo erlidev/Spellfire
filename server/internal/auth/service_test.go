@@ -29,6 +29,15 @@ func TestRegisterLoginAuthenticateAndLogout(t *testing.T) {
 	if err != nil || accountID == "" {
 		t.Fatalf("authenticate = %q, %v", accountID, err)
 	}
+	principal, err := service.AuthenticatePrincipal(ctx, token)
+	if err != nil || principal.AccountID != accountID || principal.Email != "hero@example.com" || principal.Admin {
+		t.Fatalf("principal = %#v, %v", principal, err)
+	}
+	adminService := New(data, time.Hour, " HERO@EXAMPLE.COM ")
+	principal, err = adminService.AuthenticatePrincipal(ctx, token)
+	if err != nil || !principal.Admin {
+		t.Fatalf("configured admin principal = %#v, %v", principal, err)
+	}
 	if _, err := service.Login(ctx, "hero@example.com", "wrong password"); !errors.Is(err, ErrInvalidCredentials) {
 		t.Fatalf("wrong password error = %v", err)
 	}

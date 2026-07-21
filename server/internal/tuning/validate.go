@@ -14,6 +14,8 @@ import (
 func (t *Tables) validate() error {
 	problems := &report{}
 	t.validateManifest(problems)
+	t.validateAdmins(problems)
+	t.validateAdminTools(problems)
 	t.validateSimulation(problems)
 	t.validateSession(problems)
 	t.validateWorld(problems)
@@ -31,6 +33,70 @@ func (t *Tables) validate() error {
 	t.validateRetired(problems)
 	t.validateProjectileKinds(problems)
 	return problems.err()
+}
+
+func (t *Tables) validateAdminTools(r *report) {
+	if r.require(len(t.AdminTools.Spawnables) > 0, "admin_tools: spawnables must not be empty") {
+		for _, id := range sortedKeys(t.AdminTools.Spawnables) {
+			spawnable := t.AdminTools.Spawnables[id]
+			r.require(spawnable.Name != "", "admin_tools: spawnable %q has no name", id)
+			r.require(contains([]string{"player", "projectile", "telegraph"}, spawnable.Kind),
+				"admin_tools: spawnable %q has unsupported kind %q", id, spawnable.Kind)
+			switch spawnable.Kind {
+			case "player":
+				r.require(spawnable.Class == "gunslinger" || spawnable.Class == "mage", "admin_tools: player %q has invalid class %q", id, spawnable.Class)
+				r.require(spawnable.Ability == "", "admin_tools: player %q must not declare an ability", id)
+			case "projectile":
+				ability := t.Abilities[spawnable.Ability]
+				r.require(ability.Projectile != nil, "admin_tools: projectile %q references an ability without a projectile %q", id, spawnable.Ability)
+			case "telegraph":
+				ability := t.Abilities[spawnable.Ability]
+				r.require(ability.Telegraph != nil, "admin_tools: telegraph %q references an ability without a telegraph %q", id, spawnable.Ability)
+			}
+			if spawnable.Element != "" {
+				r.require(t.Elements[spawnable.Element].Name != "", "admin_tools: spawnable %q references unknown element %q", id, spawnable.Element)
+			}
+			validateAdminFields(r, "admin_tools: spawnable "+id, spawnable.Fields)
+		}
+	}
+	if r.require(len(t.AdminTools.Attributes) > 0, "admin_tools: attributes must not be empty") {
+		for _, id := range sortedKeys(t.AdminTools.Attributes) {
+			field := t.AdminTools.Attributes[id]
+			field.ID = id
+			validateAdminFields(r, "admin_tools: attribute "+id, []AdminToolField{field})
+		}
+	}
+}
+
+func validateAdminFields(r *report, prefix string, fields []AdminToolField) {
+	seen := map[string]bool{}
+	for _, field := range fields {
+		r.require(field.ID != "", "%s has a field with no id", prefix)
+		r.require(!seen[field.ID], "%s repeats field %q", prefix, field.ID)
+		seen[field.ID] = true
+		r.require(field.Label != "", "%s field %q has no label", prefix, field.ID)
+		switch field.Kind {
+		case "number":
+			r.require(field.Minimum <= field.DefaultNumber && field.DefaultNumber <= field.Maximum,
+				"%s number field %q default %g is outside [%g,%g]", prefix, field.ID, field.DefaultNumber, field.Minimum, field.Maximum)
+			r.require(field.Minimum < field.Maximum && field.Step > 0, "%s number field %q needs minimum < maximum and positive step", prefix, field.ID)
+		case "text":
+			r.require(field.MaxLength > 0, "%s text field %q needs a positive max_length", prefix, field.ID)
+			r.require(len(field.DefaultText) <= field.MaxLength, "%s text field %q default exceeds max_length", prefix, field.ID)
+		default:
+			r.addf("%s field %q has unsupported kind %q", prefix, field.ID, field.Kind)
+		}
+	}
+}
+
+func (t *Tables) validateAdmins(r *report) {
+	seen := map[string]bool{}
+	for index, email := range t.Admins.Emails {
+		r.require(email != "" && len(email) <= 254 && strings.Count(email, "@") == 1,
+			"admins: email %d %q is not a valid account email", index, email)
+		r.require(!seen[email], "admins: duplicate account email %q", email)
+		seen[email] = true
+	}
 }
 
 type report struct{ messages []string }

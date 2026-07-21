@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { abilities, abilityFor, combat, damageBandFor, dangerBandAt, damageOf, projectileByKind, pvpRadius, resourceMax, safeRadius, simulation, spells, starterWeapon, weapons, world } from "./tuning";
+import { abilities, abilityFor, adminTools, combat, damageBandFor, dangerBandAt, damageOf, projectileByKind, pvpRadius, resourceMax, safeRadius, simulation, spells, starterWeapon, weapons, world } from "./tuning";
 
 describe("shared tuning tables", () => {
   it("derives the safety radii from the danger band rows rather than literals", () => {
@@ -54,5 +54,16 @@ describe("shared tuning tables", () => {
 
   it("keeps the snapshot rate an even divisor of the tick rate", () => {
     expect(simulation.tick_rate % simulation.send_rate).toBe(0);
+  });
+
+  it("exposes only live developer-mode entity families through data", () => {
+    const kinds = new Set(Object.values(adminTools.spawnables).map((spawnable) => spawnable.kind));
+    expect(kinds).toEqual(new Set(["player", "projectile", "telegraph"]));
+    for (const spawnable of Object.values(adminTools.spawnables)) for (const field of spawnable.fields) {
+      expect(["number", "text"]).toContain(field.kind);
+      if (field.kind === "number") expect(field.minimum).toBeLessThanOrEqual(field.default_number!);
+    }
+    expect(adminTools.attributes.speed_multiplier).toBeDefined();
+    expect(adminTools.attributes.view_distance).toBeDefined();
   });
 });
