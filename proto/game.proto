@@ -1,0 +1,62 @@
+syntax = "proto3";
+
+package spellfire.v1;
+
+// WebSocket payloads are binary protobuf. The first field is the message kind,
+// allowing both implementations to decode only the relevant payload fields.
+message ClientEnvelope {
+  enum Kind { UNKNOWN = 0; JOIN = 1; INPUT = 2; RESPAWN = 3; PING = 4; }
+  Kind kind = 1;
+  string session_token = 2;
+  string character_id = 3;
+  Input input = 4;
+  uint64 client_time_ms = 5;
+}
+
+message Input {
+  uint32 sequence = 1;
+  uint32 buttons = 2; // UP=1, DOWN=2, LEFT=4, RIGHT=8, FIRE=16, DASH=32, RELOAD=64
+  float aim_x = 3;
+  float aim_y = 4;
+  uint64 client_time_ms = 5;
+}
+
+message ServerEnvelope {
+  enum Kind { UNKNOWN = 0; WELCOME = 1; SNAPSHOT = 2; ERROR = 3; PONG = 4; }
+  Kind kind = 1;
+  uint64 server_tick = 2;
+  uint64 server_time_ms = 3;
+  string player_id = 4;
+  repeated Entity entities = 5;
+  repeated StaticCollider colliders = 6;
+  string error = 7;
+  uint64 echoed_client_time_ms = 8;
+}
+
+message Entity {
+  enum Type { UNKNOWN = 0; PLAYER = 1; PROJECTILE = 2; }
+  Type type = 1;
+  string id = 2;
+  string name = 3;
+  string class_name = 4;
+  float x = 5;
+  float y = 6;
+  float vx = 7;
+  float vy = 8;
+  float aim_x = 9;
+  float aim_y = 10;
+  float health = 11;
+  float max_health = 12;
+  float mana = 13;
+  uint32 acknowledged_input = 14;
+  bool alive = 15;
+  string owner_id = 16;
+}
+
+message StaticCollider {
+  string id = 1;
+  float x = 2;
+  float y = 3;
+  float radius = 4;
+  string kind = 5;
+}

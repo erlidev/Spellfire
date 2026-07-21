@@ -1,0 +1,8 @@
+node_modules/
+dist/
+spellfire.db
+spellfire.db-shm
+spellfire.db-wal
+.env
+coverage/
+*.out

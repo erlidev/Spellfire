@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#101829" />
+    <title>SpellFire</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <main id="home" class="screen home-screen">
+      <div class="home-grid" aria-hidden="true"></div>
+      <button id="account-button" class="utility-button">Sign in</button>
+      <section class="play-panel" aria-labelledby="title">
+        <p class="eyebrow">The seamless contested world</p>
+        <h1 id="title">SPELL<span>FIRE</span></h1>
+        <p id="service-status" class="status good" role="status">World service online</p>
+        <div id="guest-state">
+          <p>Create an account or sign in to carry your character between sessions.</p>
+        </div>
+        <div id="character-state" hidden>
+          <label for="character-select">Character</label>
+          <select id="character-select"></select>
+          <button id="new-character-button" class="text-button">Create character</button>
+        </div>
+        <button id="play-button" class="primary" disabled>Sign in to play</button>
+        <p id="home-error" class="error" role="alert"></p>
+      </section>
+      <button id="settings-button" class="secondary-link">Accessibility &amp; controls</button>
+    </main>
+
+    <section id="game" class="screen game-screen" hidden>
+      <div id="canvas-host"></div>
+      <div id="danger" class="hud danger"><span id="danger-shape">◇</span> <span id="danger-text">Central hub · Safe</span></div>
+      <button id="menu-button" class="hud menu-button" aria-label="Open menu">☰</button>
+      <div id="latency" class="hud latency">— ms</div>
+      <div class="hud vital-panel">
+        <label>Health <span id="health-label">100 / 100</span></label>
+        <div class="bar"><i id="health-bar"></i></div>
+        <label id="resource-label">Ammo <span>10 / 10</span></label>
+        <div class="bar resource"><i id="resource-bar"></i></div>
+      </div>
+      <div class="hud abilities" aria-label="Combat actions">
+        <div><kbd>Mouse</kbd><span>Primary</span></div><div><kbd>Space</kbd><span>Dash</span></div><div><kbd>R</kbd><span>Reload</span></div>
+      </div>
+      <div id="world-notice" class="hud world-notice" role="status"></div>
+      <div id="connection-overlay" class="connection-overlay" hidden><h2 id="connection-title">Connecting</h2><p id="connection-message">Joining the world…</p><button id="connection-cancel">Return home</button></div>
+      <div id="death-overlay" class="connection-overlay" hidden><h2>You fell in the frontier</h2><p>Your crafted gear is safe. This foundation does not yet award carried materials.</p><button id="respawn-button" class="primary">Respawn at central hub</button></div>
+      <div id="touch-controls" aria-label="Touch controls">
+        <div class="touch-move"><button data-button="up">▲</button><button data-button="left">◀</button><button data-button="down">▼</button><button data-button="right">▶</button></div>
+        <div class="touch-actions"><button data-button="dash">Dash</button><button data-button="fire">Fire</button></div>
+      </div>
+    </section>
+
+    <dialog id="auth-dialog">
+      <form method="dialog" class="modal-close"><button aria-label="Close">×</button></form>
+      <h2 id="auth-title">Sign in</h2>
+      <form id="auth-form">
+        <label>Email<input id="auth-email" type="email" autocomplete="email" required /></label>
+        <label>Password<input id="auth-password" type="password" autocomplete="current-password" minlength="8" maxlength="72" required /></label>
+        <p id="auth-error" class="error" role="alert"></p>
+        <button id="auth-submit" class="primary" type="submit">Sign in</button>
+      </form>
+      <button id="auth-switch" class="text-button">Need an account? Register</button>
+    </dialog>
+
+    <dialog id="character-dialog">
+      <form method="dialog" class="modal-close"><button aria-label="Close">×</button></form>
+      <h2>Create a character</h2>
+      <form id="character-form">
+        <label>Name<input id="character-name" minlength="3" maxlength="20" pattern="[A-Za-z0-9][A-Za-z0-9 _-]{1,18}[A-Za-z0-9]" required /></label>
+        <fieldset><legend>Class</legend><label><input type="radio" name="class" value="gunslinger" checked /> Gunslinger <small>Mechanical aim and movement</small></label><label><input type="radio" name="class" value="mage" /> Mage <small>Timing and prediction</small></label></fieldset>
+        <p id="character-error" class="error" role="alert"></p>
+        <button class="primary" type="submit">Create</button>
+      </form>
+    </dialog>
+
+    <dialog id="menu-dialog" class="game-menu">
+      <form method="dialog" class="modal-close"><button aria-label="Close">×</button></form>
+      <h2>Field menu</h2><p class="warning">The shared world remains active. Combat input is suspended.</p>
+      <nav id="menu-tabs"><button data-tab="character" class="active">Character</button><button data-tab="loadout">Loadout</button><button data-tab="inventory">Inventory</button><button data-tab="world">World</button><button data-tab="reference">Reference</button><button data-tab="settings">Settings</button></nav>
+      <section id="menu-content"></section>
+      <button id="exit-button" class="danger-button">Exit game</button>
+    </dialog>
+
+    <dialog id="settings-dialog">
+      <form method="dialog" class="modal-close"><button aria-label="Close">×</button></form>
+      <h2>Accessibility &amp; controls</h2>
+      <label><input id="reduced-motion" type="checkbox" /> Reduce motion and camera feedback</label>
+      <label>Interface scale <input id="ui-scale" type="range" min="85" max="130" value="100" /></label>
+      <p>Move with WASD or arrow keys. Aim and fire with the pointer. Dash with Space and reload with R. Touch controls appear on touch-first devices.</p>
+    </dialog>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
