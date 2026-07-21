@@ -48,6 +48,7 @@ Component, material, and biome-placement rows are intentionally empty until the 
 - [x] Store crafted items as recipe + component IDs, never a stat snapshot (`crafted_items`; `model.CraftedItem`)
 - [x] 10 s logout linger: the body stays in the world, killable and unable to act, so disconnecting is not an escape ([session.json](data/tuning/session.json), [engine.go](server/internal/game/engine.go))
 - [x] Saved position expires after 30 min offline and recalls to the nearest unlocked outpost or the hub ([outposts.json](data/tuning/outposts.json), `World.recallDestination`)
+- [x] One body per account: a second character's join is refused while the first is in the world, lingering included, so switching characters is not a combat-log escape (`Engine.Join`/`ErrAccountInWorld`, [architecture.md](docs/architecture.md#one-body-per-account))
 
 Carried materials and unlocked outposts round-trip through the world but nothing mutates them yet: harvesting is Phase 4.1, outpost discovery is Phase 3, and crafting is Phase 2.3. `outposts.json` ships empty, so every recall resolves to the hub until Phase 3 places them. A lingering body is not flagged on the wire, so it reads as a motionless player rather than one visibly logging out — the field belongs with the Phase 1.5 per-entity state expansion.
 

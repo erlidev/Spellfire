@@ -2,6 +2,7 @@ package transport
 
 import (
 	"context"
+	"errors"
 	"net"
 	"net/http"
 	"net/url"
@@ -62,7 +63,15 @@ func (h *WebSocket) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeProtocolError(connection, "Character unavailable.")
 		return
 	}
-	client := h.engine.Join(character, time.Now())
+	client, err := h.engine.Join(character, time.Now())
+	if errors.Is(err, game.ErrAccountInWorld) {
+		writeProtocolError(connection, "Another character on this account is still in the world. Wait a moment and try again.")
+		return
+	}
+	if err != nil {
+		writeProtocolError(connection, "Could not enter the world.")
+		return
+	}
 	defer h.engine.Leave(client)
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()

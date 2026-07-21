@@ -72,7 +72,7 @@ func (v Vec) Normalized() Vec {
 }
 
 type Player struct {
-	ID, Name                        string
+	ID, AccountID, Name             string
 	Class                           model.Class
 	WeaponID                        string
 	Position, Velocity, Aim         Vec
@@ -131,12 +131,15 @@ type historySample struct {
 }
 
 type World struct {
-	tuning         Tuning
-	tick           uint64
-	players        map[string]*Player
-	projectiles    map[string]*Projectile
-	colliders      []Collider
-	history        map[string][]historySample
+	tuning      Tuning
+	tick        uint64
+	players     map[string]*Player
+	projectiles map[string]*Projectile
+	colliders   []Collider
+	history     map[string][]historySample
+	// occupants maps an account to the one character it has a body for, so the
+	// one-body-per-account rule is a lookup rather than a scan of the world.
+	occupants      map[string]string
 	nextProjectile uint64
 }
 
@@ -147,7 +150,19 @@ func NewWorld(t Tuning) *World {
 	return &World{
 		tuning: t, players: make(map[string]*Player), projectiles: make(map[string]*Projectile),
 		colliders: generateTrees(t.Tables.World), history: make(map[string][]historySample),
+		occupants: make(map[string]string),
 	}
+}
+
+// Occupant reports which character of an account has a body in the world,
+// connected or lingering, and is empty when none does. Characters with no
+// account — only the simulation tests build those — are never indexed, so they
+// never occupy each other's slot.
+func (w *World) Occupant(accountID string) string {
+	if accountID == "" {
+		return ""
+	}
+	return w.occupants[accountID]
 }
 
 func (w *World) AddPlayer(character model.Character, now time.Time) *Player {
@@ -170,7 +185,7 @@ func (w *World) AddPlayer(character model.Character, now time.Time) *Player {
 		character.State.Placed = false
 	}
 	p := &Player{
-		ID: character.ID, Name: character.Name, Class: character.Class,
+		ID: character.ID, AccountID: character.AccountID, Name: character.Name, Class: character.Class,
 		Position: w.entryPosition(character, now), Aim: Vec{1, 0},
 		Health: w.tuning.MaxHealth, Mana: w.tuning.MaxMana, Alive: true,
 		Materials: w.carriedMaterials(character.State.Materials),
@@ -182,6 +197,9 @@ func (w *World) AddPlayer(character model.Character, now time.Time) *Player {
 		p.WeaponID, p.Ammo = weapon.ID, weapon.MagazineSize
 	}
 	w.players[p.ID] = p
+	if p.AccountID != "" {
+		w.occupants[p.AccountID] = p.ID
+	}
 	w.recordHistory(p, now)
 	return p
 }
@@ -342,7 +360,13 @@ func (w *World) weapon(p *Player) (tuning.Weapon, bool) {
 	return weapon, ok
 }
 
-func (w *World) RemovePlayer(id string) { delete(w.players, id); delete(w.history, id) }
+func (w *World) RemovePlayer(id string) {
+	if p := w.players[id]; p != nil && w.occupants[p.AccountID] == id {
+		delete(w.occupants, p.AccountID)
+	}
+	delete(w.players, id)
+	delete(w.history, id)
+}
 
 func (w *World) ApplyInput(id string, input protocol.Input) bool {
 	p := w.players[id]

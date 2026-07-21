@@ -222,14 +222,14 @@ func TestReconnectingToABodyKilledWhileLoggedOutEntersAtTheHub(t *testing.T) {
 	character := placed("p", 1500, -200)
 	now := time.Now()
 
-	client := engine.Join(character, now)
+	client, _ := engine.Join(character, now)
 	engine.Leave(client)
 	engine.mu.Lock()
 	killed := engine.world.players["p"]
 	killed.Health, killed.Alive = 0, false
 	engine.mu.Unlock()
 
-	engine.Join(character, now.Add(time.Second))
+	_, _ = engine.Join(character, now.Add(time.Second))
 	engine.mu.Lock()
 	back := engine.world.players["p"]
 	engine.mu.Unlock()
@@ -250,7 +250,7 @@ func TestReconnectingInsideTheLogoutWindowResumesTheSameBody(t *testing.T) {
 	character := placed("p", 1500, -200)
 	now := time.Now()
 
-	client := engine.Join(character, now)
+	client, _ := engine.Join(character, now)
 	engine.world.players["p"].Position = Vec{1600, -100}
 	engine.Leave(client)
 
@@ -262,7 +262,7 @@ func TestReconnectingInsideTheLogoutWindowResumesTheSameBody(t *testing.T) {
 	}
 	// Reconnecting picks the body back up where the fight left it, rather than
 	// restoring the position the record was saved at.
-	engine.Join(character, now.Add(time.Second))
+	_, _ = engine.Join(character, now.Add(time.Second))
 	engine.mu.Lock()
 	resumed := engine.world.players["p"]
 	engine.mu.Unlock()
@@ -281,10 +281,10 @@ func TestAResumedBodyAcceptsInputFromTheNewConnection(t *testing.T) {
 	character := placed("p", 1500, -200)
 	now := time.Now()
 
-	client := engine.Join(character, now)
+	client, _ := engine.Join(character, now)
 	engine.Input("p", protocol.Input{Sequence: 40, Buttons: ButtonRight, AimX: 1})
 	engine.Leave(client)
-	engine.Join(character, now.Add(time.Second))
+	_, _ = engine.Join(character, now.Add(time.Second))
 
 	engine.Input("p", protocol.Input{Sequence: 1, Buttons: ButtonRight, AimX: 1})
 	engine.mu.Lock()
@@ -307,7 +307,7 @@ func TestExpiredLogoutWindowSavesAndRemovesTheBody(t *testing.T) {
 	balance.LogoutLinger = 100 * time.Millisecond
 	engine := NewEngine(balance, store)
 	engine.saveEvery = time.Hour // Only the reap may save here.
-	client := engine.Join(placed("p", 1500, -200), time.Now())
+	client, _ := engine.Join(placed("p", 1500, -200), time.Now())
 	engine.world.players["p"].Position = Vec{1600, -100}
 	engine.Leave(client)
 
@@ -342,8 +342,8 @@ func TestReplacedConnectionLeavesTheLiveSessionAlone(t *testing.T) {
 	store := newRecorder()
 	engine := NewEngine(DefaultTuning(), store)
 	character := placed("p", 1500, -200)
-	old := engine.Join(character, time.Now())
-	engine.Join(character, time.Now())
+	old, _ := engine.Join(character, time.Now())
+	_, _ = engine.Join(character, time.Now())
 	engine.Leave(old)
 
 	engine.mu.Lock()
@@ -362,8 +362,8 @@ func TestShutdownFlushesEveryPresentPlayer(t *testing.T) {
 	store := newRecorder()
 	engine := NewEngine(DefaultTuning(), store)
 	engine.saveEvery = time.Hour // Only the shutdown flush can save here.
-	engine.Join(placed("connected", 1500, -200), time.Now())
-	client := engine.Join(placed("logging-out", -900, 300), time.Now())
+	_, _ = engine.Join(placed("connected", 1500, -200), time.Now())
+	client, _ := engine.Join(placed("logging-out", -900, 300), time.Now())
 	engine.Leave(client)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -388,7 +388,7 @@ func TestEngineAutosavesWhileConnectedAndSurvivesAFailedWrite(t *testing.T) {
 	store.fail = errors.New("database is locked")
 	engine := NewEngine(DefaultTuning(), store)
 	engine.saveEvery = 20 * time.Millisecond
-	engine.Join(placed("p", 1500, -200), time.Now())
+	_, _ = engine.Join(placed("p", 1500, -200), time.Now())
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go engine.Run(ctx)

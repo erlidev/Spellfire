@@ -43,6 +43,8 @@ A player carrying nothing may treat death as transit. That is acceptable: an emp
 
 Disconnecting is not an escape. The body stays in the world for ten seconds after the connection drops: it holds its ground, cannot move, dash, or fire, and remains a legitimate target the whole time. Someone who pulls the plug mid-fight can still be killed and still drops their haul, so combat logging saves nothing it would not have saved by standing still. Reconnecting inside the window resumes that same body wherever the fight has moved it — unless it was killed, in which case the death stands: the corpse is not resumed, and the next login enters at the hub like any other death.
 
+An account fields one character at a time. A second character cannot be brought in beside the first, and cannot be brought in while the first is still lingering — otherwise switching characters would be the escape that disconnecting is not. The wait is the logout window and nothing more.
+
 The position a character logs out at is honoured for thirty minutes. Past that, the next login recalls it to the nearest safe fixture — an [unlocked outpost](world.md#outposts-and-travel), or the central hub when that is closer. The haul is untouched by the recall: a stale position costs the walk back out, never the materials, which keeps this a convenience rule rather than a second death penalty.
 
 ## Dropped materials

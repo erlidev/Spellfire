@@ -13,7 +13,7 @@ func TestEngineJoinInputSnapshotAndLeave(t *testing.T) {
 	tuning := DefaultTuning()
 	engine := NewEngine(tuning, nil)
 	now := time.Now()
-	client := engine.Join(model.Character{ID: "p", Name: "Player", Class: model.Gunslinger}, now)
+	client, _ := engine.Join(model.Character{ID: "p", Name: "Player", Class: model.Gunslinger}, now)
 	select {
 	case welcome := <-client.Send:
 		if len(welcome) == 0 {
@@ -52,8 +52,8 @@ func TestEngineJoinInputSnapshotAndLeave(t *testing.T) {
 func TestEngineOldConnectionCannotRemoveReplacement(t *testing.T) {
 	engine := NewEngine(DefaultTuning(), nil)
 	character := model.Character{ID: "p", Name: "Player", Class: model.Mage}
-	old := engine.Join(character, time.Now())
-	replacement := engine.Join(character, time.Now())
+	old, _ := engine.Join(character, time.Now())
+	replacement, _ := engine.Join(character, time.Now())
 	engine.Leave(old)
 	engine.mu.Lock()
 	got := engine.clients["p"]

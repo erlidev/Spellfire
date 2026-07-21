@@ -2,6 +2,7 @@ package transport
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"net/http/httptest"
 	"path/filepath"
@@ -275,4 +276,95 @@ func TestWebSocketDisconnectLeavesTheBodyBehindBriefly(t *testing.T) {
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
+}
+
+// An account gets one body in the world. A second character's join is refused
+// at the socket rather than quietly added beside the first.
+func TestWebSocketRefusesASecondCharacterOnTheSameAccount(t *testing.T) {
+	data, err := store.OpenSQLite(filepath.Join(t.TempDir(), "ws.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer data.Close()
+	ctx := context.Background()
+	authService := auth.New(data, time.Hour)
+	token, err := authService.Register(ctx, "two@example.com", "socket password")
+	if err != nil {
+		t.Fatal(err)
+	}
+	accountID, err := authService.Authenticate(ctx, token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first := model.Character{ID: auth.NewID(), AccountID: accountID, Name: "First Hero", Class: model.Gunslinger, Level: 1}
+	second := model.Character{ID: auth.NewID(), AccountID: accountID, Name: "Second Hero", Class: model.Mage, Level: 1}
+	for _, character := range []model.Character{first, second} {
+		if err := data.CreateCharacter(ctx, character); err != nil {
+			t.Fatal(err)
+		}
+	}
+	engine := game.NewEngine(game.DefaultTuning(), nil)
+	server := httptest.NewServer(NewWebSocket(authService, data, engine))
+	defer server.Close()
+
+	firstConnection, kind, err := dialAndJoin(t, server.URL, token, first.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer firstConnection.Close()
+	if kind != protocol.ServerWelcome {
+		t.Fatalf("first join kind = %d, want welcome", kind)
+	}
+	secondConnection, kind, err := dialAndJoin(t, server.URL, token, second.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer secondConnection.Close()
+	if kind != protocol.ServerError {
+		t.Fatalf("second join kind = %d, want error", kind)
+	}
+	if engine.Present(second.ID) {
+		t.Fatal("the refused character entered the world anyway")
+	}
+}
+
+// dialAndJoin opens a socket, sends a join, and reports the kind of the single
+// message the server answers with.
+func dialAndJoin(t *testing.T, serverURL, token, characterID string) (*websocket.Conn, uint64, error) {
+	t.Helper()
+	connection, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(serverURL, "http"), nil)
+	if err != nil {
+		return nil, 0, err
+	}
+	var join []byte
+	join = protowire.AppendTag(join, 1, protowire.VarintType)
+	join = protowire.AppendVarint(join, protocol.ClientJoin)
+	join = protowire.AppendTag(join, 2, protowire.BytesType)
+	join = protowire.AppendString(join, token)
+	join = protowire.AppendTag(join, 3, protowire.BytesType)
+	join = protowire.AppendString(join, characterID)
+	if err := connection.WriteMessage(websocket.BinaryMessage, join); err != nil {
+		connection.Close()
+		return nil, 0, err
+	}
+	if err := connection.SetReadDeadline(time.Now().Add(time.Second)); err != nil {
+		connection.Close()
+		return nil, 0, err
+	}
+	_, response, err := connection.ReadMessage()
+	if err != nil {
+		connection.Close()
+		return nil, 0, err
+	}
+	number, wire, n := protowire.ConsumeTag(response)
+	if n < 0 || number != 1 || wire != protowire.VarintType {
+		connection.Close()
+		return nil, 0, fmt.Errorf("invalid response: %x", response)
+	}
+	kind, read := protowire.ConsumeVarint(response[n:])
+	if read < 0 {
+		connection.Close()
+		return nil, 0, fmt.Errorf("invalid response kind: %x", response)
+	}
+	return connection, kind, nil
 }

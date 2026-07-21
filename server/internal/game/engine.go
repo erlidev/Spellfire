@@ -2,6 +2,7 @@ package game
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"sync"
 	"time"
@@ -153,9 +154,19 @@ func (e *Engine) write(save characterSave) {
 	}
 }
 
-func (e *Engine) Join(character model.Character, now time.Time) *Client {
+// ErrAccountInWorld reports that the account already has a different character
+// in the world. It is not resolved by kicking that character: a lingering body
+// is the cost of disconnecting mid-fight, and evicting it on demand would turn
+// a second character into a combat-log escape hatch. The join is refused until
+// the other body leaves the world on its own.
+var ErrAccountInWorld = errors.New("game: another character on this account is in the world")
+
+func (e *Engine) Join(character model.Character, now time.Time) (*Client, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	if occupant := e.world.Occupant(character.AccountID); occupant != "" && occupant != character.ID {
+		return nil, ErrAccountInWorld
+	}
 	e.world.AddPlayer(character, now)
 	if previous := e.clients[character.ID]; previous != nil {
 		close(previous.Kick)
@@ -163,7 +174,7 @@ func (e *Engine) Join(character model.Character, now time.Time) *Client {
 	client := &Client{PlayerID: character.ID, Send: make(chan []byte, 2), Kick: make(chan struct{})}
 	e.clients[character.ID] = client
 	client.Send <- protocol.EncodeServer(e.world.SnapshotFor(character.ID, now, protocol.ServerWelcome))
-	return client
+	return client, nil
 }
 
 // Leave drops a client and leaves its body in the world for the logout window,
