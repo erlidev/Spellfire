@@ -5,13 +5,39 @@ package spellfire.v1;
 // WebSocket payloads are binary protobuf. The first field is the message kind,
 // allowing both implementations to decode only the relevant payload fields.
 message ClientEnvelope {
-  enum Kind { UNKNOWN = 0; JOIN = 1; INPUT = 2; RESPAWN = 3; PING = 4; LOADOUT = 5; }
+  enum Kind { UNKNOWN = 0; JOIN = 1; INPUT = 2; RESPAWN = 3; PING = 4; LOADOUT = 5; CRAFT = 6; }
   Kind kind = 1;
   string session_token = 2;
   string character_id = 3;
   Input input = 4;
   uint64 client_time_ms = 5;
   Loadout loadout = 6; // LOADOUT only: the requested equipped set
+  CraftRequest craft = 7; // CRAFT only: the requested build
+}
+
+// One requested build: the weapon category and the component filling each slot.
+// A slot the request omits is left stock, which is a legal choice.
+message CraftRequest {
+  string weapon = 1;
+  repeated ComponentSlot components = 2;
+}
+
+message ComponentSlot {
+  string slot = 1;
+  string component = 2;
+}
+
+// A crafted weapon as it is owned: references only, never a stat snapshot, so a
+// balance edit retunes it in place.
+message CraftedItem {
+  string id = 1;
+  string weapon = 2;
+  repeated ComponentSlot components = 3;
+}
+
+message MaterialStack {
+  string material = 1;
+  uint32 count = 2;
 }
 
 message Input {
@@ -32,7 +58,7 @@ message Loadout {
 }
 
 message ServerEnvelope {
-  enum Kind { UNKNOWN = 0; WELCOME = 1; SNAPSHOT = 2; ERROR = 3; PONG = 4; LOADOUT = 5; PROGRESS = 6; }
+  enum Kind { UNKNOWN = 0; WELCOME = 1; SNAPSHOT = 2; ERROR = 3; PONG = 4; LOADOUT = 5; PROGRESS = 6; CRAFT = 7; }
   Kind kind = 1;
   uint64 server_tick = 2;
   uint64 server_time_ms = 3;
@@ -50,6 +76,11 @@ message ServerEnvelope {
   uint64 xp = 13;
   uint64 xp_to_next = 14;
   repeated string unlocks = 15;
+  // Owned crafted items and carried materials, on WELCOME and CRAFT only. Like
+  // the loadout they change on a deliberate action inside safety, never twenty
+  // times a second, so a snapshot never pays for them.
+  repeated CraftedItem items = 16;
+  repeated MaterialStack materials = 17;
 }
 
 message Entity {

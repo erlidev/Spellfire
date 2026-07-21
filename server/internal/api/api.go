@@ -34,6 +34,7 @@ type API struct {
 type AdminController interface {
 	AdminSpawn(string, game.AdminSpawn) error
 	SetAdminAttributes(string, map[string]float64) error
+	GrantMaterials(string, map[string]int) error
 }
 
 func New(authService *auth.Service, data store.Store, tables *tuning.Tables, adminTools ...AdminController) *API {
@@ -57,6 +58,7 @@ func (a *API) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/account", a.withAccount(a.account))
 	mux.HandleFunc("POST /api/admin/spawn", a.withAdmin(a.adminSpawn))
 	mux.HandleFunc("POST /api/admin/attributes", a.withAdmin(a.adminAttributes))
+	mux.HandleFunc("POST /api/admin/materials", a.withAdmin(a.adminMaterials))
 	mux.HandleFunc("GET /api/characters", a.withAccount(a.characters))
 	mux.HandleFunc("POST /api/characters", a.withAccount(a.createCharacter))
 }
@@ -194,6 +196,34 @@ func (a *API) adminAttributes(w http.ResponseWriter, r *http.Request, principal 
 		return
 	}
 	if err := a.adminTools.SetAdminAttributes(body.CharacterID, body.Attributes); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+type adminMaterialsRequest struct {
+	CharacterID string         `json:"character_id"`
+	Materials   map[string]int `json:"materials"`
+}
+
+// adminMaterials is the developer-mode material source. It exists because
+// harvesting is Phase 4.1 and a crafting spend that can never be paid cannot be
+// exercised; it is authorized like every other privileged feature and the world
+// validates every ID and count against the tables before granting anything.
+func (a *API) adminMaterials(w http.ResponseWriter, r *http.Request, principal auth.Principal, _ string) {
+	var body adminMaterialsRequest
+	if !decodeJSON(w, r, &body) {
+		return
+	}
+	if !a.adminCharacter(w, r, principal, body.CharacterID) {
+		return
+	}
+	if a.adminTools == nil {
+		writeError(w, http.StatusServiceUnavailable, "Developer tools are not available.")
+		return
+	}
+	if err := a.adminTools.GrantMaterials(body.CharacterID, body.Materials); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}

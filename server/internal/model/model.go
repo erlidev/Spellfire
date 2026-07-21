@@ -109,6 +109,10 @@ type Character struct {
 	Progress
 	SchemaVersion int            `json:"-"`
 	State         CharacterState `json:"-"`
+	// Items are the crafted instances the character owns. They live in their own
+	// table rather than on the record, so they are loaded alongside it at join
+	// rather than carried through the character's schema version.
+	Items []CraftedItem `json:"-"`
 }
 
 // Migrate carries a record read at an older schema version forward to
@@ -150,13 +154,28 @@ func (c Character) Migrate() (Character, error) {
 	return c, nil
 }
 
-// CraftedItem is a persisted crafted weapon. It stores the blueprint and the
-// component filling each slot — references into the tuning tables — and never a
-// stat snapshot, so editing a balance row retunes every existing item in place
-// with no character migration.
+// CraftedItem is a persisted crafted weapon. It stores the weapon category it
+// is an instance of and the component filling each slot — references into the
+// tuning tables — and never a stat snapshot, so editing a balance row retunes
+// every existing item in place with no character migration. The blueprint is not
+// stored because it is the weapon row's, and two copies of one fact drift.
+//
+// An equipped weapon slot may name either a weapon row, which is the stock
+// configuration, or one of these instances.
 type CraftedItem struct {
 	ID          string
 	CharacterID string
-	Blueprint   string            // components.blueprints row ID
+	Weapon      string            // weapons row ID
 	Components  map[string]string // blueprint slot → components.components row ID
+}
+
+// Clone copies the component map so a stored item cannot be mutated through a
+// reference the world handed out.
+func (i CraftedItem) Clone() CraftedItem {
+	components := make(map[string]string, len(i.Components))
+	for slot, component := range i.Components {
+		components[slot] = component
+	}
+	i.Components = components
+	return i
 }

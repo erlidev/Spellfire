@@ -1,4 +1,4 @@
-import type { Collider, Entity, InputFrame, LoadoutSet, ServerMessage } from "../types";
+import type { Collider, CraftedItem, CraftRequest, Entity, InputFrame, LoadoutSet, ServerMessage } from "../types";
 
 class Writer {
   private bytes: number[] = [];
@@ -92,6 +92,66 @@ function decodeLoadout(bytes: Uint8Array): LoadoutSet {
   return value;
 }
 
+function encodeComponentSlot(slot: string, component: string): Uint8Array {
+  const writer = new Writer(); writer.string(1, slot); writer.string(2, component); return writer.finish();
+}
+
+function encodeCraft(request: CraftRequest): Uint8Array {
+  const writer = new Writer();
+  writer.string(1, request.weapon);
+  // Only filled slots travel: an omitted slot is the stock part, which is a
+  // legal choice rather than a component reference to nothing.
+  for (const slot of Object.keys(request.components).sort()) {
+    const component = request.components[slot];
+    if (component) writer.message(2, encodeComponentSlot(slot, component));
+  }
+  return writer.finish();
+}
+
+export function encodeCraftEnvelope(request: CraftRequest): Uint8Array {
+  const writer = new Writer(); writer.uint(1, 6); writer.message(7, encodeCraft(request)); return writer.finish();
+}
+
+function decodeComponentSlot(bytes: Uint8Array): [string, string] {
+  let slot = "", component = "";
+  const reader = new Reader(bytes);
+  while (!reader.done) {
+    const tag = reader.varint(), field = tag >>> 3, wire = tag & 7;
+    switch (field) {
+      case 1: slot = reader.string(); break; case 2: component = reader.string(); break;
+      default: reader.skip(wire);
+    }
+  }
+  return [slot, component];
+}
+
+function decodeItem(bytes: Uint8Array): CraftedItem {
+  const value: CraftedItem = { id: "", weapon: "", components: {} };
+  const reader = new Reader(bytes);
+  while (!reader.done) {
+    const tag = reader.varint(), field = tag >>> 3, wire = tag & 7;
+    switch (field) {
+      case 1: value.id = reader.string(); break; case 2: value.weapon = reader.string(); break;
+      case 3: { const [slot, component] = decodeComponentSlot(reader.data()); if (slot) value.components[slot] = component; break; }
+      default: reader.skip(wire);
+    }
+  }
+  return value;
+}
+
+function decodeStack(bytes: Uint8Array): [string, number] {
+  let material = "", count = 0;
+  const reader = new Reader(bytes);
+  while (!reader.done) {
+    const tag = reader.varint(), field = tag >>> 3, wire = tag & 7;
+    switch (field) {
+      case 1: material = reader.string(); break; case 2: count = reader.varint(); break;
+      default: reader.skip(wire);
+    }
+  }
+  return [material, count];
+}
+
 export function encodeJoin(token: string, characterID: string): Uint8Array {
   const writer = new Writer(); writer.uint(1, 1); writer.string(2, token); writer.string(3, characterID); return writer.finish();
 }
@@ -149,7 +209,7 @@ function decodeCollider(bytes: Uint8Array): Collider {
 }
 
 export function decodeServer(data: ArrayBuffer): ServerMessage {
-  const value: ServerMessage = { kind: 0, serverTick: 0, serverTimeMS: 0, playerID: "", entities: [], colliders: [], error: "", echoedClientTimeMS: 0, loadoutEditable: false, respecOwed: false, level: 0, xp: 0, xpToNext: 0, unlocks: [] };
+  const value: ServerMessage = { kind: 0, serverTick: 0, serverTimeMS: 0, playerID: "", entities: [], colliders: [], error: "", echoedClientTimeMS: 0, loadoutEditable: false, respecOwed: false, level: 0, xp: 0, xpToNext: 0, unlocks: [], items: [], materials: {} };
   const reader = new Reader(new Uint8Array(data));
   while (!reader.done) {
     const tag = reader.varint(), field = tag >>> 3, wire = tag & 7;
@@ -162,6 +222,8 @@ export function decodeServer(data: ArrayBuffer): ServerMessage {
       case 10: value.loadoutEditable = reader.varint() !== 0; break; case 11: value.respecOwed = reader.varint() !== 0; break;
       case 12: value.level = reader.varint(); break; case 13: value.xp = reader.varint(); break;
       case 14: value.xpToNext = reader.varint(); break; case 15: value.unlocks.push(reader.string()); break;
+      case 16: value.items.push(decodeItem(reader.data())); break;
+      case 17: { const [material, count] = decodeStack(reader.data()); if (material) value.materials[material] = count; break; }
       default: reader.skip(wire);
     }
   }

@@ -3,11 +3,24 @@
 // rejection before the round trip — but the server remains the authority: a
 // commit is only real once its Loadout reply confirms it.
 import { elements, gadgets, loadoutTable, spells, weapons } from "../tuning";
-import type { CharacterClass, LoadoutSet } from "../types";
+import type { CharacterClass, CraftedItem, LoadoutSet } from "../types";
+import { equippableItems, itemLabel } from "./crafting";
 
 export type SlotKind = "weapon" | "gadget" | "spell";
 
 export interface Slot { index: number; kind: SlotKind; id: string; name: string; element: string }
+
+/**
+ * Resolves an equipped weapon reference to the row it fights with. The slot
+ * holds either a stock weapon row or a crafted instance of one; the server
+ * resolves the same two cases, so the menu never offers something it would
+ * refuse.
+ */
+export function equippedWeapon(id: string, items: readonly CraftedItem[]): { row: string; item?: CraftedItem } | undefined {
+  const item = items.find((owned) => owned.id === id);
+  if (item) return weapons[item.weapon] ? { row: item.weapon, item } : undefined;
+  return weapons[id] ? { row: id } : undefined;
+}
 
 /** Selectable action-bar slots, bound to 1–6. One width for both classes. */
 export const barSlots = loadoutTable.spell_slots;
@@ -18,9 +31,10 @@ export function requiredSameElement(tier: number): number {
 }
 
 /** The equipped set laid out in binding order. */
-export function bar(characterClass: CharacterClass, set: LoadoutSet): Slot[] {
+export function bar(characterClass: CharacterClass, set: LoadoutSet, items: readonly CraftedItem[] = []): Slot[] {
+  const equipped = equippedWeapon(set.weapon, items);
+  const weapon = equipped ? weapons[equipped.row] : undefined;
   if (characterClass === "gunslinger") {
-    const weapon = weapons[set.weapon];
     const slots: Slot[] = [{ index: 0, kind: "weapon", id: weapon ? set.weapon : "", name: weapon?.name ?? "", element: "" }];
     for (let index = 0; index < loadoutTable.gadget_slots; index++) {
       const gadget = gadgets[set.gadgets[index] ?? ""];
@@ -28,7 +42,7 @@ export function bar(characterClass: CharacterClass, set: LoadoutSet): Slot[] {
     }
     return slots;
   }
-  const staff = weapons[set.weapon];
+  const staff = weapon;
   const slots: Slot[] = [];
   for (let index = 0; index < loadoutTable.spell_slots; index++) {
     // A Mage's empty first slot falls back to the staff's own spell, so a set
@@ -47,6 +61,8 @@ export function bar(characterClass: CharacterClass, set: LoadoutSet): Slot[] {
  */
 export function defaultLoadout(characterClass: CharacterClass, ledger: Ledger): LoadoutSet {
   const set: LoadoutSet = {
+    // Stock rows only: the default is the plain configuration, and which crafted
+    // weapon to carry is a choice the player makes.
     weapon: equippable(characterClass, ledger, "weapon")[0] ?? "",
     gadgets: new Array<string>(loadoutTable.gadget_slots).fill(""),
     spells: new Array<string>(loadoutTable.spell_slots).fill(""),
@@ -67,16 +83,25 @@ export function ledgerOf(unlocks: readonly string[]): Ledger { return new Set(un
  * live rows of its class that its ledger owns. The server enforces the same
  * intersection — hiding an option is never what stops it being equipped.
  */
-export function equippable(characterClass: CharacterClass, ledger: Ledger, kind: SlotKind): string[] {
+export function equippable(characterClass: CharacterClass, ledger: Ledger, kind: SlotKind, items: readonly CraftedItem[] = []): string[] {
   const owns = (id: string) => ledger.has(id);
-  if (kind === "weapon") return Object.keys(weapons).filter((id) => weapons[id]!.class === characterClass && owns(id)).sort();
+  if (kind === "weapon") {
+    // Stock rows first, then the crafted instances of them, so the plain
+    // configuration stays the deterministic default.
+    const stock = Object.keys(weapons).filter((id) => weapons[id]!.class === characterClass && owns(id)).sort();
+    return [...stock, ...equippableItems(characterClass, ledger, items).map((item) => item.id)];
+  }
   if (kind === "gadget") return Object.keys(gadgets).filter((id) => gadgets[id]!.class === characterClass && owns(id)).sort();
   return characterClass === "mage" ? Object.keys(spells).filter(owns).sort() : [];
 }
 
 /** Display name of equippable content, whatever kind it is. */
-export function contentName(kind: SlotKind, id: string): string {
-  if (kind === "weapon") return weapons[id]?.name ?? id;
+export function contentName(kind: SlotKind, id: string, items: readonly CraftedItem[] = []): string {
+  if (kind === "weapon") {
+    const item = items.find((owned) => owned.id === id);
+    if (item) return itemLabel(item);
+    return weapons[id]?.name ?? id;
+  }
   if (kind === "gadget") return gadgets[id]?.name ?? id;
   return spells[id]?.name ?? id;
 }
@@ -94,11 +119,12 @@ export function affinityShortfall(equipped: string[], index: number): number {
  * the server's rules so the menu can refuse before spending a round trip; the
  * server still validates and its answer wins.
  */
-export function loadoutProblem(characterClass: CharacterClass, ledger: Ledger, set: LoadoutSet): string | undefined {
-  const weapon = weapons[set.weapon];
-  if (!weapon) return "Choose a weapon.";
+export function loadoutProblem(characterClass: CharacterClass, ledger: Ledger, set: LoadoutSet, items: readonly CraftedItem[] = []): string | undefined {
+  const held = equippedWeapon(set.weapon, items);
+  const weapon = held ? weapons[held.row] : undefined;
+  if (!weapon || !held) return "Choose a weapon.";
   if (weapon.class !== characterClass) return `${weapon.name} is a ${weapon.class} weapon.`;
-  if (!ledger.has(set.weapon)) return `You have not unlocked ${weapon.name}.`;
+  if (!ledger.has(held.row)) return `You have not unlocked ${weapon.name}.`;
   const equipped = characterClass === "gunslinger" ? set.gadgets : set.spells;
   const kind: SlotKind = characterClass === "gunslinger" ? "gadget" : "spell";
   const seen = new Set<string>();

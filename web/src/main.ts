@@ -1,10 +1,11 @@
 import { API } from "./api";
+import { componentOf, cost as craftCost, craftable, describe, fitting, itemLabel, materialName, resolvedWeapon, shortfall, slotsOf } from "./game/crafting";
 import { bar, barSlots, contentName, defaultLoadout, equippable, ledgerOf, loadoutProblem, type Ledger, type SlotKind } from "./game/loadout";
 import { Predictor } from "./game/prediction";
 import { GameView } from "./game/view";
 import { GameSocket } from "./net/socket";
-import { adminTools, damageBandFor, dangerBandAt, resourceMax, safeRadius, session, weapons, world, xpToNext, type AdminAttribute, type AdminSpawnable, type AdminToolField } from "./tuning";
-import { Buttons, ServerKind, type Character, type CharacterClass, type Entity, type LoadoutSet, type ServerMessage } from "./types";
+import { adminTools, damageBandFor, dangerBandAt, materials as materialsTable, progression as progressionTable, resourceMax, safeRadius, session, weapons, world, xpToNext, type AdminAttribute, type AdminSpawnable, type AdminToolField } from "./tuning";
+import { Buttons, ServerKind, type Character, type CharacterClass, type CraftedItem, type Entity, type LoadoutSet, type ServerMessage } from "./types";
 
 function element<T extends HTMLElement>(id: string): T {
   const value = document.getElementById(id);
@@ -44,6 +45,17 @@ class SpellFire {
   private respecOwed = false;
   private loadoutStatus = "";
   private menuTab = "character";
+  // What the character owns and carries. Both arrive on the welcome and change
+  // only on a confirmed craft, so nothing here is ever inferred from a snapshot.
+  private items: CraftedItem[] = [];
+  private materials: Record<string, number> = {};
+  // The unconfirmed build in the Crafting section: the weapon category and the
+  // component chosen per slot. Nothing is shown as spent until a Craft reply
+  // confirms it.
+  private craftWeapon = "";
+  private craftChoices: Record<string, string> = {};
+  private craftStatus = "";
+  private adminMaterialID = Object.keys(materialsTable.materials).sort()[0] ?? "";
 
   async init(): Promise<void> {
     this.bindHome(); this.bindDialogs(); this.bindControls(); this.bindSettings();
@@ -193,6 +205,7 @@ class SpellFire {
     this.ledger = ledgerOf(character.unlocks ?? []);
     this.level = character.level; this.xp = character.xp; this.xpNext = xpToNext(character.level);
     this.loadout = defaultLoadout(character.class, this.ledger); this.draft = undefined; this.selectedSlot = 0; this.loadoutStatus = "";
+    this.items = []; this.materials = {}; this.craftWeapon = ""; this.craftChoices = {}; this.craftStatus = "";
     sessionStorage.setItem("spellfire-character", character.id); element("home").hidden = true; element("game").hidden = false;
     element("connection-overlay").hidden = false; element("connection-title").textContent = "Connecting"; element("connection-message").textContent = "Joining the shared world…";
     this.predictor = new Predictor(); this.view = new GameView(); await this.view.init(element("canvas-host")); this.view.bindPredictor(this.predictor);
@@ -205,6 +218,8 @@ class SpellFire {
     if (message.kind === ServerKind.Pong) { element("latency").textContent = `${Math.max(0, Date.now() - message.echoedClientTimeMS)} ms`; return; }
     if (message.kind === ServerKind.Welcome || message.kind === ServerKind.Progress) this.applyProgress(message);
     if (message.kind === ServerKind.Progress) return;
+    if (message.kind === ServerKind.Welcome || message.kind === ServerKind.Craft) this.applyInventory(message);
+    if (message.kind === ServerKind.Craft) return;
     if (message.loadout) this.applyLoadout(message);
     if (message.kind === ServerKind.Loadout) return;
     this.predictor?.setColliders(message.colliders); this.view?.apply(message);
@@ -264,7 +279,7 @@ class SpellFire {
 
   private renderAbilityBar(): void {
     const character = this.selectedCharacter(); if (!character) return;
-    const slots = bar(character.class, this.loadout);
+    const slots = bar(character.class, this.loadout, this.items);
     const label = (index: number) => `${index + 1}`;
     element("ability-bar").replaceChildren(...slots.map((slot) => {
       const cell = document.createElement("div");
@@ -290,7 +305,7 @@ class SpellFire {
 
   private updateHUD(entity: Entity): void {
     const health = Math.max(0, entity.health / Math.max(1, entity.maxHealth)); element("health-bar").style.width = `${health * 100}%`; element("health-label").textContent = `${Math.ceil(entity.health)} / ${Math.ceil(entity.maxHealth)}`;
-    const { label, max } = resourceMax(weapons[this.loadout.weapon]), resource = entity.mana; element("resource-label").innerHTML = `${label} <span>${Math.floor(resource)} / ${max}</span>`; element("resource-bar").style.width = `${Math.max(0, resource / max) * 100}%`;
+    const { label, max } = resourceMax(resolvedWeapon(this.loadout.weapon, this.items)), resource = entity.mana; element("resource-label").innerHTML = `${label} <span>${Math.floor(resource)} / ${max}</span>`; element("resource-bar").style.width = `${Math.max(0, resource / max) * 100}%`;
     const distance = Math.hypot(entity.x, entity.y), band = dangerBandAt(distance);
     element("danger-text").textContent = `${band.name} · ${band.summary}`; element("danger-shape").textContent = band.shape;
     if (band.name !== this.lastBand && this.lastBand) this.notice(`${band.name}: ${band.summary}`); this.lastBand = band.name;
@@ -315,10 +330,11 @@ class SpellFire {
     const character = this.selectedCharacter(); const content = element("menu-content");
     if (tab === "admin") { this.renderAdminMenu(content); return; }
     if (tab === "loadout") { this.renderLoadoutSection(content, character); return; }
-    const equipped = weapons[this.loadout.weapon];
+    if (tab === "crafting") { this.renderCraftingSection(content, character); return; }
+    if (tab === "inventory") { this.renderInventorySection(content); return; }
+    const equipped = resolvedWeapon(this.loadout.weapon, this.items);
     const pages: Record<string, string> = {
       character: `<h3>${escapeHTML(character?.name ?? "Character")}</h3><p>${titleCase(character?.class ?? "gunslinger")} · Level ${this.level}</p><p>${this.xpNext ? `${this.xp} / ${this.xpNext} XP to level ${this.level + 1}` : "Level cap reached"} · ${this.ledger.size} unlock${this.ledger.size === 1 ? "" : "s"} owned</p><p>Progression unlocks options, never raw combat power.</p>`,
-      inventory: "<h3>Materials</h3><p>No carried materials. Material harvesting and death drops are not available in this foundation.</p>",
       world: `<h3>Known world</h3><p>${world.danger_bands.map((band) => escapeHTML(band.name)).join(" → ")}. The circular world is contiguous; trees are authoritative static cover.</p>`,
       reference: `<h3>Field reference</h3><p>WASD/Arrows move · pointer aims · primary pointer fires · 1–6 or the wheel select an equipped slot · Space dashes · R reloads · E interacts. The hub is safe. Combat is server-authoritative and raw time-to-kill is about ${equipped ? damageBandFor(equipped).target_ttk_seconds : 3} seconds.</p>`,
       settings: "<h3>Settings</h3><p>Accessibility and interface-scale controls remain available on Home. Opening this menu does not pause the shared world.</p>",
@@ -330,12 +346,14 @@ class SpellFire {
     const selected = this.selectedAdminSpawn();
     const search = query.toLowerCase();
     const entries = Object.entries(adminTools.spawnables).filter(([, spawnable]) => spawnable.name.toLowerCase().includes(search) || spawnable.kind.includes(search)).sort(([, left], [, right]) => left.name.localeCompare(right.name));
-    content.innerHTML = `<h3>Developer mode</h3><p>Developer mode replaces primary fire with repeatable placement. Configure an entity, close this menu, then click the world.</p><button id="developer-mode-toggle" class="${this.developerMode ? "danger-button" : "primary"}">${this.developerMode ? "Disable developer mode" : "Enable developer mode"}</button><label>Search spawnables<input id="admin-spawn-search" value="${escapeHTML(query)}" placeholder="Player, projectile, telegraph…" /></label><div id="admin-spawn-list" class="admin-spawn-list">${entries.map(([id, spawnable]) => `<button data-admin-spawn="${escapeHTML(id)}" aria-pressed="${id === this.adminSpawnID}"><strong>${escapeHTML(spawnable.name)}</strong><small>${escapeHTML(spawnable.kind)}</small></button>`).join("") || "<p>No spawnables match.</p>"}</div>${selected ? this.adminConfigMarkup(selected) : "<p class=\"error\">No spawnable is configured.</p>"}<form id="admin-attributes-form"><h4>Your player</h4><p>These temporary overrides affect only your current body and reset when it leaves the world.</p>${Object.entries(adminTools.attributes).map(([id, field]) => this.adminFieldMarkup(field, `admin-attribute-${id}`, id)).join("")}<button class="secondary" type="submit">Apply player overrides</button></form><p id="admin-notice" class="error" role="status"></p>`;
+    content.innerHTML = `<h3>Developer mode</h3><p>Developer mode replaces primary fire with repeatable placement. Configure an entity, close this menu, then click the world.</p><button id="developer-mode-toggle" class="${this.developerMode ? "danger-button" : "primary"}">${this.developerMode ? "Disable developer mode" : "Enable developer mode"}</button><label>Search spawnables<input id="admin-spawn-search" value="${escapeHTML(query)}" placeholder="Player, projectile, telegraph…" /></label><div id="admin-spawn-list" class="admin-spawn-list">${entries.map(([id, spawnable]) => `<button data-admin-spawn="${escapeHTML(id)}" aria-pressed="${id === this.adminSpawnID}"><strong>${escapeHTML(spawnable.name)}</strong><small>${escapeHTML(spawnable.kind)}</small></button>`).join("") || "<p>No spawnables match.</p>"}</div>${selected ? this.adminConfigMarkup(selected) : "<p class=\"error\">No spawnable is configured.</p>"}<form id="admin-materials-form"><h4>Grant materials</h4><p>Harvesting is not implemented yet, so this is the only way to put materials in a character's hands and exercise a real crafting spend.</p><label>Material<select id="admin-material-select">${Object.keys(materialsTable.materials).sort().map((id) => `<option value="${escapeHTML(id)}"${id === this.adminMaterialID ? " selected" : ""}>${escapeHTML(materialsTable.materials[id]!.name)}</option>`).join("")}</select></label>${this.adminFieldMarkup({ ...adminTools.material_grant, id: "count" }, "admin-material-count", "count")}<button class="secondary" type="submit">Grant to your character</button></form><form id="admin-attributes-form"><h4>Your player</h4><p>These temporary overrides affect only your current body and reset when it leaves the world.</p>${Object.entries(adminTools.attributes).map(([id, field]) => this.adminFieldMarkup(field, `admin-attribute-${id}`, id)).join("")}<button class="secondary" type="submit">Apply player overrides</button></form><p id="admin-notice" class="error" role="status"></p>`;
     element<HTMLButtonElement>("developer-mode-toggle").addEventListener("click", () => this.setDeveloperMode(!this.developerMode));
     element<HTMLInputElement>("admin-spawn-search").addEventListener("input", (event) => this.renderAdminMenu(content, (event.currentTarget as HTMLInputElement).value));
     for (const button of document.querySelectorAll<HTMLButtonElement>("[data-admin-spawn]")) button.addEventListener("click", () => { this.adminSpawnID = button.dataset.adminSpawn ?? ""; this.adminSpawnConfig = this.defaultAdminConfig(this.adminSpawnID); this.renderAdminMenu(content, query); });
     for (const input of document.querySelectorAll<HTMLInputElement>("[data-admin-config]")) input.addEventListener("input", () => { this.adminSpawnConfig[input.dataset.adminConfig ?? ""] = input.value; });
     element<HTMLFormElement>("admin-attributes-form").addEventListener("submit", (event) => void this.applyAdminAttributes(event));
+    element<HTMLSelectElement>("admin-material-select").addEventListener("change", (event) => { this.adminMaterialID = (event.currentTarget as HTMLSelectElement).value; });
+    element<HTMLFormElement>("admin-materials-form").addEventListener("submit", (event) => void this.grantAdminMaterials(event));
   }
 
   private adminConfigMarkup(selected: AdminSpawnable): string {
@@ -381,6 +399,22 @@ class SpellFire {
     } catch (error) { this.notice(`Placement rejected: ${messageOf(error)}`); }
   }
 
+  /**
+   * Grants materials to the developer's own character. The world validates the
+   * ID and bounds the count against the same catalog row the form renders, so
+   * the browser never decides what a grant may be.
+   */
+  private async grantAdminMaterials(event: SubmitEvent): Promise<void> {
+    event.preventDefault();
+    if (!this.activeCharacter) return;
+    const count = Number(element<HTMLInputElement>("admin-material-count").value);
+    const notice = element("admin-notice"); notice.textContent = "";
+    try {
+      await this.api.adminMaterials(this.activeCharacter.id, { [this.adminMaterialID]: count });
+      notice.textContent = `Granted ${count} ${materialName(this.adminMaterialID)}.`; notice.classList.remove("error");
+    } catch (error) { notice.textContent = messageOf(error); notice.classList.add("error"); }
+  }
+
   private async applyAdminAttributes(event: SubmitEvent): Promise<void> {
     event.preventDefault();
     if (!this.activeCharacter) return;
@@ -399,9 +433,9 @@ class SpellFire {
   private renderLoadoutSection(content: HTMLElement, character: Character | undefined): void {
     if (!character) { content.innerHTML = "<h3>Loadout</h3><p>No character selected.</p>"; return; }
     const set = this.draft ?? this.loadout;
-    const slots = bar(character.class, set);
+    const slots = bar(character.class, set, this.items);
     const editable = this.inSafety;
-    const problem = loadoutProblem(character.class, this.ledger, set);
+    const problem = loadoutProblem(character.class, this.ledger, set, this.items);
     content.replaceChildren();
     content.append(heading("Loadout"));
     const lock = document.createElement("p");
@@ -434,14 +468,192 @@ class SpellFire {
     content.append(save);
   }
 
+  /** Adopts what the server says the character owns and carries. */
+  private applyInventory(message: ServerMessage): void {
+    this.items = message.items; this.materials = message.materials;
+    if (message.kind === ServerKind.Craft) {
+      this.craftStatus = message.error || "Crafted. The item is in your inventory and can be equipped in the Loadout section.";
+      if (message.error) this.notice(message.error); else this.craftChoices = {};
+    }
+    this.renderAbilityBar();
+    if (element<HTMLDialogElement>("menu-dialog").open && (this.menuTab === "crafting" || this.menuTab === "inventory" || this.menuTab === "loadout")) this.renderMenu(this.menuTab);
+  }
+
+  /**
+   * The Crafting section: a blueprint's slots, the components that fit each one,
+   * what the build costs against what is carried, and what it changes in plain
+   * language. Like the loadout it is viewable anywhere and usable only in
+   * safety, because raw materials have to be hauled back before they are worth
+   * anything.
+   */
+  private renderCraftingSection(content: HTMLElement, character: Character | undefined): void {
+    if (!character) { content.innerHTML = "<h3>Crafting</h3><p>No character selected.</p>"; return; }
+    const buildable = craftable(character.class, this.ledger);
+    if (!this.craftWeapon || !buildable.includes(this.craftWeapon)) this.craftWeapon = buildable[0] ?? "";
+    content.replaceChildren();
+    content.append(heading("Crafting"));
+
+    const lock = document.createElement("p");
+    lock.className = this.inSafety ? "status good" : "warning";
+    lock.textContent = this.inSafety
+      ? "You are inside a safe zone. Crafting spends the materials you are carrying."
+      : "Locked: crafting is only available inside a safe zone. Haul your materials back to spend them.";
+    content.append(lock);
+
+    if (!this.craftWeapon) {
+      const empty = document.createElement("p");
+      empty.textContent = "You have not unlocked a weapon to build from yet.";
+      content.append(empty);
+      return;
+    }
+
+    // Blueprint choice. The category is the blueprint; its slots follow from it.
+    const blueprint = document.createElement("label"); blueprint.className = "loadout-slot";
+    const select = document.createElement("select");
+    select.disabled = !this.inSafety;
+    for (const id of buildable) select.append(new Option(weapons[id]?.name ?? id, id));
+    select.value = this.craftWeapon;
+    select.addEventListener("change", () => { this.craftWeapon = select.value; this.craftChoices = {}; this.craftStatus = ""; this.renderMenu("crafting"); });
+    blueprint.append(document.createTextNode("Blueprint"), select);
+    content.append(blueprint);
+
+    const slots = document.createElement("div"); slots.className = "loadout-slots";
+    for (const slot of slotsOf(this.craftWeapon)) {
+      const row = document.createElement("label"); row.className = "loadout-slot";
+      const choice = document.createElement("select");
+      choice.disabled = !this.inSafety;
+      choice.append(new Option("Stock", ""));
+      const options = fitting(this.craftWeapon, slot);
+      for (const id of options) choice.append(new Option(componentOf(id)?.name ?? id, id));
+      if (!options.length) choice.append(new Option("No components fit this slot yet", "", true, true));
+      choice.value = this.craftChoices[slot] ?? "";
+      choice.addEventListener("change", () => {
+        if (choice.value) this.craftChoices[slot] = choice.value; else delete this.craftChoices[slot];
+        this.craftStatus = ""; this.renderMenu("crafting");
+      });
+      row.append(document.createTextNode(titleCase(slot)), choice);
+      slots.append(row);
+    }
+    content.append(slots);
+
+    // What this build does, stated as behaviour rather than as multipliers: a
+    // rare part must never read as a higher power tier.
+    const behaviour = describe(this.craftWeapon, this.craftChoices);
+    const effects = document.createElement("ul"); effects.className = "craft-effects";
+    if (behaviour.length) {
+      for (const line of behaviour) { const item = document.createElement("li"); item.textContent = line; effects.append(item); }
+    } else {
+      const item = document.createElement("li");
+      item.textContent = "Stock configuration: this weapon behaves exactly as its category does.";
+      effects.append(item);
+    }
+    content.append(effects);
+
+    const required = craftCost(this.craftChoices);
+    const missing = shortfall(required, this.materials);
+    content.append(this.materialCostList(required, missing));
+
+    const message = document.createElement("p");
+    message.className = Object.keys(missing).length ? "error" : "status good";
+    message.textContent = Object.keys(missing).length
+      ? `Short ${Object.keys(missing).sort().map((id) => `${missing[id]} ${materialName(id)}`).join(", ")}.`
+      : this.craftStatus;
+    content.append(message);
+
+    const full = this.items.length >= progressionTable.crafted_item_capacity;
+    if (full) {
+      const capacity = document.createElement("p"); capacity.className = "warning";
+      capacity.textContent = `You are carrying ${this.items.length} of ${progressionTable.crafted_item_capacity} crafted weapons. Nothing more can be built.`;
+      content.append(capacity);
+    }
+
+    const build = document.createElement("button");
+    build.className = "primary";
+    build.textContent = Object.keys(required).length ? "Craft — spend materials" : "Craft (no materials required)";
+    build.disabled = !this.inSafety || full || Object.keys(missing).length > 0;
+    build.addEventListener("click", () => this.commitCraft(required));
+    content.append(build);
+  }
+
+  /** Owned and required materials side by side, with the shortfall named. */
+  private materialCostList(required: Record<string, number>, missing: Record<string, number>): HTMLElement {
+    const list = document.createElement("dl"); list.className = "craft-cost";
+    if (!Object.keys(required).length) {
+      const none = document.createElement("p"); none.textContent = "This build costs no materials.";
+      return none;
+    }
+    for (const id of Object.keys(required).sort()) {
+      const term = document.createElement("dt"); term.textContent = materialName(id);
+      const value = document.createElement("dd");
+      const carried = this.materials[id] ?? 0;
+      value.textContent = `${carried} / ${required[id]} carried`;
+      if (missing[id]) value.className = "error";
+      list.append(term, value);
+    }
+    return list;
+  }
+
+  /**
+   * Sends one build and shows it as pending. Nothing is deducted on screen: the
+   * server answers with the authoritative materials and items either way, so a
+   * refusal never leaves a spend the player did not make.
+   */
+  private commitCraft(required: Record<string, number>): void {
+    const summary = Object.keys(required).sort().map((id) => `${required[id]} ${materialName(id)}`).join(", ");
+    if (summary && !confirm(`Craft this ${weapons[this.craftWeapon]?.name ?? "weapon"}? It spends ${summary}.`)) return;
+    if (!this.socket?.craft({ weapon: this.craftWeapon, components: { ...this.craftChoices } })) {
+      this.craftStatus = "Not connected. Nothing was spent."; this.renderMenu("crafting"); return;
+    }
+    this.craftStatus = "Crafting…"; this.renderMenu("crafting");
+  }
+
+  /** Carried materials and owned crafted items — what crafting draws on and produces. */
+  private renderInventorySection(content: HTMLElement): void {
+    content.replaceChildren();
+    content.append(heading("Inventory"));
+    const carried = Object.keys(this.materials).filter((id) => (this.materials[id] ?? 0) > 0).sort();
+    const materialsHeading = document.createElement("h4"); materialsHeading.textContent = "Carried materials";
+    content.append(materialsHeading);
+    if (!carried.length) {
+      const empty = document.createElement("p");
+      empty.textContent = "No carried materials. Harvesting is not available in this foundation, so materials arrive only through developer tools for now.";
+      content.append(empty);
+    } else {
+      const list = document.createElement("dl"); list.className = "craft-cost";
+      for (const id of carried) {
+        const term = document.createElement("dt"); term.textContent = materialName(id);
+        const value = document.createElement("dd"); value.textContent = String(this.materials[id]);
+        list.append(term, value);
+      }
+      content.append(list);
+      const warning = document.createElement("p"); warning.className = "warning";
+      warning.textContent = "Carried materials are what a death drops. Crafted gear is kept.";
+      content.append(warning);
+    }
+    const itemsHeading = document.createElement("h4"); itemsHeading.textContent = "Crafted weapons";
+    content.append(itemsHeading);
+    if (!this.items.length) {
+      const empty = document.createElement("p"); empty.textContent = "Nothing crafted yet. A crafted weapon is equipped from the Loadout section like any other.";
+      content.append(empty);
+      return;
+    }
+    const owned = document.createElement("ul"); owned.className = "craft-effects";
+    for (const item of this.items) {
+      const row = document.createElement("li");
+      row.textContent = itemLabel(item) + (item.id === this.loadout.weapon ? " · equipped" : "");
+      owned.append(row);
+    }
+    content.append(owned);
+  }
+
   /** One slot row: a select over the content this character may equip there. */
   private slotRow(character: Character, kind: SlotKind, index: number, id: string, editable: boolean, label: string): HTMLElement {
     const row = document.createElement("label"); row.className = "loadout-slot";
     const select = document.createElement("select");
     select.disabled = !editable;
-    const options = equippable(character.class, this.ledger, kind);
+    const options = equippable(character.class, this.ledger, kind, this.items);
     if (kind !== "weapon") select.append(new Option("Empty", ""));
-    for (const option of options) select.append(new Option(contentName(kind, option), option));
+    for (const option of options) select.append(new Option(contentName(kind, option, this.items), option));
     if (!options.length && kind !== "weapon") select.append(new Option(kind === "gadget" ? "No gadgets unlocked yet" : "No spells unlocked yet", "", true, true));
     select.value = id;
     select.addEventListener("change", () => { this.editDraft(kind, index, select.value); });
@@ -470,6 +682,7 @@ class SpellFire {
   private exitGame(): void {
     window.clearInterval(this.inputTimer); this.socket?.close(); this.socket = undefined; this.view?.destroy(); this.view = undefined; this.predictor = undefined; this.pressed.clear(); this.lastBand = "";
     this.draft = undefined; this.selectedSlot = 0; this.inSafety = true; this.respecOwed = false; this.loadoutStatus = "";
+    this.items = []; this.materials = {}; this.craftWeapon = ""; this.craftChoices = {}; this.craftStatus = "";
     this.ledger = ledgerOf([]); this.level = 1; this.xp = 0; this.xpNext = 0;
     element("ability-bar").replaceChildren(); element("touch-slots").replaceChildren();
     const menu = element<HTMLDialogElement>("menu-dialog"); if (menu.open) menu.close(); this.activeCharacter = undefined; this.setDeveloperMode(false); element("game").hidden = true; element("home").hidden = false; element("death-overlay").hidden = true; element("connection-overlay").hidden = true;

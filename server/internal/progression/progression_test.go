@@ -6,6 +6,7 @@ import (
 	"testing/fstest"
 
 	"spellfire/data"
+	"spellfire/server/internal/crafting"
 	"spellfire/server/internal/loadout"
 	"spellfire/server/internal/model"
 	"spellfire/server/internal/progression"
@@ -54,11 +55,11 @@ func TestAZeroMaterialCharacterCanFillACoherentLoadout(t *testing.T) {
 	tables := edited(t, map[string]string{"spells.json": basicSpells, "gadgets.json": basicGadgets})
 	for _, class := range []model.Class{model.Gunslinger, model.Mage} {
 		ledger := progression.New(progression.StarterKit(tables, class, "fresh-character"))
-		set := loadout.Default(tables, class, ledger)
-		if err := loadout.Validate(tables, class, ledger, set); err != nil {
+		set := loadout.Default(tables, class, crafting.Inventory{Ledger: ledger})
+		if err := loadout.Validate(tables, class, crafting.Inventory{Ledger: ledger}, set); err != nil {
 			t.Fatalf("%s starter kit does not produce a legal loadout: %v", class, err)
 		}
-		slots := loadout.Bar(tables, class, set)
+		slots := loadout.Bar(tables, class, crafting.Inventory{Ledger: ledger}, set)
 		if slots[0].AbilityID == "" {
 			t.Fatalf("%s cannot act from its first slot on creation", class)
 		}
@@ -170,7 +171,7 @@ func TestSyncGivesAKitToARecordThatPredatesTheLedger(t *testing.T) {
 	if ledger.Len() == 0 || !changed {
 		t.Fatalf("a ledgerless character was left with %d unlocks (changed %v)", ledger.Len(), changed)
 	}
-	if len(loadout.Equippable(tables, model.Gunslinger, ledger, loadout.KindWeapon)) == 0 {
+	if len(loadout.Equippable(tables, model.Gunslinger, crafting.Inventory{Ledger: ledger}, loadout.KindWeapon)) == 0 {
 		t.Fatal("a ledgerless character was left unable to equip any weapon")
 	}
 }

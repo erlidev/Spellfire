@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"spellfire/server/internal/auth"
+	"spellfire/server/internal/crafting"
 	"spellfire/server/internal/game"
 	"spellfire/server/internal/loadout"
 	"spellfire/server/internal/model"
@@ -23,6 +24,7 @@ import (
 type recordingAdminTools struct {
 	spawn      game.AdminSpawn
 	attributes map[string]float64
+	materials  map[string]int
 }
 
 func (r *recordingAdminTools) AdminSpawn(_ string, spawn game.AdminSpawn) error {
@@ -32,6 +34,11 @@ func (r *recordingAdminTools) AdminSpawn(_ string, spawn game.AdminSpawn) error 
 
 func (r *recordingAdminTools) SetAdminAttributes(_ string, attributes map[string]float64) error {
 	r.attributes = attributes
+	return nil
+}
+
+func (r *recordingAdminTools) GrantMaterials(_ string, materials map[string]int) error {
+	r.materials = materials
 	return nil
 }
 
@@ -147,7 +154,7 @@ func TestCharacterCreationRollsTheStarterKit(t *testing.T) {
 	}
 	tables := tuning.MustLoad()
 	ledger := progression.New(character.Unlocks)
-	if len(loadout.Equippable(tables, model.Mage, ledger, loadout.KindWeapon)) == 0 {
+	if len(loadout.Equippable(tables, model.Mage, crafting.Inventory{Ledger: ledger}, loadout.KindWeapon)) == 0 {
 		t.Fatalf("a new character owns no weapon of its class: %v", character.Unlocks)
 	}
 	// The kit is persisted, not recomputed: the listing carries the same ledger.

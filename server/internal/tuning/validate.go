@@ -108,6 +108,7 @@ func (t *Tables) validateAdminTools(r *report) {
 			validateAdminFields(r, "admin_tools: spawnable "+id, spawnable.Fields)
 		}
 	}
+	validateAdminFields(r, "admin_tools: material_grant", []AdminToolField{t.AdminTools.MaterialGrant})
 	if r.require(len(t.AdminTools.Attributes) > 0, "admin_tools: attributes must not be empty") {
 		for _, id := range sortedKeys(t.AdminTools.Attributes) {
 			field := t.AdminTools.Attributes[id]
@@ -340,6 +341,8 @@ func (t *Tables) validateProgression(r *report) {
 	for _, source := range sortedKeys(p.Sources) {
 		r.require(contains(XPSources, source), "progression: source %q is not one the simulation awards; want one of %v", source, XPSources)
 	}
+	r.require(p.CraftedItemCapacity > 0,
+		"progression: crafted_item_capacity must be positive; a stock build costs nothing, so an unbounded inventory can be minted forever")
 	r.require(p.StarterKit.Unlocks >= t.Loadout.BarSlots(),
 		"progression: starter_kit.unlocks %d cannot fill the %d-slot action bar", p.StarterKit.Unlocks, t.Loadout.BarSlots())
 }
@@ -385,12 +388,63 @@ func (t *Tables) validateComponents(r *report) {
 	for _, id := range sortedKeys(t.Components.Components) {
 		component := t.Components.Components[id]
 		r.require(component.Name != "", "components: %q has no name", id)
+		// The crafting UI must state a behaviour change in plain language, so a
+		// row without one would leave a player spending materials on a mystery.
+		r.require(component.Effect != "", "components: %q must describe its behaviour in plain language for the crafting UI", id)
 		blueprint, ok := t.Components.Blueprints[component.Blueprint]
 		if !r.require(ok, "components: %q references unknown blueprint %q", id, component.Blueprint) {
 			continue
 		}
 		r.require(contains(blueprint.Slots, component.Slot), "components: %q fills slot %q, which blueprint %q does not expose", id, component.Slot, component.Blueprint)
+		// Materials must be hauled to a safe zone and spent. A free component
+		// would put a behaviour change outside the economy entirely.
+		if r.require(len(component.Cost) > 0, "components: %q declares no material cost; crafting is what the hauled materials are for", id) {
+			for _, material := range sortedKeys(component.Cost) {
+				r.require(component.Cost[material] > 0, "components: %q costs a non-positive count of %q", id, material)
+				r.require(t.Live("material", material), "components: %q costs unknown material %q", id, material)
+			}
+		}
+		t.validateModifiers(r, id, component)
 	}
+}
+
+// validateModifiers keeps crafting on the behaviour axis. The map is open — a
+// component names whatever attribute it changes — but a name the simulation
+// never reads would be a promise the world silently drops, and fire cadence is
+// rejected outright because scaling it moves an item out of its damage band.
+func (t *Tables) validateModifiers(r *report, id string, component Component) {
+	if !r.require(len(component.Modifiers) > 0, "components: %q declares no modifiers; a component that changes nothing is not a choice", id) {
+		return
+	}
+	magazines := t.blueprintHoldsMagazine(component.Blueprint)
+	for _, attribute := range sortedKeys(component.Modifiers) {
+		modifier := component.Modifiers[attribute]
+		if contains(ForbiddenAttributes, attribute) {
+			r.addf("components: %q modifies %q, which crafting may never touch: fire cadence is the damage band, and crafting changes handling and ceiling only", id, attribute)
+			continue
+		}
+		if !r.require(contains(ComponentAttributes, attribute),
+			"components: %q modifies %q, which the simulation does not read; want one of %v", id, attribute, ComponentAttributes) {
+			continue
+		}
+		r.require(modifier >= ModifierMin && modifier <= ModifierMax,
+			"components: %q scales %q by %g, outside the [%g,%g] band crafting is allowed to move an attribute", id, attribute, modifier, ModifierMin, ModifierMax)
+		r.require(modifier != 1, "components: %q scales %q by 1, which is no change at all", id, attribute)
+		if contains(MagazineAttributes, attribute) {
+			r.require(magazines, "components: %q modifies %q, but no %q weapon holds a magazine", id, attribute, component.Blueprint)
+		}
+	}
+}
+
+// blueprintHoldsMagazine reports whether any live weapon of the blueprint has a
+// magazine, which is what makes the magazine attributes mean anything.
+func (t *Tables) blueprintHoldsMagazine(blueprint string) bool {
+	for _, weapon := range t.Weapons {
+		if weapon.Blueprint == blueprint && weapon.MagazineSize > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 func (t *Tables) validateMaterials(r *report) {

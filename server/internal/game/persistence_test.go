@@ -20,11 +20,30 @@ type recorder struct {
 	mu       sync.Mutex
 	writes   map[string]model.CharacterState
 	progress map[string]model.Progress
+	items    []model.CraftedItem
 	fail     error
 }
 
 func newRecorder() *recorder {
 	return &recorder{writes: map[string]model.CharacterState{}, progress: map[string]model.Progress{}}
+}
+
+func (r *recorder) CreateCraftedItem(_ context.Context, item model.CraftedItem) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.fail != nil {
+		return r.fail
+	}
+	r.items = append(r.items, item)
+	return nil
+}
+
+// savedItems is the crafted items the engine has written, copied so a test
+// never reads the recorder's slice while the writer goroutine appends to it.
+func (r *recorder) savedItems() []model.CraftedItem {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]model.CraftedItem(nil), r.items...)
 }
 
 func (r *recorder) SaveCharacterProgress(_ context.Context, id string, progress model.Progress) error {

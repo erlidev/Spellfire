@@ -3,6 +3,7 @@ package protocol
 import (
 	"errors"
 	"math"
+	"sort"
 
 	"google.golang.org/protobuf/encoding/protowire"
 )
@@ -13,6 +14,7 @@ const (
 	ClientRespawn uint64 = 3
 	ClientPing    uint64 = 4
 	ClientLoadout uint64 = 5
+	ClientCraft   uint64 = 6
 
 	ServerWelcome  uint64 = 1
 	ServerSnapshot uint64 = 2
@@ -26,6 +28,11 @@ const (
 	// unlock ledger — when it changes. It is pushed, not polled: a level-up has
 	// to reach the loadout menu without the player reconnecting to see it.
 	ServerProgress uint64 = 6
+	// ServerCraft answers a craft request. Like ServerLoadout it is not terminal:
+	// it carries the authoritative owned items and carried materials, and Error
+	// when the build was refused, so a rejection never drops the connection and
+	// never leaves an unconfirmed spend on screen.
+	ServerCraft uint64 = 7
 )
 
 const (
@@ -74,6 +81,26 @@ type Loadout struct {
 	Spells  []string
 }
 
+// CraftRequest is one requested build. Components is the slot → component ID
+// choice; a slot the request omits is left stock.
+type CraftRequest struct {
+	Weapon     string
+	Components map[string]string
+}
+
+// CraftedItem is an owned crafted weapon on the wire: references only.
+type CraftedItem struct {
+	ID         string
+	Weapon     string
+	Components map[string]string
+}
+
+// MaterialStack is one carried material and how much of it.
+type MaterialStack struct {
+	Material string
+	Count    uint32
+}
+
 type ClientEnvelope struct {
 	Kind         uint64
 	SessionToken string
@@ -81,6 +108,7 @@ type ClientEnvelope struct {
 	Input        Input
 	ClientTimeMS uint64
 	Loadout      Loadout
+	Craft        CraftRequest
 }
 
 type Entity struct {
@@ -149,6 +177,11 @@ type ServerEnvelope struct {
 	XP       uint64
 	XPToNext uint64
 	Unlocks  []string
+	// Items and Materials travel on the welcome and on every craft reply, never
+	// on a snapshot, for the same reason the loadout does not: both change on a
+	// deliberate action inside safety.
+	Items     []CraftedItem
+	Materials []MaterialStack
 }
 
 func DecodeClient(data []byte) (ClientEnvelope, error) {
@@ -209,6 +242,17 @@ func DecodeClient(data []byte) (ClientEnvelope, error) {
 				return out, err
 			}
 			out.Loadout = set
+			data = data[m:]
+		case 7:
+			v, m := protowire.ConsumeBytes(data)
+			if m < 0 {
+				return out, errors.New("invalid craft request")
+			}
+			request, err := decodeCraft(v)
+			if err != nil {
+				return out, err
+			}
+			out.Craft = request
 			data = data[m:]
 		default:
 			m := protowire.ConsumeFieldValue(num, typ, data)
@@ -316,6 +360,80 @@ func decodeLoadout(data []byte) (Loadout, error) {
 	return out, nil
 }
 
+// decodeCraft reads a requested build. A slot the request leaves empty is a
+// stock choice and is dropped here, so the world never sees a slot pointing at
+// nothing.
+func decodeCraft(data []byte) (CraftRequest, error) {
+	out := CraftRequest{Components: map[string]string{}}
+	for len(data) > 0 {
+		num, typ, n := protowire.ConsumeTag(data)
+		if n < 0 {
+			return out, errors.New("invalid craft tag")
+		}
+		data = data[n:]
+		switch num {
+		case 1:
+			v, m := protowire.ConsumeString(data)
+			if m < 0 {
+				return out, errors.New("invalid craft weapon")
+			}
+			out.Weapon = v
+			data = data[m:]
+		case 2:
+			v, m := protowire.ConsumeBytes(data)
+			if m < 0 {
+				return out, errors.New("invalid component slot")
+			}
+			slot, component, err := decodeComponentSlot(v)
+			if err != nil {
+				return out, err
+			}
+			if slot != "" && component != "" {
+				out.Components[slot] = component
+			}
+			data = data[m:]
+		default:
+			m := protowire.ConsumeFieldValue(num, typ, data)
+			if m < 0 {
+				return out, errors.New("invalid craft field")
+			}
+			data = data[m:]
+		}
+	}
+	return out, nil
+}
+
+func decodeComponentSlot(data []byte) (string, string, error) {
+	var slot, component string
+	for len(data) > 0 {
+		num, typ, n := protowire.ConsumeTag(data)
+		if n < 0 {
+			return "", "", errors.New("invalid component slot tag")
+		}
+		data = data[n:]
+		switch num {
+		case 1, 2:
+			v, m := protowire.ConsumeString(data)
+			if m < 0 {
+				return "", "", errors.New("invalid component slot value")
+			}
+			if num == 1 {
+				slot = v
+			} else {
+				component = v
+			}
+			data = data[m:]
+		default:
+			m := protowire.ConsumeFieldValue(num, typ, data)
+			if m < 0 {
+				return "", "", errors.New("invalid component slot field")
+			}
+			data = data[m:]
+		}
+	}
+	return slot, component, nil
+}
+
 func EncodeServer(message ServerEnvelope) []byte {
 	var out []byte
 	out = appendVarint(out, 1, message.Kind)
@@ -345,7 +463,55 @@ func EncodeServer(message ServerEnvelope) []byte {
 	for _, unlock := range message.Unlocks {
 		out = appendString(out, 15, unlock)
 	}
+	for _, item := range message.Items {
+		out = appendMessage(out, 16, encodeItem(item))
+	}
+	for _, stack := range message.Materials {
+		out = appendMessage(out, 17, encodeStack(stack))
+	}
 	return out
+}
+
+// encodeItem writes an owned crafted weapon. Slots go out in sorted order so two
+// encodings of one item are byte-identical.
+func encodeItem(item CraftedItem) []byte {
+	out := appendString(nil, 1, item.ID)
+	out = appendString(out, 2, item.Weapon)
+	for _, slot := range sortedKeys(item.Components) {
+		out = appendMessage(out, 3, encodeComponentSlot(slot, item.Components[slot]))
+	}
+	return out
+}
+
+func encodeComponentSlot(slot, component string) []byte {
+	out := appendString(nil, 1, slot)
+	return appendString(out, 2, component)
+}
+
+func encodeStack(stack MaterialStack) []byte {
+	out := appendString(nil, 1, stack.Material)
+	return appendVarint(out, 2, uint64(stack.Count))
+}
+
+// Stacks lays a carried inventory out for the wire in sorted order, dropping the
+// empty stacks a spend left behind.
+func Stacks(materials map[string]int) []MaterialStack {
+	stacks := make([]MaterialStack, 0, len(materials))
+	for _, material := range sortedKeys(materials) {
+		if count := materials[material]; count > 0 {
+			stacks = append(stacks, MaterialStack{Material: material, Count: uint32(count)})
+		}
+	}
+	return stacks
+}
+
+func sortedKeys[V any](values map[string]V) []string {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 // encodeLoadout writes every slot, empty ones included: appendString drops an

@@ -9,5 +9,134 @@
       "slots": ["core", "focus", "conduit"]
     }
   },
-  "components": {}
+  "components": {
+    "muzzle-brake": {
+      "name": "Muzzle brake",
+      "blueprint": "gun",
+      "slot": "muzzle",
+      "effect": "Rounds leave the barrel faster. The heavier muzzle makes reloads slower.",
+      "cost": { "salvaged-plate": 4 },
+      "modifiers": { "projectile_speed": 1.15, "reload_ms": 1.1 }
+    },
+    "suppressor": {
+      "name": "Suppressor",
+      "blueprint": "gun",
+      "slot": "muzzle",
+      "effect": "Subsonic rounds travel more slowly but stay in flight far longer.",
+      "cost": { "salvaged-plate": 3, "tempered-plate": 1 },
+      "modifiers": { "projectile_speed": 0.85, "projectile_life": 1.4 }
+    },
+    "long-barrel": {
+      "name": "Long barrel",
+      "blueprint": "gun",
+      "slot": "barrel",
+      "effect": "A longer bore drives rounds out much faster, but tightens them into a thinner shot that is easier to miss with.",
+      "cost": { "salvaged-plate": 5, "tempered-plate": 2 },
+      "modifiers": { "projectile_speed": 1.3, "projectile_radius": 0.8 }
+    },
+    "short-barrel": {
+      "name": "Short barrel",
+      "blueprint": "gun",
+      "slot": "barrel",
+      "effect": "A stubby bore handles quickly and reloads fast, giving up muzzle velocity for it.",
+      "cost": { "salvaged-plate": 3 },
+      "modifiers": { "projectile_speed": 0.85, "reload_ms": 0.8 }
+    },
+    "ranged-optic": {
+      "name": "Ranged optic",
+      "blueprint": "gun",
+      "slot": "scope",
+      "effect": "Shots stay in flight much longer, so they reach targets further out.",
+      "cost": { "salvaged-plate": 3, "tempered-plate": 3 },
+      "modifiers": { "projectile_life": 1.4 }
+    },
+    "close-optic": {
+      "name": "Close optic",
+      "blueprint": "gun",
+      "slot": "scope",
+      "effect": "A wide bead makes shots easier to land up close, at the cost of how far they carry.",
+      "cost": { "salvaged-plate": 2 },
+      "modifiers": { "projectile_radius": 1.25, "projectile_life": 0.8 }
+    },
+    "match-trigger": {
+      "name": "Match trigger",
+      "blueprint": "gun",
+      "slot": "trigger",
+      "effect": "A consistent break makes every shot land a little wider. The mechanism is slower to clear on a reload.",
+      "cost": { "tempered-plate": 3 },
+      "modifiers": { "projectile_radius": 1.15, "reload_ms": 1.15 }
+    },
+    "light-trigger": {
+      "name": "Light trigger",
+      "blueprint": "gun",
+      "slot": "trigger",
+      "effect": "A light pull gets the weapon back into action faster, and sends rounds out slightly slower.",
+      "cost": { "salvaged-plate": 2, "tempered-plate": 1 },
+      "modifiers": { "reload_ms": 0.8, "projectile_speed": 0.9 }
+    },
+    "extended-magazine": {
+      "name": "Extended magazine",
+      "blueprint": "gun",
+      "slot": "magazine",
+      "effect": "Holds half again as many rounds, and takes considerably longer to swap.",
+      "cost": { "salvaged-plate": 4, "tempered-plate": 2 },
+      "modifiers": { "magazine_size": 1.5, "reload_ms": 1.3 }
+    },
+    "quick-magazine": {
+      "name": "Quick magazine",
+      "blueprint": "gun",
+      "slot": "magazine",
+      "effect": "Swaps far faster in exchange for holding fewer rounds.",
+      "cost": { "salvaged-plate": 3, "tempered-plate": 1 },
+      "modifiers": { "magazine_size": 0.8, "reload_ms": 0.65 }
+    },
+    "focusing-core": {
+      "name": "Focusing core",
+      "blueprint": "staff",
+      "slot": "core",
+      "effect": "Casts cost noticeably less mana, and take longer to commit before they release.",
+      "cost": { "salvaged-plate": 3, "arcane-shard": 1 },
+      "modifiers": { "cost_amount": 0.75, "windup_ms": 1.3 }
+    },
+    "surging-core": {
+      "name": "Surging core",
+      "blueprint": "staff",
+      "slot": "core",
+      "effect": "Casts commit much faster, giving opponents less warning, and burn more mana each time.",
+      "cost": { "tempered-plate": 2, "storm-shard": 2 },
+      "modifiers": { "windup_ms": 0.7, "cost_amount": 1.3 }
+    },
+    "wide-focus": {
+      "name": "Wide focus",
+      "blueprint": "staff",
+      "slot": "focus",
+      "effect": "Shapes a broader, slower bolt that is easier to connect with.",
+      "cost": { "salvaged-plate": 3, "ember-shard": 1 },
+      "modifiers": { "projectile_radius": 1.35, "projectile_speed": 0.8 }
+    },
+    "narrow-focus": {
+      "name": "Narrow focus",
+      "blueprint": "staff",
+      "slot": "focus",
+      "effect": "Shapes a fast, thin bolt that crosses the gap quickly and is easier to miss with.",
+      "cost": { "salvaged-plate": 3, "rime-shard": 1 },
+      "modifiers": { "projectile_speed": 1.35, "projectile_radius": 0.75 }
+    },
+    "reaching-conduit": {
+      "name": "Reaching conduit",
+      "blueprint": "staff",
+      "slot": "conduit",
+      "effect": "Bolts persist far longer before fading, at a small mana premium.",
+      "cost": { "tempered-plate": 2, "stone-shard": 2 },
+      "modifiers": { "projectile_life": 1.4, "cost_amount": 1.15 }
+    },
+    "channeling-conduit": {
+      "name": "Channeling conduit",
+      "blueprint": "staff",
+      "slot": "conduit",
+      "effect": "Draws less mana per cast and sends bolts out more slowly.",
+      "cost": { "tempered-plate": 2, "arcane-shard": 2 },
+      "modifiers": { "cost_amount": 0.8, "projectile_speed": 0.85 }
+    }
+  }
 }

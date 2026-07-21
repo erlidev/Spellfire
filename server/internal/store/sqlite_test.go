@@ -264,11 +264,11 @@ func TestSQLitePersistsCharacterStateAndCraftedItems(t *testing.T) {
 		t.Fatalf("save for an unknown character = %v", err)
 	}
 
-	item := model.CraftedItem{ID: "i1", CharacterID: "c", Blueprint: "staff", Components: map[string]string{"core": "core_ember", "focus": "focus_wide"}}
+	item := model.CraftedItem{ID: "i1", CharacterID: "c", Weapon: "starter-staff", Components: map[string]string{"core": "core_ember", "focus": "focus_wide"}}
 	if err := s.CreateCraftedItem(ctx, item); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.CreateCraftedItem(ctx, model.CraftedItem{ID: "i2", CharacterID: "ghost", Blueprint: "staff"}); !errors.Is(err, ErrNotFound) {
+	if err := s.CreateCraftedItem(ctx, model.CraftedItem{ID: "i2", CharacterID: "ghost", Weapon: "starter-staff"}); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("crafted item for an unknown character = %v", err)
 	}
 	items, err := s.CraftedItems(ctx, "c")

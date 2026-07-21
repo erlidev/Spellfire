@@ -45,10 +45,10 @@ export interface Effect { name: string; kind: string; stacking: string; duration
 export interface Weapon { name: string; class: CharacterClass; blueprint: string; category: string; starter?: boolean; unlock_level: number; magazine_size?: number; reload_ms?: number; ability?: string; spell?: string }
 export interface Spell { name: string; element: string; tier: number; starter?: boolean; unlock_level: number; ability: string }
 export interface Gadget { name: string; class: CharacterClass; starter?: boolean; unlock_level: number; ability: string }
-export interface ProgressionTable { max_level: number; base_xp: number; growth: number; sources: Record<string, number>; starter_kit: { unlocks: number } }
+export interface ProgressionTable { max_level: number; base_xp: number; growth: number; sources: Record<string, number>; crafted_item_capacity: number; starter_kit: { unlocks: number } }
 export interface LoadoutTable { weapon_slots: number; gadget_slots: number; spell_slots: number; affinity: { same_element_per_tier: number } }
 export interface Blueprint { name: string; slots: string[] }
-export interface Component { name: string; blueprint: string; slot: string; effect?: string }
+export interface Component { name: string; blueprint: string; slot: string; effect: string; cost: Record<string, number>; modifiers: Record<string, number> }
 export interface ComponentsTable { blueprints: Record<string, Blueprint>; components: Record<string, Component> }
 export interface Grade { name: string; tier: number }
 export interface MaterialKind { name: string; universal: boolean; source: string; summary: string }
@@ -59,7 +59,7 @@ export interface Biome { name: string; element: string }
 export interface AdminToolField { id: string; label: string; kind: "number" | "text"; default_text?: string; default_number?: number; minimum?: number; maximum?: number; step?: number; max_length?: number }
 export interface AdminSpawnable { name: string; kind: "player" | "projectile" | "telegraph"; class?: CharacterClass; ability?: string; element?: string; fields: AdminToolField[] }
 export type AdminAttribute = Omit<AdminToolField, "id">;
-export interface AdminTools { spawnables: Record<string, AdminSpawnable>; attributes: Record<string, AdminAttribute> }
+export interface AdminTools { spawnables: Record<string, AdminSpawnable>; attributes: Record<string, AdminAttribute>; material_grant: AdminToolField }
 
 export const manifest = manifestData as Manifest;
 export const adminTools = adminToolsData as AdminTools;

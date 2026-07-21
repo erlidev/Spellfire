@@ -5,6 +5,7 @@ import (
 	"testing/fstest"
 
 	"spellfire/data"
+	"spellfire/server/internal/crafting"
 	"spellfire/server/internal/loadout"
 	"spellfire/server/internal/model"
 	"spellfire/server/internal/progression"
@@ -13,15 +14,15 @@ import (
 
 // kit is the ledger a freshly created character owns, which is what every test
 // about the default set and the starter kit must run against.
-func kit(tables *tuning.Tables, class model.Class) progression.Ledger {
-	return progression.New(progression.StarterKit(tables, class, "ledger-test"))
+func kit(tables *tuning.Tables, class model.Class) crafting.Inventory {
+	return crafting.Inventory{Ledger: progression.New(progression.StarterKit(tables, class, "ledger-test"))}
 }
 
 // everything is the ledger of a character that has unlocked all live content.
 // Tests about class, affinity, and retirement rules use it so ownership is not
 // the reason a case passes or fails.
-func everything(tables *tuning.Tables) progression.Ledger {
-	return progression.New(tables.UnlocksThrough(tables.Progression.MaxLevel))
+func everything(tables *tuning.Tables) crafting.Inventory {
+	return crafting.Inventory{Ledger: progression.New(tables.UnlocksThrough(tables.Progression.MaxLevel))}
 }
 
 func shipped(t *testing.T) *tuning.Tables {
@@ -67,7 +68,7 @@ func TestDefaultIsEquippableForBothClasses(t *testing.T) {
 		if err := loadout.Validate(tables, class, kit(tables, class), set); err != nil {
 			t.Fatalf("%s default loadout is invalid: %v", class, err)
 		}
-		slots := loadout.Bar(tables, class, set)
+		slots := loadout.Bar(tables, class, kit(tables, class), set)
 		if len(slots) != tables.Loadout.BarSlots() {
 			t.Fatalf("%s bar has %d slots, want %d", class, len(slots), tables.Loadout.BarSlots())
 		}
@@ -81,8 +82,8 @@ func TestDefaultIsEquippableForBothClasses(t *testing.T) {
 
 func TestBarLaysClassesOutOverTheSameBindings(t *testing.T) {
 	tables := shipped(t)
-	gunslinger := loadout.Bar(tables, model.Gunslinger, loadout.Default(tables, model.Gunslinger, kit(tables, model.Gunslinger)))
-	mage := loadout.Bar(tables, model.Mage, loadout.Default(tables, model.Mage, kit(tables, model.Mage)))
+	gunslinger := loadout.Bar(tables, model.Gunslinger, kit(tables, model.Gunslinger), loadout.Default(tables, model.Gunslinger, kit(tables, model.Gunslinger)))
+	mage := loadout.Bar(tables, model.Mage, kit(tables, model.Mage), loadout.Default(tables, model.Mage, kit(tables, model.Mage)))
 	if len(gunslinger) != len(mage) {
 		t.Fatalf("bars differ: gunslinger %d, mage %d", len(gunslinger), len(mage))
 	}
@@ -213,7 +214,7 @@ func TestGadgetsFillTheGunslingerBar(t *testing.T) {
 	if set.Gadgets[0] != "smoke" {
 		t.Fatalf("starter gadget was not equipped: %v", set.Gadgets)
 	}
-	slots := loadout.Bar(tables, model.Gunslinger, set)
+	slots := loadout.Bar(tables, model.Gunslinger, kit(tables, model.Gunslinger), set)
 	if slots[1].Name != "Smoke canister" || slots[1].AbilityID == "" {
 		t.Fatalf("gadget slot resolved to %+v", slots[1])
 	}
@@ -227,7 +228,7 @@ func TestGadgetsFillTheGunslingerBar(t *testing.T) {
 // never merely hidden by the menu.
 func TestValidateRefusesContentTheLedgerDoesNotOwn(t *testing.T) {
 	tables := edited(t, map[string]string{"spells.json": grid})
-	owned := progression.New([]string{"starter-staff", "fire-bolt", "fire-2", "fire-3"})
+	owned := crafting.Inventory{Ledger: progression.New([]string{"starter-staff", "fire-bolt", "fire-2", "fire-3"})}
 	built := model.Loadout{Weapon: "starter-staff", Spells: []string{"fire-bolt", "fire-2", "fire-3", "", "", ""}}
 	if err := loadout.Validate(tables, model.Mage, owned, built); err != nil {
 		t.Fatalf("a set built entirely from owned spells was refused: %v", err)
@@ -250,7 +251,7 @@ func TestValidateRefusesContentTheLedgerDoesNotOwn(t *testing.T) {
 // than leave a character holding something it no longer owns.
 func TestResolveUnequipsContentTheLedgerLost(t *testing.T) {
 	tables := edited(t, map[string]string{"spells.json": grid})
-	owned := progression.New([]string{"starter-staff", "fire-bolt"})
+	owned := crafting.Inventory{Ledger: progression.New([]string{"starter-staff", "fire-bolt"})}
 	saved := model.Loadout{Weapon: "starter-staff", Spells: []string{"fire-bolt", "fire-2", "", "", "", ""}, Version: tables.Manifest.Version}
 	set, respec := loadout.Resolve(tables, model.Mage, owned, saved)
 	if set.Spells[1] != "" {
@@ -272,3 +273,48 @@ const grid = `{
   "fire-3":    {"name": "Flame wave", "element": "fire", "tier": 3, "unlock_level": 7, "ability": "fire-bolt-cast"},
   "fire-4":    {"name": "Firestorm", "element": "fire", "tier": 4, "unlock_level": 11, "ability": "fire-bolt-cast"}
 }`
+
+// The weapon slot holds something usable: either a stock row or a crafted
+// instance of one. Materials and components never reach the action bar.
+func TestWeaponSlotHoldsStockRowsAndCraftedInstances(t *testing.T) {
+	tables := shipped(t)
+	weapon, ok := tables.StarterWeapon("gunslinger")
+	if !ok {
+		t.Fatal("no starter gun")
+	}
+	item := model.CraftedItem{ID: "itm-1", CharacterID: "c1", Weapon: weapon.ID, Components: map[string]string{}}
+	inventory := everything(tables)
+	inventory.Items = []model.CraftedItem{item}
+	set := loadout.Default(tables, model.Gunslinger, inventory)
+	// The default is the plain configuration; a crafted weapon is a choice.
+	if set.Weapon == item.ID {
+		t.Fatal("the default set equipped a crafted instance")
+	}
+	set.Weapon = item.ID
+	if err := loadout.Validate(tables, model.Gunslinger, inventory, set); err != nil {
+		t.Fatalf("an owned crafted weapon was refused: %v", err)
+	}
+	if slot := loadout.Bar(tables, model.Gunslinger, inventory, set)[0]; slot.Item.ID != item.ID || slot.AbilityID != weapon.Ability {
+		t.Fatalf("weapon slot = %+v, want the instance over the row's ability", slot)
+	}
+	// Stock rows sort ahead of instances, so the deterministic first choice is
+	// the plain one.
+	equippable := loadout.Equippable(tables, model.Gunslinger, inventory, loadout.KindWeapon)
+	if equippable[len(equippable)-1] != item.ID || equippable[0] == item.ID {
+		t.Fatalf("equippable weapons = %v, want stock rows before instances", equippable)
+	}
+	// An instance this character does not own is refused rather than hidden.
+	stranger := everything(tables)
+	if err := loadout.Validate(tables, model.Gunslinger, stranger, set); err == nil {
+		t.Fatal("a character equipped an item it does not own")
+	}
+	// A saved set naming a vanished instance falls back to a stock row: being
+	// unarmed is a state no rule allows.
+	repaired, respec := loadout.Resolve(tables, model.Gunslinger, stranger, set)
+	if repaired.Weapon == "" || repaired.Weapon == item.ID {
+		t.Fatalf("resolved weapon = %q, want a stock fallback", repaired.Weapon)
+	}
+	if !respec {
+		t.Fatal("a repaired set did not grant a respec")
+	}
+}

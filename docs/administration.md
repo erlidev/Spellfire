@@ -46,6 +46,12 @@ overrides for the administrator's connected character:
 - Movement speed multiplier: 0.25–4×.
 - View distance: 300–2,000 world units. This only changes that administrator's
   snapshot/AOI and can increase their received snapshot size.
+- Material grants: any live material, in a count bounded by
+  `admin_tools.material_grant`. Harvest nodes and mob drops are not implemented
+  yet, so this is the only way to put materials in a character's hands and
+  exercise a real crafting spend. The world validates the material ID against
+  the tables and the count against that catalog row; the browser never decides
+  what a grant may be.
 
 Enable Developer Mode after configuring an item, close the menu, and click the
 world to place it. While enabled, primary clicks place the selected item rather
@@ -65,9 +71,12 @@ and validation rule before it is permitted.
 Spawned training players are non-persistent fixtures: they are visible,
 collidable, and damageable like a player but never occupy an account slot or
 become a saved character. Developer overrides reset when the administrator's
-body leaves the world. The HTTP commands are `POST /api/admin/spawn` and
-`POST /api/admin/attributes`; both verify the session's admin role and that the
-selected in-world character belongs to that account.
+body leaves the world. Granted materials do not: they are ordinary carried
+inventory from the moment they land, persisted and spendable like any other, so
+a grant on a live account is a real economy change rather than a fixture. The HTTP commands are `POST /api/admin/spawn`,
+`POST /api/admin/attributes`, and `POST /api/admin/materials`; each verifies the
+session's admin role and that the selected in-world character belongs to that
+account.
 
 The admin list is configuration, not a secret. Do not put passwords, session
 tokens, API keys, or other credentials in the tuning file.

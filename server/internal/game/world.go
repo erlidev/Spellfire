@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"strings"
 	"time"
 
+	"spellfire/server/internal/crafting"
 	"spellfire/server/internal/loadout"
 	"spellfire/server/internal/model"
 	"spellfire/server/internal/progression"
@@ -114,9 +116,14 @@ type Player struct {
 	Effects []ActiveEffect
 	// Carried materials and unlocked outposts are persisted references, held
 	// here so they survive a disconnect. Harvesting (Phase 4.1) and outpost
-	// discovery (Phase 3) are what will mutate them.
+	// discovery (Phase 3) are what will mutate them. Crafting is the first thing
+	// that spends them.
 	Materials map[string]int
 	Outposts  []string
+	// Items are the crafted weapons the character owns, as weapon and component
+	// references. They are permanent like unlocks rather than carried like
+	// materials, so death never drops one.
+	Items []model.CraftedItem
 	// LingerUntil is set when the connection drops: the body stays in the world,
 	// killable and unable to act, until it passes. Zero means connected.
 	LingerUntil time.Time
@@ -229,13 +236,18 @@ func (w *World) AddPlayer(character model.Character, now time.Time) *Player {
 	// invalidated is re-validated, content the ledger does not own is unequipped,
 	// and an empty record resolves to the class default. A character therefore
 	// never enters the world holding a set the rules would refuse.
-	equipped, respec := loadout.Resolve(w.tuning.Tables, character.Class, ledger, character.State.Loadout)
+	// Crafted items are loaded with the record and resolved the same way: an
+	// instance whose weapon row a content change withdrew stops being equippable
+	// rather than arming the character with a row that no longer exists.
+	items := w.craftedItems(character.Items)
+	equipped, respec := loadout.Resolve(w.tuning.Tables, character.Class, crafting.Inventory{Ledger: ledger, Items: items}, character.State.Loadout)
 	p := &Player{
 		Entity:    newEntity(character.ID, "player", w.entryPosition(character, now), w.tuning.Tables.Entities["player"], EntityOverrides{}),
 		AccountID: character.AccountID, Name: character.Name, Class: character.Class,
 		Aim: Vec{1, 0}, Mana: w.tuning.MaxMana,
 		Materials:       w.carriedMaterials(character.State.Materials),
 		Outposts:        append([]string(nil), character.State.Outposts...),
+		Items:           items,
 		Cooldowns:       make(map[string]time.Time),
 		SpeedMultiplier: 1,
 		Loadout:         equipped,
@@ -409,18 +421,48 @@ func (w *World) States(now time.Time) map[string]model.CharacterState {
 	return states
 }
 
-// weapon resolves the player's equipped row from the tables each time it is
-// needed, so nothing caches a stat snapshot.
+// craftedItems carries a character's saved items onto today's content. An item
+// whose weapon row was withdrawn is dropped from what may be equipped rather
+// than resolved onto a replacement: the components filling its slots belong to
+// that row's blueprint, and silently rebuilding it on another one would hand the
+// character a weapon it never made.
+func (w *World) craftedItems(saved []model.CraftedItem) []model.CraftedItem {
+	items := make([]model.CraftedItem, 0, len(saved))
+	for _, item := range saved {
+		resolved, ok := w.tuning.Tables.Resolve("weapon", item.Weapon)
+		if !ok || resolved.ID == "" {
+			continue
+		}
+		item.Weapon = resolved.ID
+		items = append(items, item.Clone())
+	}
+	return items
+}
+
+// inventory is what the player may equip from: its permanent ledger and the
+// crafted instances it owns.
+func (w *World) inventory(p *Player) crafting.Inventory {
+	return crafting.Inventory{Ledger: p.Unlocks, Items: p.Items}
+}
+
+// weapon resolves the player's equipped weapon from the tables each time it is
+// needed, so nothing caches a stat snapshot. When the slot holds a crafted
+// instance, its components are applied on top of the row — again every time,
+// which is what lets a balance edit retune a crafted item in place.
 func (w *World) weapon(p *Player) (tuning.Weapon, bool) {
-	weapon, ok := w.tuning.Tables.Weapons[p.Loadout.Weapon]
-	return weapon, ok
+	weapon, item, ok := w.inventory(p).Equipped(w.tuning.Tables, p.Loadout.Weapon)
+	if !ok {
+		return tuning.Weapon{}, false
+	}
+	weapon, _ = crafting.Apply(w.tuning.Tables, weapon, tuning.Ability{}, item.Components)
+	return weapon, true
 }
 
 // bar is the player's action bar, resolved from the tables on every use for the
 // same reason weapon is: a slot holds an ID, and what that ID means is whatever
 // the tables say today.
 func (w *World) bar(p *Player) []loadout.Slot {
-	return loadout.Bar(w.tuning.Tables, p.Class, p.Loadout)
+	return loadout.Bar(w.tuning.Tables, p.Class, w.inventory(p), p.Loadout)
 }
 
 // selectedSlot is the bar position the use button acts through. A selection
@@ -467,7 +509,7 @@ func (w *World) SetLoadout(id string, requested model.Loadout, now time.Time) (m
 		return p.Loadout.Clone(), ErrLoadoutLocked
 	}
 	requested.Version = w.tuning.Tables.Manifest.Version
-	if err := loadout.Validate(w.tuning.Tables, p.Class, p.Unlocks, requested); err != nil {
+	if err := loadout.Validate(w.tuning.Tables, p.Class, w.inventory(p), requested); err != nil {
 		return p.Loadout.Clone(), err
 	}
 	p.Loadout = requested.Clone()
@@ -484,6 +526,128 @@ func (w *World) SetLoadout(id string, requested model.Loadout, now time.Time) (m
 		p.Selected = 0
 	}
 	return p.Loadout.Clone(), nil
+}
+
+// ErrCraftingLocked is the other half of the safe-zone economy rule: raw
+// materials have to be hauled back to safety before they become anything.
+var ErrCraftingLocked = errors.New("Crafting is only available inside a safe zone. Haul your materials back to the hub.")
+
+// ErrCraftingUnavailable reports a body that cannot craft: dead, or lingering
+// after a disconnect.
+var ErrCraftingUnavailable = errors.New("You cannot craft right now.")
+
+// CraftRequest is one requested build: the weapon category, and the component
+// filling each slot the blueprint exposes. An unnamed slot is left stock.
+type CraftRequest struct {
+	Weapon     string
+	Components map[string]string
+}
+
+// Craft builds one item and charges its materials. Every gate is here rather
+// than split with the caller: the safe-zone rule, the recipe's legality, and
+// whether the materials are actually carried. A refused craft spends nothing and
+// leaves no item — there is no partial outcome to report or roll back.
+func (w *World) Craft(id string, request CraftRequest, itemID string) (model.CraftedItem, error) {
+	p := w.players[id]
+	if p == nil {
+		return model.CraftedItem{}, ErrCraftingUnavailable
+	}
+	// A developer fixture is a test target, not an economy: it has no character
+	// row to hang an item off and nothing about it is ever saved.
+	if !p.Alive || p.Lingering() || p.AdminSpawned {
+		return model.CraftedItem{}, ErrCraftingUnavailable
+	}
+	if !w.InSafety(p) {
+		return model.CraftedItem{}, ErrCraftingLocked
+	}
+	if capacity := w.tuning.Tables.Progression.CraftedItemCapacity; len(p.Items) >= capacity {
+		return model.CraftedItem{}, fmt.Errorf("You can only keep %d crafted weapons. Nothing was spent.", capacity)
+	}
+	components := filledSlots(request.Components)
+	if err := crafting.Validate(w.tuning.Tables, p.Class, w.inventory(p), request.Weapon, components); err != nil {
+		return model.CraftedItem{}, err
+	}
+	cost := crafting.Cost(w.tuning.Tables, components)
+	if short := crafting.Shortfall(cost, p.Materials); len(short) > 0 {
+		return model.CraftedItem{}, w.shortfallError(short)
+	}
+	crafting.Spend(p.Materials, cost)
+	item := model.CraftedItem{ID: itemID, CharacterID: p.ID, Weapon: request.Weapon, Components: components}
+	p.Items = append(p.Items, item)
+	return item.Clone(), nil
+}
+
+// shortfallError names what is missing and how much of it, because "you need
+// three more tempered plate" is something a player can act on and "you cannot
+// afford this" is not.
+func (w *World) shortfallError(short map[string]int) error {
+	parts := make([]string, 0, len(short))
+	for _, material := range sortedKeys(short) {
+		name := w.tuning.Tables.Materials.Materials[material].Name
+		if name == "" {
+			name = material
+		}
+		parts = append(parts, fmt.Sprintf("%d more %s", short[material], name))
+	}
+	return fmt.Errorf("You are short %s.", strings.Join(parts, ", "))
+}
+
+// filledSlots drops the slots the request left stock, so an empty choice is
+// never stored as a component reference to nothing.
+func filledSlots(components map[string]string) map[string]string {
+	filled := make(map[string]string, len(components))
+	for slot, component := range components {
+		if slot != "" && component != "" {
+			filled[slot] = component
+		}
+	}
+	return filled
+}
+
+// GrantMaterials adds to what a body carries and reports the inventory it
+// leaves behind. It is the developer-mode seam only: harvesting (Phase 4.1) is
+// how a material legitimately enters the world, and the HTTP layer authorizes
+// the caller before this is reached.
+func (w *World) GrantMaterials(id string, grants map[string]int) (map[string]int, error) {
+	p := w.players[id]
+	if p == nil {
+		return nil, errors.New("game: player is not in the world")
+	}
+	bound := w.tuning.Tables.AdminTools.MaterialGrant
+	for _, material := range sortedKeys(grants) {
+		count := grants[material]
+		if !w.tuning.Tables.Live("material", material) {
+			return nil, fmt.Errorf("unknown material %q", material)
+		}
+		if float64(count) < bound.Minimum || float64(count) > bound.Maximum {
+			return nil, fmt.Errorf("grant of %d %s is outside the permitted %g to %g", count, material, bound.Minimum, bound.Maximum)
+		}
+		p.Materials[material] += count
+	}
+	return p.CarriedMaterials(), nil
+}
+
+// CarriedMaterials is a copy of what the body holds, safe for a caller to keep.
+func (p *Player) CarriedMaterials() map[string]int {
+	carried := make(map[string]int, len(p.Materials))
+	for material, count := range p.Materials {
+		carried[material] = count
+	}
+	return carried
+}
+
+// Carried reports what a body holds and the crafted items it owns, which is what
+// the crafting and inventory surfaces are drawn from.
+func (w *World) Carried(id string) (map[string]int, []model.CraftedItem, bool) {
+	p := w.players[id]
+	if p == nil {
+		return nil, nil, false
+	}
+	items := make([]model.CraftedItem, 0, len(p.Items))
+	for _, item := range p.Items {
+		items = append(items, item.Clone())
+	}
+	return p.CarriedMaterials(), items, true
 }
 
 func (w *World) RemovePlayer(id string) {

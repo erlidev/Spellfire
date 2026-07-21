@@ -67,6 +67,11 @@ type AdminSpawnable struct {
 type AdminTools struct {
 	Spawnables map[string]AdminSpawnable `json:"spawnables"`
 	Attributes map[string]AdminToolField `json:"attributes"`
+	// MaterialGrant bounds the developer-mode material grant. Harvesting is what
+	// legitimately produces a material (Phase 4.1); until it lands this is the
+	// only way to exercise a real crafting spend, so its ceiling is data rather
+	// than a constant in the handler.
+	MaterialGrant AdminToolField `json:"material_grant"`
 }
 
 type Simulation struct {
@@ -439,11 +444,15 @@ type StarterKit struct {
 // here — each weapon, spell, and gadget row declares its own unlock_level, so
 // adding content never means editing a second table.
 type Progression struct {
-	MaxLevel   int            `json:"max_level"`
-	BaseXP     int            `json:"base_xp"`
-	Growth     float64        `json:"growth"`
-	Sources    map[string]int `json:"sources"`
-	StarterKit StarterKit     `json:"starter_kit"`
+	MaxLevel int            `json:"max_level"`
+	BaseXP   int            `json:"base_xp"`
+	Growth   float64        `json:"growth"`
+	Sources  map[string]int `json:"sources"`
+	// CraftedItemCapacity bounds how many crafted weapons a character may own. A
+	// stock build costs no materials, so without a ceiling a client could mint
+	// rows forever; it is also the capacity outcome the crafting UI owes.
+	CraftedItemCapacity int        `json:"crafted_item_capacity"`
+	StarterKit          StarterKit `json:"starter_kit"`
 }
 
 // XPToNext is what the level costs to leave. It is zero at the cap, which is
@@ -496,19 +505,80 @@ type Blueprint struct {
 	Slots []string `json:"slots"`
 }
 
-// Component fills one blueprint slot. Effects are behavioural; a component may
-// never carry a damage band, which is what keeps crafting out of the power axis.
+// Component attribute names a modifier may scale. The map is open — a component
+// names whatever it changes — but every name must be an attribute the
+// simulation actually reads at use time, so a modifier can never be data the
+// world silently ignores.
+const (
+	AttrMagazineSize     = "magazine_size"
+	AttrReloadMS         = "reload_ms"
+	AttrCooldownMS       = "cooldown_ms"
+	AttrWindupMS         = "windup_ms"
+	AttrCostAmount       = "cost_amount"
+	AttrProjectileSpeed  = "projectile_speed"
+	AttrProjectileLife   = "projectile_life"
+	AttrProjectileRadius = "projectile_radius"
+	AttrInterval         = "interval_ms"
+)
+
+// ComponentAttributes is the set a modifier may name. Damage is absent by
+// construction rather than by exclusion: it lives on the shared band row, not on
+// any numeric item field, so no component can reach it.
+var ComponentAttributes = []string{
+	AttrMagazineSize, AttrReloadMS, AttrCooldownMS, AttrWindupMS, AttrCostAmount,
+	AttrProjectileSpeed, AttrProjectileLife, AttrProjectileRadius,
+}
+
+// MagazineAttributes only mean anything on a weapon that holds a magazine, so a
+// blueprint whose weapons cast spells may not modify them.
+var MagazineAttributes = []string{AttrMagazineSize, AttrReloadMS}
+
+// ForbiddenAttributes are the ones crafting may never touch. Fire cadence is the
+// DPS axis: scaling it moves an item out of its damage band, which is precisely
+// what progression-and-crafting.md forbids crafting from doing.
+var ForbiddenAttributes = []string{AttrInterval}
+
+// Modifier bounds. Crafting changes handling and ceiling, so a component may
+// halve or double an attribute and no more; a modifier of exactly 1 is a row
+// that claims an effect it does not have.
+const (
+	ModifierMin = 0.5
+	ModifierMax = 2.0
+)
+
+// Component fills one blueprint slot. Modifiers are behavioural scalars over the
+// attributes the simulation reads, and Effect states the same change in the
+// plain language the crafting UI shows. A component may never carry a damage
+// band, which is what keeps crafting out of the power axis.
 type Component struct {
 	ID        string `json:"-"`
 	Name      string `json:"name"`
 	Blueprint string `json:"blueprint"`
 	Slot      string `json:"slot"`
 	Effect    string `json:"effect"`
+	// Cost is the material ID → count one of this component consumes. Materials
+	// must be hauled to a safe zone before they can be spent.
+	Cost map[string]int `json:"cost"`
+	// Modifiers scale an attribute by a multiplier: 1.2 is twenty percent more.
+	Modifiers map[string]float64 `json:"modifiers"`
 }
 
 type Components struct {
 	Blueprints map[string]Blueprint `json:"blueprints"`
 	Components map[string]Component `json:"components"`
+}
+
+// ComponentsFor lists the components that fit one slot of a blueprint, in
+// stable order. It is what the crafting UI offers for the active slot and what
+// the server checks a requested fill against.
+func (t *Tables) ComponentsFor(blueprint, slot string) []string {
+	fitting := make([]string, 0, len(t.Components.Components))
+	for _, id := range sortedKeys(t.Components.Components) {
+		if component := t.Components.Components[id]; component.Blueprint == blueprint && component.Slot == slot {
+			fitting = append(fitting, id)
+		}
+	}
+	return fitting
 }
 
 type Grade struct {

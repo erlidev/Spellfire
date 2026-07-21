@@ -62,6 +62,10 @@ export class API {
     return this.request<void>("/api/admin/attributes", { method: "POST", body: JSON.stringify({ character_id: characterID, attributes }) });
   }
 
+  adminMaterials(characterID: string, materials: Record<string, number>): Promise<void> {
+    return this.request<void>("/api/admin/materials", { method: "POST", body: JSON.stringify({ character_id: characterID, materials }) });
+  }
+
   private async request<T>(path: string, init: RequestInit = {}, authenticated = true): Promise<T> {
     const headers = new Headers(init.headers);
     headers.set("Content-Type", "application/json");

@@ -64,6 +64,12 @@ func (h *WebSocket) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeProtocolError(connection, "Character unavailable.")
 		return
 	}
+	// Crafted items live in their own table, so they are loaded alongside the
+	// record: what a character owns decides what its weapon slot may hold.
+	if character.Items, err = h.store.CraftedItems(r.Context(), character.ID); err != nil {
+		writeProtocolError(connection, "Character unavailable.")
+		return
+	}
 	client, err := h.engine.Join(character, time.Now())
 	if errors.Is(err, game.ErrAccountInWorld) {
 		writeProtocolError(connection, "Another character on this account is still in the world. Wait a moment and try again.")
@@ -102,6 +108,10 @@ func (h *WebSocket) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			h.engine.SetLoadout(client.PlayerID, model.Loadout{
 				Weapon: message.Loadout.Weapon, Gadgets: message.Loadout.Gadgets, Spells: message.Loadout.Spells,
 			}, time.Now())
+		case protocol.ClientCraft:
+			h.engine.Craft(client.PlayerID, game.CraftRequest{
+				Weapon: message.Craft.Weapon, Components: message.Craft.Components,
+			})
 		}
 	}
 }

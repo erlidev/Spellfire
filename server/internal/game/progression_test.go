@@ -44,7 +44,7 @@ func TestLevellingGrantsUnlocksAndWidensTheEquippableSet(t *testing.T) {
 	w, now := testWorld()
 	killer := addTestPlayer(w, "killer", model.Mage, Vec{}, now)
 	// A fresh Mage owns only its drawn kit, so the level-2 grant is observable.
-	before := len(loadout.Equippable(w.tuning.Tables, model.Mage, killer.Unlocks, loadout.KindSpell))
+	before := len(loadout.Equippable(w.tuning.Tables, model.Mage, w.inventory(killer), loadout.KindSpell))
 	cost := w.tuning.Tables.Progression.XPToNext(1)
 	award := w.tuning.Tables.Progression.Award(tuning.SourcePlayerKill)
 	for earned := 0; earned <= cost; earned += award {
@@ -61,7 +61,7 @@ func TestLevellingGrantsUnlocksAndWidensTheEquippableSet(t *testing.T) {
 			t.Fatalf("level %d did not grant %q", killer.Level, id)
 		}
 	}
-	if after := len(loadout.Equippable(w.tuning.Tables, model.Mage, killer.Unlocks, loadout.KindSpell)); after < before {
+	if after := len(loadout.Equippable(w.tuning.Tables, model.Mage, w.inventory(killer), loadout.KindSpell)); after < before {
 		t.Fatalf("equippable spells shrank from %d to %d on levelling", before, after)
 	}
 }

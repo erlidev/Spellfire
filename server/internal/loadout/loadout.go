@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strings"
 
+	"spellfire/server/internal/crafting"
 	"spellfire/server/internal/model"
 	"spellfire/server/internal/progression"
 	"spellfire/server/internal/tuning"
@@ -36,6 +37,10 @@ type Slot struct {
 	Name      string
 	AbilityID string
 	Element   string
+	// Item is the crafted instance a weapon slot holds, and is empty when the
+	// slot holds a stock weapon row. It is what the simulation applies component
+	// modifiers from.
+	Item model.CraftedItem
 }
 
 // Filled reports whether the slot holds content that can be used.
@@ -44,30 +49,32 @@ func (s Slot) Filled() bool { return s.ID != "" }
 // Bar lays an equipped set out as the selectable action bar, in binding order.
 // It is the single answer to "what does the use button do", shared by the
 // simulation and the menu.
-func Bar(tables *tuning.Tables, class model.Class, set model.Loadout) []Slot {
+func Bar(tables *tuning.Tables, class model.Class, inventory crafting.Inventory, set model.Loadout) []Slot {
 	table := tables.Loadout
 	slots := make([]Slot, 0, table.BarSlots())
 	if class == model.Gunslinger {
-		slots = append(slots, weaponSlot(tables, 0, set.Weapon))
+		slots = append(slots, weaponSlot(tables, inventory, 0, set.Weapon))
 		for index := 0; index < table.GadgetSlots; index++ {
 			slots = append(slots, gadgetSlot(tables, len(slots), at(set.Gadgets, index)))
 		}
 		return slots
 	}
+	staff, item, _ := inventory.Equipped(tables, set.Weapon)
 	for index := 0; index < table.SpellSlots; index++ {
-		slots = append(slots, spellSlot(tables, tables.Weapons[set.Weapon], index, at(set.Spells, index)))
+		slots = append(slots, spellSlot(tables, staff, item, index, at(set.Spells, index)))
 	}
 	return slots
 }
 
-func weaponSlot(tables *tuning.Tables, index int, id string) Slot {
-	slot := Slot{Index: index, Kind: KindWeapon, ID: id}
-	weapon, ok := tables.Weapons[id]
+// weaponSlot resolves the one weapon slot. The reference is either a stock
+// weapon row or a crafted instance of one; both answer with the row's ability,
+// and the instance rides along so the simulation can apply its components.
+func weaponSlot(tables *tuning.Tables, inventory crafting.Inventory, index int, id string) Slot {
+	weapon, item, ok := inventory.Equipped(tables, id)
 	if !ok {
 		return Slot{Index: index, Kind: KindWeapon}
 	}
-	slot.Name, slot.AbilityID = weapon.Name, weapon.Ability
-	return slot
+	return Slot{Index: index, Kind: KindWeapon, ID: id, Name: weapon.Name, AbilityID: weapon.Ability, Item: item}
 }
 
 func gadgetSlot(tables *tuning.Tables, index int, id string) Slot {
@@ -84,11 +91,11 @@ func gadgetSlot(tables *tuning.Tables, index int, id string) Slot {
 // and the spell is what it casts, so an empty slot on a Mage falls back to the
 // staff's own declared spell only in slot zero — that keeps a Mage whose
 // loadout has been emptied by a content withdrawal still able to fight.
-func spellSlot(tables *tuning.Tables, staff tuning.Weapon, index int, id string) Slot {
+func spellSlot(tables *tuning.Tables, staff tuning.Weapon, item model.CraftedItem, index int, id string) Slot {
 	if id == "" && index == 0 {
 		id = staff.Spell
 	}
-	slot := Slot{Index: index, Kind: KindSpell, ID: id}
+	slot := Slot{Index: index, Kind: KindSpell, ID: id, Item: item}
 	spell, ok := tables.Spells[id]
 	if !ok {
 		return Slot{Index: index, Kind: KindSpell}
@@ -101,29 +108,31 @@ func spellSlot(tables *tuning.Tables, staff tuning.Weapon, index int, id string)
 // owns, packed from slot zero. A character's ledger always contains a weapon of
 // its class — the starter kit draws one — so the result is a fightable set
 // rather than an empty bar, and dropIllegal guarantees it is a legal one.
-func Default(tables *tuning.Tables, class model.Class, ledger progression.Ledger) model.Loadout {
+func Default(tables *tuning.Tables, class model.Class, inventory crafting.Inventory) model.Loadout {
 	table := tables.Loadout
 	set := model.Loadout{
 		Gadgets: make([]string, table.GadgetSlots),
 		Spells:  make([]string, table.SpellSlots),
 		Version: tables.Manifest.Version,
 	}
-	set.Weapon = defaultWeapon(tables, class, ledger)
+	set.Weapon = defaultWeapon(tables, class, inventory)
 	if class == model.Gunslinger {
-		fill(set.Gadgets, Equippable(tables, class, ledger, KindGadget))
+		fill(set.Gadgets, Equippable(tables, class, inventory, KindGadget))
 	} else {
-		fill(set.Spells, Equippable(tables, class, ledger, KindSpell))
+		fill(set.Spells, Equippable(tables, class, inventory, KindSpell))
 	}
 	dropIllegal(tables, class, &set)
 	return set
 }
 
-// defaultWeapon is the weapon a character falls back to: the first of its class
-// it owns, or the class starter when a content withdrawal has left it owning
-// none. Being unarmed is not a state any rule allows, so this never answers
-// empty while the tables have a starter.
-func defaultWeapon(tables *tuning.Tables, class model.Class, ledger progression.Ledger) string {
-	if owned := Equippable(tables, class, ledger, KindWeapon); len(owned) > 0 {
+// defaultWeapon is the weapon a character falls back to: the first stock row of
+// its class it owns, or the class starter when a content withdrawal has left it
+// owning none. Being unarmed is not a state any rule allows, so this never
+// answers empty while the tables have a starter. It never falls back to a
+// crafted instance: the default is the plain configuration, and which crafted
+// weapon to carry is a choice the player makes.
+func defaultWeapon(tables *tuning.Tables, class model.Class, inventory crafting.Inventory) string {
+	if owned := stockWeapons(tables, class, inventory); len(owned) > 0 {
 		return owned[0]
 	}
 	if starter, ok := tables.StarterWeapon(string(class)); ok {
@@ -138,30 +147,56 @@ func defaultWeapon(tables *tuning.Tables, class model.Class, ledger progression.
 // not own is unequipped rather than dropping the whole set. It reports whether
 // the character is owed a respec: a balance patch bumped the manifest, or the
 // set itself had to change.
-func Resolve(tables *tuning.Tables, class model.Class, ledger progression.Ledger, saved model.Loadout) (model.Loadout, bool) {
+func Resolve(tables *tuning.Tables, class model.Class, inventory crafting.Inventory, saved model.Loadout) (model.Loadout, bool) {
 	if saved.Empty() {
-		return Default(tables, class, ledger), false
+		return Default(tables, class, inventory), false
 	}
 	table := tables.Loadout
 	set := model.Loadout{
-		Weapon:  owned(tables, ledger, KindWeapon, saved.Weapon),
+		Weapon:  resolveWeapon(tables, class, inventory, saved.Weapon),
 		Gadgets: resize(saved.Gadgets, table.GadgetSlots),
 		Spells:  resize(saved.Spells, table.SpellSlots),
 		Version: tables.Manifest.Version,
 	}
-	if weapon, ok := tables.Weapons[set.Weapon]; !ok || weapon.Class != string(class) {
-		// A withdrawn weapon leaves the character unarmed, which no rule allows.
-		set.Weapon = defaultWeapon(tables, class, ledger)
-	}
 	for index, id := range set.Gadgets {
-		set.Gadgets[index] = owned(tables, ledger, KindGadget, id)
+		set.Gadgets[index] = owned(tables, inventory, KindGadget, id)
 	}
 	for index, id := range set.Spells {
-		set.Spells[index] = owned(tables, ledger, KindSpell, id)
+		set.Spells[index] = owned(tables, inventory, KindSpell, id)
 	}
 	dropIllegal(tables, class, &set)
 	changed := saved.Version != tables.Manifest.Version || !equal(saved, set)
 	return set, changed
+}
+
+// resolveWeapon carries a saved weapon slot onto today's content. A crafted
+// instance the character still owns is kept as it is; a stock row follows its
+// retirement chain like any other reference. Anything that no longer resolves,
+// belongs to the other class, or is not owned falls back to the default, because
+// a withdrawn weapon leaving the character unarmed is a state no rule allows.
+func resolveWeapon(tables *tuning.Tables, class model.Class, inventory crafting.Inventory, saved string) string {
+	if weapon, _, ok := inventory.Equipped(tables, saved); ok && weapon.Class == string(class) {
+		return saved
+	}
+	if _, isItem := inventory.Item(saved); !isItem {
+		if id := owned(tables, inventory, KindWeapon, saved); id != "" && tables.Weapons[id].Class == string(class) {
+			return id
+		}
+	}
+	return defaultWeapon(tables, class, inventory)
+}
+
+// stockWeapons lists the plain weapon rows of a class the ledger owns, in stable
+// order.
+func stockWeapons(tables *tuning.Tables, class model.Class, inventory crafting.Inventory) []string {
+	ids := make([]string, 0, len(tables.Weapons))
+	for id, weapon := range tables.Weapons {
+		if weapon.Class == string(class) && inventory.Ledger.Has(id) {
+			ids = append(ids, id)
+		}
+	}
+	sort.Strings(ids)
+	return ids
 }
 
 // dropIllegal unequips whatever keeps a set from validating, highest slot
@@ -224,17 +259,27 @@ func affinityShortfall(tables *tuning.Tables, spells []string, index int) int {
 // Validate reports why a requested set may not be equipped, in language a
 // player can act on. It is the authority the mutation path runs before it
 // commits, and it never consults the world: legality is a property of the set.
-func Validate(tables *tuning.Tables, class model.Class, ledger progression.Ledger, set model.Loadout) error {
+func Validate(tables *tuning.Tables, class model.Class, inventory crafting.Inventory, set model.Loadout) error {
 	table := tables.Loadout
-	weapon, ok := tables.Weapons[set.Weapon]
+	ledger := inventory.Ledger
+	weapon, _, ok := inventory.Equipped(tables, set.Weapon)
 	if !ok {
+		// The slot names either a stock row or a crafted instance, so a failure
+		// here is one of three things: nothing of that name, an instance another
+		// character owns, or a category this one has not unlocked. Naming the row
+		// when there is one keeps the message actionable.
+		if item, isItem := inventory.Item(set.Weapon); isItem {
+			if row, live := tables.Weapons[item.Weapon]; live {
+				return fmt.Errorf("you have not unlocked %s", row.Name)
+			}
+		}
+		if row, live := tables.Weapons[set.Weapon]; live {
+			return fmt.Errorf("you have not unlocked %s", row.Name)
+		}
 		return fmt.Errorf("%q is not a weapon you can equip", set.Weapon)
 	}
 	if weapon.Class != string(class) {
 		return fmt.Errorf("%s is a %s weapon", weapon.Name, weapon.Class)
-	}
-	if !ledger.Has(set.Weapon) {
-		return fmt.Errorf("you have not unlocked %s", weapon.Name)
 	}
 	if len(set.Gadgets) > table.GadgetSlots {
 		return fmt.Errorf("a loadout holds %d gadget slots, not %d", table.GadgetSlots, len(set.Gadgets))
@@ -301,15 +346,23 @@ func checkSlots(ledger progression.Ledger, ids []string, kind string, lookup fun
 // stable order: the live rows of the right class that its ledger owns. Owning
 // more options improves preparation, never the power carried into one fight, so
 // this is the only place the ledger narrows.
-func Equippable(tables *tuning.Tables, class model.Class, ledger progression.Ledger, kind string) []string {
+func Equippable(tables *tuning.Tables, class model.Class, inventory crafting.Inventory, kind string) []string {
+	ledger := inventory.Ledger
 	var ids []string
 	switch kind {
 	case KindWeapon:
-		for id, weapon := range tables.Weapons {
-			if weapon.Class == string(class) && ledger.Has(id) {
-				ids = append(ids, id)
+		// Stock rows first, then the crafted instances of them, so the plain
+		// configuration is the deterministic default and a crafted weapon is
+		// something the player picks on purpose.
+		stock := stockWeapons(tables, class, inventory)
+		crafted := make([]string, 0, len(inventory.Items))
+		for _, item := range inventory.Items {
+			if weapon, ok := tables.Weapons[item.Weapon]; ok && weapon.Class == string(class) && ledger.Has(item.Weapon) {
+				crafted = append(crafted, item.ID)
 			}
 		}
+		sort.Strings(crafted)
+		return append(stock, crafted...)
 	case KindGadget:
 		for id, gadget := range tables.Gadgets {
 			if gadget.Class == string(class) && ledger.Has(id) {
@@ -334,14 +387,14 @@ func Equippable(tables *tuning.Tables, class model.Class, ledger progression.Led
 // followed, and the result is kept only if the character actually owns it. A
 // slot holding something the ledger does not have empties rather than granting
 // it — the ledger is the authority on ownership, not the saved set.
-func owned(tables *tuning.Tables, ledger progression.Ledger, kind, id string) string {
+func owned(tables *tuning.Tables, inventory crafting.Inventory, kind, id string) string {
 	if id == "" {
 		return ""
 	}
 	resolved, ok := tables.Resolve(kind, id)
 	// A refunded retirement has no live replacement, so the slot empties. The
 	// refund itself is owed against the material ledger, not the slot.
-	if !ok || !ledger.Has(resolved.ID) {
+	if !ok || !inventory.Ledger.Has(resolved.ID) {
 		return ""
 	}
 	return resolved.ID

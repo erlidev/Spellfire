@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"time"
 
+	"spellfire/server/internal/crafting"
+	"spellfire/server/internal/loadout"
 	"spellfire/server/internal/tuning"
 )
 
@@ -24,7 +26,22 @@ func (w *World) ability(p *Player) (tuning.Ability, bool) {
 		return tuning.Ability{}, false
 	}
 	ability, ok := w.tuning.Tables.Abilities[slot.AbilityID]
-	return ability, ok
+	if !ok {
+		return tuning.Ability{}, false
+	}
+	// A crafted weapon's components shape what it delivers. They reach the
+	// weapon slot a gun fires from and the spell slots a staff casts through —
+	// the staff is the delivery device, so its parts change the cast — but never
+	// a gadget, which the weapon has no part in throwing.
+	if slot.Item.ID == "" || slot.Kind == loadout.KindGadget {
+		return ability, true
+	}
+	weapon, _, resolved := w.inventory(p).Equipped(w.tuning.Tables, p.Loadout.Weapon)
+	if !resolved {
+		return ability, true
+	}
+	_, ability = crafting.Apply(w.tuning.Tables, weapon, ability, slot.Item.Components)
+	return ability, true
 }
 
 // useAbility charges and delivers one use. It is the only way an action reaches

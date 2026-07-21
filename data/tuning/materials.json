@@ -18,5 +18,14 @@
       "summary": "Biome-gated, element-typed stock for element-specific recipes."
     }
   },
-  "materials": {}
+  "materials": {
+    "salvaged-plate": { "name": "Salvaged plate", "grade": "common", "kind": "structural" },
+    "tempered-plate": { "name": "Tempered plate", "grade": "uncommon", "kind": "structural" },
+    "resonant-plate": { "name": "Resonant plate", "grade": "rare", "kind": "structural" },
+    "ember-shard": { "name": "Ember shard", "grade": "uncommon", "kind": "aligned", "biome": "emberlands" },
+    "rime-shard": { "name": "Rime shard", "grade": "uncommon", "kind": "aligned", "biome": "rimeshelf" },
+    "storm-shard": { "name": "Storm shard", "grade": "uncommon", "kind": "aligned", "biome": "stormflats" },
+    "arcane-shard": { "name": "Arcane shard", "grade": "uncommon", "kind": "aligned", "biome": "arcane-hollow" },
+    "stone-shard": { "name": "Stone shard", "grade": "uncommon", "kind": "aligned", "biome": "stonereach" }
+  }
 }

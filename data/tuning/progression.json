@@ -8,6 +8,7 @@
     "harvest": 8,
     "discovery": 150
   },
+  "crafted_item_capacity": 24,
   "starter_kit": {
     "unlocks": 6
   }

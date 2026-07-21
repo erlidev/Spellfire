@@ -66,6 +66,19 @@ CREATE INDEX IF NOT EXISTS crafted_items_character_idx ON crafted_items(characte
 	// array is a character that predates the ledger and is given a starter kit
 	// the first time it is used.
 	`ALTER TABLE characters ADD COLUMN unlocks TEXT NOT NULL DEFAULT '[]';`,
+
+	// 6 — a crafted item names the weapon category it instantiates rather than
+	// the blueprint family, because a crafted rifle and a crafted pistol share
+	// the gun blueprint and an equipped slot has to tell them apart. Nothing had
+	// ever written this table before slotted-blueprint crafting existed, so it is
+	// rebuilt rather than left carrying a column no code reads.
+	`
+DROP TABLE IF EXISTS crafted_items;
+CREATE TABLE crafted_items (
+  id TEXT PRIMARY KEY, character_id TEXT NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
+  weapon TEXT NOT NULL, components TEXT NOT NULL DEFAULT '{}'
+);
+CREATE INDEX IF NOT EXISTS crafted_items_character_idx ON crafted_items(character_id);`,
 }
 
 const characterColumns = `id,account_id,name,class,level,xp,unlocks,schema_version,pos_x,pos_y,materials,outposts,last_seen_at,loadout`
@@ -262,7 +275,7 @@ func (s *SQLite) SaveCharacterState(ctx context.Context, id string, state model.
 }
 
 func (s *SQLite) CraftedItems(ctx context.Context, characterID string) ([]model.CraftedItem, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id,character_id,blueprint,components FROM crafted_items WHERE character_id=? ORDER BY id`, characterID)
+	rows, err := s.db.QueryContext(ctx, `SELECT id,character_id,weapon,components FROM crafted_items WHERE character_id=? ORDER BY id`, characterID)
 	if err != nil {
 		return nil, err
 	}
@@ -271,7 +284,7 @@ func (s *SQLite) CraftedItems(ctx context.Context, characterID string) ([]model.
 	for rows.Next() {
 		var item model.CraftedItem
 		var components string
-		if err := rows.Scan(&item.ID, &item.CharacterID, &item.Blueprint, &components); err != nil {
+		if err := rows.Scan(&item.ID, &item.CharacterID, &item.Weapon, &components); err != nil {
 			return nil, err
 		}
 		if err := json.Unmarshal([]byte(components), &item.Components); err != nil {
@@ -290,8 +303,8 @@ func (s *SQLite) CreateCraftedItem(ctx context.Context, item model.CraftedItem) 
 	if err != nil {
 		return fmt.Errorf("store: encode components: %w", err)
 	}
-	_, err = s.db.ExecContext(ctx, `INSERT INTO crafted_items(id,character_id,blueprint,components) VALUES(?,?,?,?)`,
-		item.ID, item.CharacterID, item.Blueprint, string(components))
+	_, err = s.db.ExecContext(ctx, `INSERT INTO crafted_items(id,character_id,weapon,components) VALUES(?,?,?,?)`,
+		item.ID, item.CharacterID, item.Weapon, string(components))
 	return classify(err)
 }
 

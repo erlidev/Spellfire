@@ -22,6 +22,15 @@ Rules, from [`invariants.md`](../../docs/game/design/invariants.md) and
 - **Damage lives on the band, not the item.** Every damaging row points at a
   `combat.damage_bands` entry. That is what keeps the compressed power band from
   drifting item by item.
+- **Crafting changes handling and ceiling, never the damage band.** A component
+  declares an open `modifiers` map of multipliers, but only over attributes the
+  simulation actually reads: `magazine_size`, `reload_ms`, `cooldown_ms`,
+  `windup_ms`, `cost_amount`, `projectile_speed`, `projectile_life`, and
+  `projectile_radius`. Damage is unreachable because it is not a numeric item
+  field, and `interval_ms` is rejected outright — fire cadence *is* the DPS axis.
+  Multipliers are bounded to `[0.5, 2]`, an exact `1` is rejected as a
+  non-change, and every component must declare a material `cost` and a
+  plain-language `effect`.
 - **Every damaging ability declares a dodge vector**, and no projectile may
   have zero travel speed. The loader rejects both, and it also rejects a dodge
   vector the simulation cannot deliver or a cast-time/telegraph claim without
@@ -60,14 +69,14 @@ Rules, from [`invariants.md`](../../docs/game/design/invariants.md) and
 | `world.json` | World radius, spawn radius, danger bands, procedural tree parameters, fixed fixtures |
 | `combat.json` | Role and dodge-vector vocabularies, player movement/resources, universal dash, damage bands |
 | `loadout.json` | Slot counts per kind and the Mage affinity multiplier |
-| `progression.json` | XP curve, the XP each source awards, and the starter-kit draw size |
+| `progression.json` | XP curve, the XP each source awards, the starter-kit draw size, and the crafted-item capacity |
 | `elements.json` | The five Mage elements and their roles |
 | `abilities.json` | What every action costs, how often it may be used, how it is dodged, what it delivers, and what it applies |
 | `effects.json` | Status effects: burn, slow, root, stun, knockback, shield |
 | `weapons.json` | Craftable weapons: class, blueprint, magazine, unlock level, and the ability they fire or the spell they cast |
 | `spells.json` | Spells: element, tier, unlock level, and the ability they cast |
 | `gadgets.json` | Gadgets: the Gunslinger's slot content, its unlock level, and the ability each performs |
-| `components.json` | Blueprint slot layouts and the components that fill them |
+| `components.json` | Blueprint slot layouts, and the components that fill them: material cost, behaviour modifiers, and the plain-language effect the crafting UI shows |
 | `materials.json` | Material grades, kinds, and rows |
 | `mobs.json` | Mob contracts |
 | `biomes.json` | Biomes and the element they align to |
@@ -114,9 +123,17 @@ Rows are populated only where a design document has settled them.
 - The basic sets are one weapon per class and one spell, so today's draw is not
   yet much of a draw. `unlock_level: 2` on those rows keeps the level-1 kit a
   genuine subset once Phase 2.4 and 2.5 widen the pools.
-- `components.components` and `materials.materials` are empty. Slotted-blueprint
-  crafting (Phase 2.3) and harvesting (Phase 4.1) fill them; the schemas and
-  their validation exist now so those phases add data, not structure.
+- `materials.materials` carries the structural stock every biome yields and one
+  element-aligned shard per biome, because component costs have to name
+  something real. Nothing *produces* a material yet — harvest nodes and mob
+  drops are Phase 4.1 — so the only source today is the bounded developer-mode
+  grant in `admin_tools.material_grant`.
+- `components.components` covers both blueprints: five gun slots and three staff
+  slots, two options each. Their modifiers reach only the attributes the
+  simulation reads today. Recoil, spread, and scoped state are Phase 2.4 and
+  cast-shape changes beyond projectile geometry are Phase 2.5; those attributes
+  join the vocabulary when the simulation delivers them, and until then a
+  component may not claim one.
 - `mobs.sentry` carries the settled contract — family, silhouette, damage band,
   dodge vector, shared telegraph shape, turret count — and no aggro radius,
   leash, movement, cadence, telegraph timing, or projectile values.
@@ -156,11 +173,12 @@ caller may drop is an ID no build ever shipped.
 `server/internal/tuning` re-validates on every load: unknown JSON fields are
 rejected, every cross-table reference is resolved, danger bands must run
 outward from the hub to the rim with contiguous PvP protection, projectile
-kinds must be unique across tables, and each class must have at least one starter
-weapon — the basic set is a pool a new character draws one of. Unlock IDs must
+kinds must be unique across tables, components must fit a slot their blueprint
+exposes and may not modify a magazine on a blueprint whose weapons cast spells,
+and each class must have at least one starter weapon — the basic set is a pool a new character draws one of. Unlock IDs must
 be unique across the weapon, spell, and gadget tables and must unlock at a level
 between 1 and the progression cap, or a ledger entry would be ambiguous or a row
-unreachable. The progression curve may not shrink between levels, every XP
+unreachable. The crafted-item capacity must be positive, the progression curve may not shrink between levels, every XP
 source the simulation awards must be priced and no other may be declared, and
 the starter-kit draw must be wide enough to fill the action bar. The loadout table must lay both classes out over one action bar —
 `weapon_slots + gadget_slots` has to equal `spell_slots` — and its affinity

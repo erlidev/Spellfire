@@ -16,6 +16,16 @@ export interface InputFrame {
 /** The equipped set. Both arrays are positional; an empty slot is "". */
 export interface LoadoutSet { weapon: string; gadgets: string[]; spells: string[] }
 
+/**
+ * A crafted weapon as it is owned: the weapon category it instantiates and the
+ * component filling each slot. Never a stat snapshot — every value it implies is
+ * derived from the tables, so a balance edit retunes it in place.
+ */
+export interface CraftedItem { id: string; weapon: string; components: Record<string, string> }
+
+/** One requested build. A slot the request omits is left stock. */
+export interface CraftRequest { weapon: string; components: Record<string, string> }
+
 export interface Entity {
   type: number; id: string; name: string; className: string;
   x: number; y: number; vx: number; vy: number; aimX: number; aimY: number;
@@ -39,11 +49,13 @@ export interface ServerMessage {
   loadout?: LoadoutSet; loadoutEditable: boolean; respecOwed: boolean;
   /** The permanent axis, on Welcome and Progress only. `xpToNext` is derived from the curve. */
   level: number; xp: number; xpToNext: number; unlocks: string[];
+  /** Owned crafted items and carried materials, on Welcome and Craft only. */
+  items: CraftedItem[]; materials: Record<string, number>;
 }
 
 export const Buttons = { Up: 1, Down: 2, Left: 4, Right: 8, Fire: 16, Dash: 32, Reload: 64, Interact: 128 } as const;
 export const EntityType = { Player: 1, Projectile: 2, Mob: 3, Drop: 4, Node: 5, Telegraph: 6, Deployable: 7, Boss: 8, WorldItem: 9 } as const;
 export const Allegiance = { Self: 1, Squad: 2, Neutral: 3, Hostile: 4 } as const;
 export const TelegraphState = { Pending: 1, Active: 2, Resolved: 3 } as const;
-export const ClientKind = { Join: 1, Input: 2, Respawn: 3, Ping: 4, Loadout: 5 } as const;
-export const ServerKind = { Welcome: 1, Snapshot: 2, Error: 3, Pong: 4, Loadout: 5, Progress: 6 } as const;
+export const ClientKind = { Join: 1, Input: 2, Respawn: 3, Ping: 4, Loadout: 5, Craft: 6 } as const;
+export const ServerKind = { Welcome: 1, Snapshot: 2, Error: 3, Pong: 4, Loadout: 5, Progress: 6, Craft: 7 } as const;

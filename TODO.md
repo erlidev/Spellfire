@@ -40,18 +40,18 @@ Nothing else in this file can be built cleanly without these. Land them first.
 - [x] Verify the invariant in a test: editing one row changes every dependent item with no character migration ([game/tuning_test.go](server/internal/game/tuning_test.go), [tuning/tuning_test.go](server/internal/tuning/tuning_test.go))
 - [x] Common typed entity base for every materialized world family, with tuning defaults and per-instance overrides; 500-health circular trees and an immovable/undestroyable square wall fixture ([entity.go](server/internal/game/entity.go), [entities.json](data/tuning/entities.json))
 
-Component, material, and biome-placement rows are intentionally empty until the phases that consume them; the Sentry row carries its settled contract without the values [economy-death-and-pve.md](docs/game/design/economy-death-and-pve.md#sentry) defers to implementation. Runtime table delivery to a live client stays in Phase 8.
+Biome-placement rows are intentionally empty until Phase 3; component and material rows landed with Phase 2.3. The Sentry row carries its settled contract without the values [economy-death-and-pve.md](docs/game/design/economy-death-and-pve.md#sentry) defers to implementation. Runtime table delivery to a live client stays in Phase 8.
 
 ### 1.2 Persistence & migration
 - [x] Read `schema_version` and run sequential forward migrations — `PRAGMA user_version` for the database schema, `characters.schema_version` for the record shape ([sqlite.go](server/internal/store/sqlite.go), [model.go](server/internal/model/model.go), [architecture.md](docs/architecture.md#persistence-and-migration))
 - [x] Retired-ID → replacement/refund resolution map; never delete an ID ([retired.json](data/tuning/retired.json), `Tables.Resolve` in [tuning.go](server/internal/tuning/tuning.go), [invariants.md](docs/game/design/invariants.md))
 - [x] Persist character position, carried inventory, and unlocked outposts; saved every 15 s, at logout, and at shutdown, restored and re-validated on join ([engine.go](server/internal/game/engine.go), [world.go](server/internal/game/world.go))
-- [x] Store crafted items as recipe + component IDs, never a stat snapshot (`crafted_items`; `model.CraftedItem`)
+- [x] Store crafted items as weapon + component IDs, never a stat snapshot (`crafted_items`; `model.CraftedItem`); Phase 2.3 is what writes them
 - [x] 10 s logout linger: the body stays in the world, killable and unable to act, so disconnecting is not an escape ([session.json](data/tuning/session.json), [engine.go](server/internal/game/engine.go))
 - [x] Saved position expires after 30 min offline and recalls to the nearest unlocked outpost or the hub ([outposts.json](data/tuning/outposts.json), `World.recallDestination`)
 - [x] One body per account: a second character's join is refused while the first is in the world, lingering included, so switching characters is not a combat-log escape (`Engine.Join`/`ErrAccountInWorld`, [architecture.md](docs/architecture.md#one-body-per-account))
 
-Carried materials and unlocked outposts round-trip through the world but nothing mutates them yet: harvesting is Phase 4.1, outpost discovery is Phase 3, and crafting is Phase 2.3. `outposts.json` ships empty, so every recall resolves to the hub until Phase 3 places them. Lingering bodies are now flagged on the wire and rendered as dimmed, offline actors; Phase 7 still owns the surrounding exit and reconnect UX.
+Unlocked outposts round-trip through the world but nothing mutates them yet — outpost discovery is Phase 3. Carried materials are now spent by Phase 2.3 crafting; harvesting, which is what legitimately produces them, is Phase 4.1. `outposts.json` ships empty, so every recall resolves to the hub until Phase 3 places them. Lingering bodies are now flagged on the wire and rendered as dimmed, offline actors; Phase 7 still owns the surrounding exit and reconnect UX.
 
 ### 1.3 Server-side ability/effect framework
 - [x] One authoritative ability system replacing the ad-hoc branches in `stepPlayer`/`tryFire` — `World.ability`/`useAbility`/`spend`/`deliver` ([ability.go](server/internal/game/ability.go), [architecture.md](docs/architecture.md#abilities-and-effects))
@@ -131,11 +131,21 @@ live row" to "what this character owns" by the Phase 2.2 unlock ledger.
 Only `player_kill` has a trigger: mob kills, harvesting, and outpost discovery are priced in the table and awarded by Phases 4.3, 4.1, and 3, and Phase 4.4 tunes the curve against the pacing targets. Keystone IDs share the ledger's shape but have no rows until Phase 2.7. The basic sets are one weapon per class and one spell, so today's draw is nearly deterministic; the pools widen with Phases 2.4 and 2.5 without touching the draw.
 
 ### 2.3 Slotted-blueprint crafting
-- [ ] Blueprint + slot + component definitions with material costs and **behavioural** (not power) effects ([progression-and-crafting.md](docs/game/design/progression-and-crafting.md#slotted-blueprint-crafting))
-- [ ] Gun slots: muzzle, barrel, scope, trigger, magazine
-- [ ] Staff slots: core, focus, conduit
-- [ ] Crafting gated to safe zones; raw materials must be hauled there
-- [ ] Crafting UI: blueprint, slots, compatible components, owned/required materials with shortfalls, plain-language behaviour changes, spend confirmation, rejection outcomes ([system-interfaces.md](docs/game/ui/system-interfaces.md#safe-zone-loadout-and-crafting))
+- [x] Blueprint + slot + component definitions with material costs and **behavioural** (not power) effects ([components.json](data/tuning/components.json), [crafting.go](server/internal/crafting/crafting.go), [progression-and-crafting.md](docs/game/design/progression-and-crafting.md#slotted-blueprint-crafting))
+- [x] Gun slots: muzzle, barrel, scope, trigger, magazine — two options each, costed in structural materials so geography never hard-locks a Gunslinger
+- [x] Staff slots: core, focus, conduit — element-aligned shards price the element-typed parts
+- [x] Crafting gated to safe zones; raw materials must be hauled there (`World.Craft`/`ErrCraftingLocked`, [architecture.md](docs/architecture.md#slotted-blueprint-crafting))
+- [x] Crafting UI: blueprint, slots, compatible components, owned/required materials with shortfalls, plain-language behaviour changes, spend confirmation, rejection outcomes ([system-interfaces.md](docs/game/ui/system-interfaces.md#safe-zone-loadout-and-crafting), [crafting.ts](web/src/game/crafting.ts), [main.ts](web/src/main.ts))
+- [x] Crafted items are equippable: the weapon slot names either a stock row or an instance, resolved through `crafting.Inventory.Equipped` on the same path
+- [x] Test: recipe legality, cost aggregation, per-material shortfalls, atomic refusals, modifier application, the shared projectile row surviving unmutated, items round-tripping through a rejoin, and the inventory capacity
+
+Components declare an open `modifiers` map, but only over attributes the simulation reads, and the loader
+rejects `interval_ms` outright: fire cadence is the DPS axis, and crafting changes handling and ceiling.
+Recoil, spread, and scoped state join the vocabulary with Phase 2.4 rather than being claimed early.
+Nothing produces a material yet — harvesting is Phase 4.1 — so the only source is the bounded
+developer-mode grant behind the Phase 1.7 authorization wrapper, and an ordinary player sees accurate
+shortfalls until then. Death drops (Phase 4.2) will drop carried materials and keep crafted gear, which is
+already the split the inventory surface states.
 
 ### 2.4 Gunslinger kit
 - [ ] Recoil model; every shot currently leaves on the exact aim vector ([ability.go:101](server/internal/game/ability.go#L101))
@@ -156,7 +166,7 @@ Only `player_kill` has a trigger: mob kills, harvesting, and outpost discovery a
 - [ ] Author the settled 5 × 4 spell grid — all twenty rows, every element to tier 4 so affinity's 4 + 2 build is satisfiable ([mage.md](docs/game/design/mage.md#the-spell-grid))
 - [ ] Stone wall: dynamic destructible collider, one per caster, placement rules, and lifetime carried in the rewind history ([mage.md](docs/game/design/mage.md#stone-wall)) — common entity and box-collision substrate exists; sequence behavior after 2.6 so it ships blocking line of sight
 - [ ] Spell tiers 1–4 scaling mana, cooldown, telegraph, payoff, and whiff punishment
-- [ ] Staff components alter cast speed, mana cost, projectile/area shape, and element bias without touching the damage band
+- [ ] Staff components alter element bias and cast/area shape beyond projectile geometry; cast speed, mana cost, and projectile shape already run through Phase 2.3's modifiers
 - [ ] Test: no spell delivers instant point-and-click damage
 
 ### 2.6 Line of sight
@@ -190,7 +200,7 @@ Only `player_kill` has a trigger: mob kills, harvesting, and outpost discovery a
 ## Phase 4 — Loop axis
 
 ### 4.1 Materials & harvesting
-- [ ] Carried-material inventory on the player, distinct from crafted items
+- [x] Carried-material inventory on the player, distinct from crafted items — carried materials are spendable and droppable, crafted items are permanent (Phase 2.3)
 - [ ] Harvest nodes as world entities; grade-scaled channel time ([economy-death-and-pve.md](docs/game/design/economy-death-and-pve.md#resource-sources))
 - [ ] Interact/channel state machine, interruptible at any time
 - [ ] Contextual harvest prompt and interruption feedback ([game-view-and-hud.md](docs/game/ui/game-view-and-hud.md#contextual-prompts-and-feedback))
@@ -262,7 +272,7 @@ Only `player_kill` has a trigger: mob kills, harvesting, and outpost discovery a
 - [ ] Conditional collapsing HUD modules that never hide local health, critical resources, or menu access
 - [ ] Contextual prompts in one consistent interaction area covering harvest, loot priority, safe-zone transitions, and actionable failures
 - [ ] Boundary-crossing announcements that teach once and then condense to persistent state
-- [ ] Menu sections still missing: Crafting, World, Squad, Activity ([game-menu.md](docs/game/ui/game-menu.md#information-architecture))
+- [ ] Menu sections still missing: Squad and Activity ([game-menu.md](docs/game/ui/game-menu.md#information-architecture)); Crafting and Inventory landed with Phase 2.3
 - [ ] Exit game: explain vulnerability/material/position consequences and confirm when leaving creates risk ([game-menu.md](docs/game/ui/game-menu.md#exit-and-session-actions)) — still a bare `confirm()` ([main.ts:73](web/src/main.ts#L73)), though it now states the logout linger
 - [ ] Shared network states on every remote-data surface: loading, empty, unavailable/locked, error, stale/conflict, offline/reconnecting ([shared-states.md](docs/game/ui/shared-states.md))
 - [ ] Idempotent retries; success shown only after server confirmation; never claim an unconfirmed spend, craft, pickup, or loadout change

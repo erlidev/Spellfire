@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"spellfire/server/internal/crafting"
 	"spellfire/server/internal/model"
 	"spellfire/server/internal/protocol"
 )
@@ -28,6 +29,9 @@ const (
 type Persister interface {
 	SaveCharacterState(ctx context.Context, characterID string, state model.CharacterState) error
 	SaveCharacterProgress(ctx context.Context, characterID string, progress model.Progress) error
+	// CreateCraftedItem records a finished item. It is an insert rather than a
+	// save: an item is made once and its references never change.
+	CreateCraftedItem(ctx context.Context, item model.CraftedItem) error
 }
 
 type Client struct {
@@ -43,6 +47,10 @@ type characterSave struct {
 	id       string
 	state    *model.CharacterState
 	progress *model.Progress
+	// item is a finished craft. It is written before the state that paid for it,
+	// and a failed insert abandons that state too, so a craft can never take the
+	// materials without leaving the item behind.
+	item *model.CraftedItem
 }
 
 type Engine struct {
@@ -207,6 +215,16 @@ func (e *Engine) writeLoop(stop <-chan struct{}, done chan<- struct{}) {
 func (e *Engine) write(save characterSave) {
 	ctx, cancel := context.WithTimeout(context.Background(), saveTimeout)
 	defer cancel()
+	if save.item != nil {
+		if err := e.persist.CreateCraftedItem(ctx, *save.item); err != nil {
+			// The state riding along is the one that spent the materials, so it
+			// is abandoned with the item rather than charging for something that
+			// was never written. The body keeps both until the autosave, which is
+			// the same window every other unwritten change lives in.
+			slog.Warn("persist crafted item", "character", save.id, "error", err)
+			return
+		}
+	}
 	if save.state != nil {
 		if err := e.persist.SaveCharacterState(ctx, save.id, *save.state); err != nil {
 			slog.Warn("persist character state", "character", save.id, "error", err)
@@ -249,6 +267,10 @@ func (e *Engine) Join(character model.Character, now time.Time) (*Client, error)
 			axis := e.progressMessageLocked(character.ID, progress)
 			welcome.Level, welcome.XP, welcome.XPToNext, welcome.Unlocks = axis.Level, axis.XP, axis.XPToNext, axis.Unlocks
 		}
+		// Owned items and carried materials ride the welcome for the same reason:
+		// the crafting and inventory surfaces open without a second round trip.
+		inventory := e.craftMessageLocked(character.ID, nil)
+		welcome.Items, welcome.Materials = inventory.Items, inventory.Materials
 	}
 	client.Send <- protocol.EncodeServer(welcome)
 	return client, nil
@@ -307,6 +329,27 @@ func (e *Engine) SetAdminAttributes(playerID string, attributes map[string]float
 	return e.world.setAdminAttributes(playerID, attributes)
 }
 
+// GrantMaterials is the developer-mode material source. Harvesting is what
+// legitimately produces a material; until Phase 4.1 lands this is the only way
+// to exercise a real crafting spend, so it is authorized like every other admin
+// feature and persisted like every other change to what a body carries.
+func (e *Engine) GrantMaterials(playerID string, grants map[string]int) error {
+	e.mu.Lock()
+	_, err := e.world.GrantMaterials(playerID, grants)
+	var pending []characterSave
+	if err == nil {
+		if state, ok := e.world.StateOf(playerID, time.Now()); ok {
+			pending = append(pending, characterSave{id: playerID, state: &state})
+		}
+		if client := e.clients[playerID]; client != nil {
+			e.queue(client, protocol.EncodeServer(e.craftMessageLocked(playerID, nil)))
+		}
+	}
+	e.mu.Unlock()
+	e.enqueue(pending)
+	return err
+}
+
 // SetLoadout commits a requested equipped set and answers the client either
 // way. A refusal is reported on the same message as the authoritative set the
 // player still has, so the menu can show what actually holds rather than
@@ -328,6 +371,55 @@ func (e *Engine) SetLoadout(playerID string, requested model.Loadout, now time.T
 	}
 	e.mu.Unlock()
 	e.enqueue(pending)
+}
+
+// Craft builds one item and answers the client either way. A refusal reports
+// the reason alongside the inventory the character still has, so nothing is ever
+// shown as spent before the server confirmed it. A successful craft is persisted
+// immediately — it is a deliberate commit, and the materials it charged are gone
+// from the body the moment it returns.
+func (e *Engine) Craft(playerID string, request CraftRequest) {
+	e.mu.Lock()
+	item, err := e.world.Craft(playerID, request, crafting.NewItemID())
+	var pending []characterSave
+	if err == nil {
+		if state, ok := e.world.StateOf(playerID, time.Now()); ok {
+			pending = append(pending, characterSave{id: playerID, state: &state, item: &item})
+		}
+	}
+	reply := e.craftMessageLocked(playerID, err)
+	if client := e.clients[playerID]; client != nil {
+		e.queue(client, protocol.EncodeServer(reply))
+	}
+	e.mu.Unlock()
+	e.enqueue(pending)
+}
+
+// craftMessageLocked reports what the character owns and carries after a craft
+// attempt. The caller holds the engine lock.
+func (e *Engine) craftMessageLocked(playerID string, err error) protocol.ServerEnvelope {
+	message := protocol.ServerEnvelope{
+		Kind: protocol.ServerCraft, ServerTick: e.world.tick,
+		ServerTimeMS: uint64(time.Now().UnixMilli()), PlayerID: playerID,
+	}
+	if err != nil {
+		message.Error = err.Error()
+	}
+	materials, items, ok := e.world.Carried(playerID)
+	if !ok {
+		return message
+	}
+	message.Materials, message.Items = protocol.Stacks(materials), wireItems(items)
+	return message
+}
+
+// wireItems lays owned crafted items out for the wire.
+func wireItems(items []model.CraftedItem) []protocol.CraftedItem {
+	wire := make([]protocol.CraftedItem, 0, len(items))
+	for _, item := range items {
+		wire = append(wire, protocol.CraftedItem{ID: item.ID, Weapon: item.Weapon, Components: item.Components})
+	}
+	return wire
 }
 
 // loadoutMessageLocked builds the reply that reports an equipped set. The

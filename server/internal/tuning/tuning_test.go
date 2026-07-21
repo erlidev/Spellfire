@@ -2,6 +2,7 @@ package tuning
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/fs"
 	"math"
 	"strings"
@@ -582,5 +583,69 @@ func TestGadgetRowsAreValidatedLikeSpells(t *testing.T) {
 	files["tuning/gadgets.json"] = &fstest.MapFile{Data: []byte(`{"smoke": {"name": "Smoke", "class": "gunslinger", "ability": "no-such-ability"}}`)}
 	if _, err := Parse(files); err == nil || !strings.Contains(err.Error(), "unknown ability") {
 		t.Fatalf("a gadget with no ability was accepted: %v", err)
+	}
+}
+
+// Crafting is the behaviour axis. The loader is what keeps it there: a modifier
+// on fire cadence is the damage band by another name, and a modifier the
+// simulation never reads is a promise the world silently drops.
+func TestComponentModifiersStayOnTheBehaviourAxis(t *testing.T) {
+	component := func(modifiers string) string {
+		return `{"blueprints": {"gun": {"name": "Gun", "slots": ["muzzle"]}, "staff": {"name": "Staff", "slots": ["core"]}},
+		 "components": {"brake": {"name": "Brake", "blueprint": "gun", "slot": "muzzle",
+		   "effect": "Rounds leave faster.", "cost": {"salvaged-plate": 2}, "modifiers": ` + modifiers + `}}}`
+	}
+	cases := []struct{ name, modifiers, want string }{
+		{"cadence", `{"interval_ms": 0.8}`, "crafting may never touch"},
+		{"unread", `{"recoil": 0.8}`, "which the simulation does not read"},
+		{"out of band", `{"projectile_speed": 6}`, "outside the [0.5,2] band"},
+		{"no change", `{"projectile_speed": 1}`, "which is no change at all"},
+		{"empty", `{}`, "declares no modifiers"},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			files := shipped(t)
+			files["tuning/components.json"] = &fstest.MapFile{Data: []byte(component(testCase.modifiers))}
+			if _, err := Parse(files); err == nil || !strings.Contains(err.Error(), testCase.want) {
+				t.Fatalf("modifiers %s were accepted: %v", testCase.modifiers, err)
+			}
+		})
+	}
+}
+
+// Materials have to be hauled to a safe zone and spent, so a component with no
+// cost would put a behaviour change outside the economy entirely — and a cost in
+// a material that does not exist could never be paid.
+func TestComponentsMustCostLiveMaterialsAndExplainThemselves(t *testing.T) {
+	base := `{"blueprints": {"gun": {"name": "Gun", "slots": ["muzzle"]}, "staff": {"name": "Staff", "slots": ["core"]}},
+	 "components": {"brake": {"name": "Brake", "blueprint": "gun", "slot": "muzzle", %s
+	   "modifiers": {"projectile_speed": 1.2}}}}`
+	cases := []struct{ name, row, want string }{
+		{"no cost", `"effect": "Faster rounds.",`, "declares no material cost"},
+		{"unknown material", `"effect": "Faster rounds.", "cost": {"unobtainium": 1},`, "costs unknown material"},
+		{"non-positive", `"effect": "Faster rounds.", "cost": {"salvaged-plate": 0},`, "non-positive count"},
+		{"no plain language", `"cost": {"salvaged-plate": 2},`, "plain language"},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			files := shipped(t)
+			files["tuning/components.json"] = &fstest.MapFile{Data: []byte(fmt.Sprintf(base, testCase.row))}
+			if _, err := Parse(files); err == nil || !strings.Contains(err.Error(), testCase.want) {
+				t.Fatalf("component row %s was accepted: %v", testCase.row, err)
+			}
+		})
+	}
+}
+
+// A magazine attribute means nothing on a blueprint whose weapons cast spells,
+// so a staff component may not claim one.
+func TestStaffComponentsMayNotModifyAMagazine(t *testing.T) {
+	files := shipped(t)
+	files["tuning/components.json"] = &fstest.MapFile{Data: []byte(
+		`{"blueprints": {"gun": {"name": "Gun", "slots": ["muzzle"]}, "staff": {"name": "Staff", "slots": ["core"]}},
+		 "components": {"core": {"name": "Core", "blueprint": "staff", "slot": "core",
+		   "effect": "Holds more.", "cost": {"salvaged-plate": 2}, "modifiers": {"magazine_size": 1.5}}}}`)}
+	if _, err := Parse(files); err == nil || !strings.Contains(err.Error(), "no \"staff\" weapon holds a magazine") {
+		t.Fatalf("a staff component claimed a magazine: %v", err)
 	}
 }

@@ -319,3 +319,45 @@ func hasField(data []byte, want protowire.Number) bool {
 	}
 	return false
 }
+
+// A craft request is positional in nothing — slots are named — but an omitted
+// slot must stay omitted rather than arriving as a component reference to
+// nothing, because a stock slot is a legal choice.
+func TestCraftRequestRoundTrips(t *testing.T) {
+	envelope := appendMessage(appendVarint(nil, 1, ClientCraft), 7,
+		appendMessage(appendString(nil, 1, "starter-rifle"), 2,
+			appendString(appendString(nil, 1, "magazine"), 2, "extended-magazine")))
+	decoded, err := DecodeClient(envelope)
+	if err != nil {
+		t.Fatalf("decode craft: %v", err)
+	}
+	if decoded.Kind != ClientCraft || decoded.Craft.Weapon != "starter-rifle" {
+		t.Fatalf("decoded = %+v", decoded)
+	}
+	if decoded.Craft.Components["magazine"] != "extended-magazine" || len(decoded.Craft.Components) != 1 {
+		t.Fatalf("components = %v", decoded.Craft.Components)
+	}
+	// An empty component is a stock slot and must not survive as a reference.
+	empty := appendMessage(appendVarint(nil, 1, ClientCraft), 7,
+		appendMessage(appendString(nil, 1, "starter-rifle"), 2, appendString(nil, 1, "muzzle")))
+	decoded, err = DecodeClient(empty)
+	if err != nil {
+		t.Fatalf("decode stock craft: %v", err)
+	}
+	if len(decoded.Craft.Components) != 0 {
+		t.Fatalf("a stock slot survived as %v", decoded.Craft.Components)
+	}
+}
+
+// Owned items and carried materials ride the welcome and craft replies. Empty
+// stacks are dropped, and slots go out sorted so one item has one encoding.
+func TestStacksDropEmptiesAndSort(t *testing.T) {
+	stacks := Stacks(map[string]int{"tempered-plate": 2, "salvaged-plate": 4, "resonant-plate": 0})
+	if len(stacks) != 2 || stacks[0].Material != "salvaged-plate" || stacks[1].Count != 2 {
+		t.Fatalf("stacks = %+v", stacks)
+	}
+	item := CraftedItem{ID: "itm-1", Weapon: "starter-rifle", Components: map[string]string{"muzzle": "suppressor", "barrel": "long-barrel"}}
+	if string(encodeItem(item)) != string(encodeItem(item)) {
+		t.Fatal("one item produced two encodings")
+	}
+}
