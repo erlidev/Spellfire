@@ -4,6 +4,10 @@ services:
       context: .
       dockerfile: Dockerfile
     image: spellfire:latest
+    # Build from source in this repo; never try to pull from a registry.
+    # Komodo (and `docker compose pull`) would otherwise attempt a registry
+    # pull of `spellfire:latest`, which does not exist remotely.
+    pull_policy: build
     container_name: spellfire
     restart: unless-stopped
     ports:
