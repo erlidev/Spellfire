@@ -117,7 +117,7 @@ while Sentry cadence, projectile values, and full AI remain deliberately deferre
 - [ ] Recoil model; every shot currently leaves on the exact aim vector ([ability.go:101](server/internal/game/ability.go#L101))
 - [ ] Move-spread: firing while moving is currently identical to standing ([gunslinger.md](docs/game/design/gunslinger.md#gunplay))
 - [ ] Weight classes with recoil / spread / slowdown tradeoffs inside one damage band
-- [ ] Multiple guns and gun categories; magazine size and reload are already weapon properties ([weapons.json](data/tuning/weapons.json)), so this is rows plus the loadout that selects between them
+- [ ] The nine settled gun categories — pistol, revolver, SMG, shotgun, assault rifle, marksman, sniper, LMG, launcher ([gunslinger.md](docs/game/design/gunslinger.md#weapon-categories)); magazine size and reload are already weapon properties ([weapons.json](data/tuning/weapons.json)), so this is rows plus the loadout that selects between them
 - [ ] Crafted special ammunition (rockets) as a finite, craftable resource
 - [ ] Snipers: hitscan to a weapon cap, then travel-time projectile with falloff and hard max range ([gunslinger.md](docs/game/design/gunslinger.md#snipers))
 - [ ] Scope mode: peripheral blackout, controllable near-area view, server-side scoped state affecting movement and spread; camera exception in [game-view-and-hud.md](docs/game/ui/game-view-and-hud.md#camera)
@@ -129,6 +129,8 @@ while Sentry cadence, projectile values, and full AI remain deliberately deferre
 - [ ] Author per-spell cooldowns and costs — the second resource axis alongside mana ([mage.md](docs/game/design/mage.md#mana-and-cooldowns)); 1.3 enforces both from `abilities.json`, and every shipped row still declares a zero cooldown
 - [ ] Five elements as data and behaviour: Fire, Frost, Storm, Arcane, Earth ([mage.md](docs/game/design/mage.md#elements))
 - [ ] Element secondaries: burn/DoT, light mitigation, blink-on-hit, shields/dispel/teleport, walls/knockback/armor
+- [ ] Author the settled 5 × 4 spell grid — all twenty rows, every element to tier 4 so affinity's 4 + 2 build is satisfiable ([mage.md](docs/game/design/mage.md#the-spell-grid))
+- [ ] Stone wall: dynamic destructible collider, one per caster, placement rules, and lifetime carried in the rewind history ([mage.md](docs/game/design/mage.md#stone-wall)) — sequence after 2.6 so it ships blocking line of sight
 - [ ] Spell tiers 1–4 scaling mana, cooldown, telegraph, payoff, and whiff punishment
 - [ ] Staff components alter cast speed, mana cost, projectile/area shape, and element bias without touching the damage band
 - [ ] Test: no spell delivers instant point-and-click damage
@@ -140,6 +142,7 @@ while Sentry cadence, projectile values, and full AI remain deliberately deferre
 ### 2.7 Roles, keystones, and band enforcement
 - [ ] Cover the seven combat roles across both classes; only Damage exists ([combat.md](docs/game/design/combat.md#shared-combat-roles))
 - [ ] Keystones: behaviour-changing tradeoffs (empowered-but-costlier casts, overheat-instead-of-reload)
+- [ ] Add the sustained / burst / heavy-burst damage bands to [combat.json](data/tuning/combat.json); only `standard` exists, and one band cannot carry both a shotgun and a rifle ([combat.md](docs/game/design/combat.md#damage-bands))
 - [ ] Damage/DPS resolver computing from item data instead of one constant
 - [ ] Automated band test: every weapon and spell lands inside the effective damage band ([pillars.md](docs/game/design/pillars.md#p2--vertical-progression-stays-compressed))
 

@@ -9,6 +9,24 @@ The Gunslinger is a mechanical, aim-and-movement class. Mastery comes from aim, 
 - Guns use magazines and reloads. Ammo is effectively infinite except for crafted special ammunition such as rockets.
 - Heavier classes impose more recoil, movement spread, or slowdown. They offer higher mastery payoff within the same effective damage band—not free damage.
 
+## Weapon categories
+
+Nine categories cover the armory. Weight class is the balance axis: it sets recoil, movement spread, and slowdown, and it never sets damage. Every category shares the [damage bands](combat.md#damage-bands), so a category is a set of conditions and a handling profile, not a power level.
+
+| Category | Weight | Band | Role | Identity |
+|---|---|---|---|---|
+| Pistol | Light | Sustained | Damage | Fast reload, near-zero movement spread, small magazine. The mobile fallback. |
+| Revolver | Light | Burst | Burst | Few rounds, heavy per-shot kick, slow recovery. Rewards a settled aim. |
+| SMG | Light | Sustained | Damage | High rate of fire, tolerant of movement, steep falloff. Close range only. |
+| Shotgun | Medium | Burst | Burst | A cone of pellets. Lethal at contact range, irrelevant beyond a dash or two. |
+| Assault rifle | Medium | Sustained | Damage | The baseline. Automatic, mid-everything, no exposed condition. |
+| Marksman rifle | Medium | Burst | Range | Semi-automatic and accurate standing, badly punished for firing on the move. |
+| Sniper | Heavy | Heavy burst | Burst, Range | Hitscan to a cap when scoped, and only when scoped. See below. |
+| LMG | Heavy | Sustained | Damage, Zone | Large magazine, spin-up, long reload, heavy slowdown. Suppression and area denial. |
+| Launcher | Heavy | Heavy burst | Burst, Control | Ground-indicator area damage with knockback, fed by finite crafted rockets. |
+
+Categories are not unlocked in a power order. A pistol is a valid rim loadout; heavy categories cost rare materials because they demand commitment, not because they win fights ([`invariants.md`](invariants.md)).
+
 ## Snipers
 
 A sniper round is hitscan to a weapon-specific cap, then becomes a travel-time projectile with falloff and a hard maximum range.

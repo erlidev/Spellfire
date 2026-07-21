@@ -39,6 +39,31 @@ With six slots, the current examples are concise:
 
 Higher tiers mean more mana, cooldown, telegraph, payoff, and whiff punishment—not more unconditional power. A player who dodges the signature owns its downtime window.
 
+## The spell grid
+
+Every element is authored to tier 4. This is a floor, not a flourish: affinity requires N−1 same-element spells to equip a tier-N spell, so an element with fewer than four spells cannot support the 4 + 2 build its own rule describes.
+
+| | Tier 1 — spam | Tier 2 — secondary | Tier 3 — identity | Tier 4 — signature |
+|---|---|---|---|---|
+| **Fire** | **Fire bolt** — traveling bolt, applies burn | **Cinder patch** — placed ground indicator leaving a burning area | **Flame wave** — telegraphed cone, stacks burn across a group | **Firestorm** — large delayed area, denies ground for its duration |
+| **Frost** | **Frost shard** — traveling shard, applies slow | **Rime ward** — self mitigation and a chilling aura | **Ice trap** — placed indicator that roots whoever triggers it | **Blizzard** — wide zone whose stacking slow ends in a stun |
+| **Storm** | **Spark** — fast, low-damage bolt | **Thunderstep** — short blink after a cast time | **Chain lightning** — cast time, then arcs between nearby targets | **Skyfall** — heavy ground indicator; landing it grants a blink |
+| **Arcane** | **Arcane missile** — homing, but always with travel time | **Ward** — absorbing shield on self or an ally | **Nullify** — strips effects and shields, returns mana | **Rift** — paired teleport repositioning the caster and squad |
+| **Earth** | **Stone shard** — slow, heavy bolt with knockback | **Stone wall** — a placed, destructible solid barrier | **Upheaval** — ground indicator, knockback and a brief root | **Bulwark** — armor to the caster and nearby allies, plus a shockwave |
+
+Tier sets cost and commitment, not power: higher tiers spend more mana, hold longer cooldowns, telegraph longer, and leave a worse whiff. Tier 1 is mana-gated and always available; tier 4 is cooldown-gated and defines the window a dodging opponent earns.
+
+Each row carries at least one counterplay vector — travel time, cast time, telegraph, or ground indicator — because the [ability schema](../../architecture.md#abilities-and-effects) rejects a damaging spell without one. Non-damaging rows (Rime ward, Ward, Nullify, Rift, Stone wall) are exempt from the requirement, and pay their cost in mana and cooldown instead.
+
+### Stone wall
+
+The wall is the only spell that is not just a table row. It creates the first dynamic, player-authored collider in a world that otherwise holds only static trees, and it carries obligations the rest of the grid does not:
+
+- It is a **short-lived, destructible** span of segments placed perpendicular to the caster's aim. Damage destroys it early; it expires on its own otherwise.
+- It blocks movement and projectiles. It blocks line of sight once that [exists as a system](combat.md#time-to-kill), and it never blocks ground-placed area effects — the same exemption the [riot shield](gunslinger.md#defense) carries.
+- Because the server rewinds to resolve hits, a wall's **lifetime is part of the rewind history**. A shot rewound to a moment when the wall stood must be blocked by it.
+- One wall per caster, and it may not be placed overlapping an actor or inside a safe zone. Safety is never an offensive tool, and a wall that boxes a player in would make it one ([`invariants.md`](invariants.md)).
+
 ## Staffs
 
 Staffs use the shared [slotted-blueprint system](progression-and-crafting.md#slotted-blueprint-crafting), with components such as core, focus, and conduit. Components alter behavior—cast speed, mana cost, projectile or area shape, element bias, or keystone-like tradeoffs—without inflating the damage band.

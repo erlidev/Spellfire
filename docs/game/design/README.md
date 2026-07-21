@@ -7,10 +7,10 @@ The design fixes system shape, not false precision. Unless a value is explicitly
 ## Design map
 
 - [`pillars.md`](pillars.md) — ordered product commitments
-- [`combat.md`](combat.md) — TTK, roles, mobility, and encounter dynamics
+- [`combat.md`](combat.md) — TTK, damage bands, roles, mobility, and encounter dynamics
 - [`classes.md`](classes.md) — shared class structure and matchup contract
-- [`gunslinger.md`](gunslinger.md) — gunplay, defense, and progression
-- [`mage.md`](mage.md) — spell counterplay, elements, affinity, and staffs
+- [`gunslinger.md`](gunslinger.md) — gunplay, weapon categories, defense, and progression
+- [`mage.md`](mage.md) — spell counterplay, elements, the spell grid, affinity, and staffs
 - [`progression-and-crafting.md`](progression-and-crafting.md) — progression layers, crafting, and persistence
 - [`world.md`](world.md) — danger bands, biomes, outposts, and travel
 - [`economy-death-and-pve.md`](economy-death-and-pve.md) — hauling, death, resources, and mobs
