@@ -137,6 +137,40 @@ func (w *World) pulse(deployable *Deployable, effects []string, now time.Time) b
 	return reached
 }
 
+// concealed reports whether a cloud has swallowed something whole, hiding it
+// from a viewer standing elsewhere. Two things closer together than the field's
+// reveal radius always see each other, so standing in your own smoke does not
+// blind you to the body you are touching.
+//
+// Containment rather than the sightline is what decides this, because the cloud
+// is drawn as a circle of exactly this radius on every client: a body clipping
+// the edge is visibly half out of the smoke, so hiding it would be a rule the
+// player can see being broken. Anything the cloud does not cover completely —
+// a body at the rim, a round crossing in front of it — stays on the wire.
+//
+// A fading cloud stops concealing the moment it expires: the fade is a render
+// courtesy, and vision has to match what the simulation says is there.
+func (w *World) concealed(viewer, at Vec, extent float64) bool {
+	// Iterated unordered on purpose: this runs once per candidate entity per
+	// viewer per send, and the answer is a boolean that no ordering can change.
+	for _, cloud := range w.deployables {
+		// Only a field authored to conceal takes anything off the wire. A burning
+		// patch is plainly visible ground, and hiding what stands in it would be a
+		// rule no player could read from what is drawn.
+		if cloud.Deleting || !cloud.Field.Conceals || cloud.Field.Radius <= 0 {
+			continue
+		}
+		if math.Sqrt(at.Sub(cloud.Position).LengthSq())+extent > cloud.Field.Radius {
+			continue
+		}
+		if viewer.Sub(at).LengthSq() <= cloud.Field.RevealRadius*cloud.Field.RevealRadius {
+			continue
+		}
+		return true
+	}
+	return false
+}
+
 // blinded reports whether a body can currently see anything at all. A flashbang
 // takes vision whole rather than dimming it: the counterplay is the travel time
 // of the canister and the ground it covers, not a partial view.

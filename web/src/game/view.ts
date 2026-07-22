@@ -6,7 +6,6 @@ import type { Collider, Entity, ServerMessage } from "../types";
 import { Allegiance, EntityType, ServerKind } from "../types";
 import type { Predictor } from "./prediction";
 import { SightShadowFilter } from "./shadow";
-import { smokeCircles } from "./smoke";
 import { telegraphStyle } from "./telegraph";
 
 interface Sample { at: number; entity: Entity }
@@ -28,9 +27,14 @@ const kickDistance = 9;
 // gunfire never shakes the view it has to be aimed through.
 const shakeMS = 220;
 const shakeDistance = 6;
-// Non-smoke fields retain the drifting presentation. Smoke is the cheaper and
-// authoritative exception: five static opaque circles are expanded from one
-// field record and match the server and shader exactly.
+// Smoke is drawn as overlapping puffs and nothing else — no disc underneath it,
+// which reads as a hard bubble the moment the puffs move off it. The puffs are
+// all of a size and their bands overlap heavily: some scattered through the
+// middle, the rest wandering a wide band that reaches both the centre and past
+// the rim. Separating them by size and distance is what made a cloud read as
+// small circles ringing one big one. The spill is deliberate: the server's rule is
+// the exact radius, and a body the fog only laps at is one the server still
+// shows, which is what keeps a half-covered opponent from vanishing.
 const puffCount = 18;
 const puffCoreCount = 6;
 const puffFadeMS = 320;
@@ -84,12 +88,8 @@ export class GameView {
   async init(host: HTMLElement): Promise<void> {
     await this.app.init({ resizeTo: window, antialias: true, backgroundColor: colors.ground, resolution: Math.min(2, devicePixelRatio), autoDensity: true });
     host.replaceChildren(this.app.canvas);
-<<<<<<< HEAD
-    this.world.addChild(this.ground, this.telegraphLayer, this.fogLayer, this.entityLayer);
-=======
     this.world.addChild(this.ground, this.telegraphLayer, this.entityLayer);
     this.overlayWorld.addChild(this.shadowVisibleLayer, this.fogLayer);
->>>>>>> b44abae (Revert "fix los")
     this.shadow.filters = [this.shadowFilter];
     this.app.stage.addChild(this.world, this.shadow, this.overlayWorld, this.blackout);
     this.app.ticker.add(() => this.renderFrame());
@@ -322,9 +322,9 @@ export class GameView {
   }
 
   /**
-   * A deployed field fades in on arrival and out with shared removal. Smoke's
-   * empty puff list means its five opaque circles need no per-frame animation;
-   * elemental fields retain their drifting puffs.
+   * A deployed field, drawn as drifting puffs and no disc. The layout is seeded
+   * from the field's own identity so it is stable frame to frame, and it fades
+   * in on arrival and out with the shared removal fade.
    *
    * Each puff carries a modest alpha and the overlaps do the rest: the middle,
    * where the most puffs stack, ends up the densest part of the cloud and the
@@ -366,11 +366,6 @@ export class GameView {
       body.moveTo(0, -12).lineTo(12, 0).lineTo(0, 12).lineTo(-12, 0).closePath().fill(elementColors[entity.element] ?? colors.bullet).stroke({ color: outline, width: 3 });
     } else if (entity.type === EntityType.Node) {
       body.circle(-8, 2, 9).circle(7, 5, 11).circle(1, -8, 8).fill(elementColors[entity.element] ?? colors.tree).stroke({ color: outline, width: 3 });
-    } else if (entity.type === EntityType.Deployable && deployableByKind(entity.className)?.conceals) {
-      const shades = [0x8d97a3, 0x838e9a, 0x929ca7, 0x87929e, 0x7f8a96];
-      for (const [index, circle] of smokeCircles(entity.radius || 120).entries()) {
-        body.circle(circle.x, circle.y, circle.radius).fill({ color: shades[index], alpha: 1 });
-      }
     } else if (entity.type === EntityType.Deployable) {
       // The puffs are laid out from a hash of the field's ID, so a cloud looks
       // the same to everyone watching it and never reshuffles between frames.

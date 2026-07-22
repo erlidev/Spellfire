@@ -63,47 +63,6 @@ func TestCollisionDoesNotImplyVisionOcclusion(t *testing.T) {
 	}
 }
 
-<<<<<<< HEAD
-func TestAnyVisiblePartKeepsBodyInSnapshot(t *testing.T) {
-	w, now := testWorld()
-	viewer := addTestPlayer(w, "viewer", model.Gunslinger, Vec{1200, 0}, now)
-	target := addTestPlayer(w, "target", model.Mage, Vec{1400, 0}, now)
-	wall := testWorldItem(w, "wall", "wall", Vec{1300, 0}, CollisionObject{Type: CollisionBox, HalfWidth: 12, HalfHeight: 6})
-	w.worldItems = []*Entity{wall}
-
-	if !visible(w, viewer.ID, target.ID, now) {
-		t.Fatal("a body with a visible edge was omitted because its centre was covered")
-	}
-	wall.CollisionObjects[0].HalfHeight = 60
-	if visible(w, viewer.ID, target.ID, now) {
-		t.Fatal("a body whose complete silhouette was covered remained in the snapshot")
-	}
-}
-
-func TestSmokeBlocksSightlineAndSuppliesShadowCollider(t *testing.T) {
-	w, now := testWorld()
-	viewer := addTestPlayer(w, "viewer", model.Gunslinger, Vec{1200, 0}, now)
-	target := addTestPlayer(w, "target", model.Mage, Vec{1700, 0}, now)
-	field := *w.tuning.Tables.Abilities["smoke-throw"].Deployable
-	cloud := w.deploy("", field, Vec{1450, 0}, "", now)
-
-	if visible(w, viewer.ID, target.ID, now) {
-		t.Fatal("smoke between two bodies did not block the complete target silhouette")
-	}
-	snapshot := w.SnapshotFor(viewer.ID, now, 0)
-	found := 0
-	for _, collider := range snapshot.Colliders {
-		if collider.EntityID == cloud.ID && collider.Kind == "smoke" && collider.Shape == "circle" {
-			found++
-		}
-	}
-	if found != 1 {
-		t.Fatalf("standing smoke supplied %d collider records, want one compact analytic shape", found)
-	}
-}
-
-=======
->>>>>>> b44abae (Revert "fix los")
 func TestAutomaticTargetingRequiresLineOfSight(t *testing.T) {
 	w, now := testWorld()
 	owner := addTestPlayer(w, "owner", model.Mage, Vec{1200, 0}, now)

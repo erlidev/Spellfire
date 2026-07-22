@@ -15,13 +15,6 @@ describe("sight shadow GPU input", () => {
     expect([...packed.data.slice(4, 8)]).toEqual([20, 10, 10, 6]);
   });
 
-  it("marks smoke for analytic expansion without sending five colliders", () => {
-    const smoke = { ...collider("smoke", "circle", 10), kind: "smoke" };
-    const packed = packShadowOccluders([smoke], { x: 0, y: 0 });
-    expect(packed.count).toBe(1);
-    expect([...packed.data.slice(0, 4)]).toEqual([10, 10, 6, -2]);
-  });
-
   it("keeps the nearest 32 occluders in the bounded uniform block", () => {
     const colliders = Array.from({ length: 40 }, (_, index) => collider(String(index), "box", 100 - index));
     const packed = packShadowOccluders(colliders, { x: 0, y: 0 });

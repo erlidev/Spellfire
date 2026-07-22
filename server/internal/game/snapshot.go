@@ -41,12 +41,6 @@ func (w *World) SnapshotFor(playerID string, now time.Time, kind uint64) protoco
 	// than drawn over on the client: what a player cannot see, a client is never
 	// sent.
 	blind := w.blinded(viewer)
-<<<<<<< HEAD
-	// Player and projectile bodies are sampled around their silhouette. Smoke
-	// and terrain may therefore omit them only when no sampled edge is visible;
-	// ownership does not bypass a crossed sightline.
-	hidden := func(at Vec, extent float64, visibleInShadow bool) bool {
-=======
 	// A cloud hides only what it covers completely, and never what the viewer
 	// owns. Concealing a body's own rounds would make its smoke read as a wall it
 	// cannot shoot through: the round would vanish at the edge of the cloud and
@@ -54,26 +48,17 @@ func (w *World) SnapshotFor(playerID string, now time.Time, kind uint64) protoco
 	// smoke is bought for is hiding the *opponent* and the shots they fire, and
 	// only while the drawn cloud actually covers them.
 	hidden := func(at Vec, ownerID string, extent float64) bool {
->>>>>>> b44abae (Revert "fix los")
 		if outsideView(at, 0) || blind {
 			return true
 		}
 		if w.terrainOccluded(viewer.Position, at) {
 			return true
 		}
-<<<<<<< HEAD
-		return !w.anyPartVisible(viewer.Position, at, extent)
-	}
-	for _, id := range sortedPlayerIDs(w.players) {
-		p := w.players[id]
-		if id != playerID && hidden(p.Position, p.circleRadius(), w.tuning.Tables.Entities["player"].VisibleInShadow) {
-=======
 		return ownerID != playerID && w.concealed(viewer.Position, at, extent)
 	}
 	for _, id := range sortedPlayerIDs(w.players) {
 		p := w.players[id]
 		if id != playerID && hidden(p.Position, p.ID, p.circleRadius()) {
->>>>>>> b44abae (Revert "fix los")
 			continue
 		}
 		resource := p.Mana
@@ -104,11 +89,7 @@ func (w *World) SnapshotFor(playerID string, now time.Time, kind uint64) protoco
 	}
 	for _, id := range sortedProjectileIDs(w.projectiles) {
 		p := w.projectiles[id]
-<<<<<<< HEAD
-		if hidden(p.Position, p.circleRadius(), w.tuning.Tables.Entities["projectile"].VisibleInShadow) {
-=======
 		if hidden(p.Position, p.OwnerID, p.circleRadius()) {
->>>>>>> b44abae (Revert "fix los")
 			continue
 		}
 		message.Entities = append(message.Entities, protocol.Entity{
@@ -124,11 +105,7 @@ func (w *World) SnapshotFor(playerID string, now time.Time, kind uint64) protoco
 		// A telegraph is ground geometry rather than a body: it is hidden only
 		// when the point it is anchored at is inside a cloud, since the shape it
 		// warns about reaches well outside its own origin.
-<<<<<<< HEAD
-		if hidden(telegraph.Position, 0, w.tuning.Tables.Entities["telegraph"].VisibleInShadow) {
-=======
 		if hidden(telegraph.Position, telegraph.OwnerID, 0) {
->>>>>>> b44abae (Revert "fix los")
 			continue
 		}
 		message.Entities = append(message.Entities, protocol.Entity{
@@ -145,15 +122,10 @@ func (w *World) SnapshotFor(playerID string, now time.Time, kind uint64) protoco
 	}
 	for _, id := range sortedDeployableIDs(w.deployables) {
 		deployable := w.deployables[id]
-<<<<<<< HEAD
-		definition := w.tuning.Tables.Entities[deployable.Kind]
-		if hidden(deployable.Position, deployable.Field.Radius, definition.VisibleInShadow) {
-=======
 		// A cloud is never hidden by a cloud: what is standing in the world is
 		// exactly what explains why everything inside it went missing. Solid
 		// terrain still hides the field when it is wholly out of sight.
 		if blind || outsideView(deployable.Position, deployable.Field.Radius) || w.terrainOccluded(viewer.Position, deployable.Position) {
->>>>>>> b44abae (Revert "fix los")
 			continue
 		}
 		message.Entities = append(message.Entities, protocol.Entity{

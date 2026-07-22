@@ -1,7 +1,5 @@
 import { Filter, GlProgram, GpuProgram, UniformGroup } from "pixi.js";
-import { deployableByKind } from "../tuning";
 import type { Collider } from "../types";
-import { smokeCenterRadiusScale, smokeOffsetScale, smokeOuterRadiusScale } from "./smoke";
 
 const maxOccluders = 32;
 const packedOccluders = maxOccluders * 4;
@@ -42,28 +40,6 @@ bool circleHit(vec2 origin, vec2 delta, vec3 circle) {
   return far > 0.001 && near < 0.999;
 }
 
-vec3 smokeCircle(vec3 smoke, int index) {
-  if (index == 0) return vec3(smoke.xy, smoke.z * ${smokeCenterRadiusScale});
-  float offset = smoke.z * ${smokeOffsetScale};
-  vec2 direction = index == 1 ? vec2(1.0, 0.0) : index == 2 ? vec2(-1.0, 0.0) : index == 3 ? vec2(0.0, 1.0) : vec2(0.0, -1.0);
-  return vec3(smoke.xy + direction * offset, smoke.z * ${smokeOuterRadiusScale});
-}
-
-bool smokeHit(vec2 origin, vec2 delta, vec3 smoke) {
-  vec2 point = origin + delta;
-  bool originInside = false;
-  bool pointInViewerCircle = false;
-  for (int index = 0; index < 5; index++) {
-    vec3 circle = smokeCircle(smoke, index);
-    bool containsOrigin = distance(origin, circle.xy) <= circle.z;
-    originInside = originInside || containsOrigin;
-    pointInViewerCircle = pointInViewerCircle || (containsOrigin && distance(point, circle.xy) <= circle.z);
-  }
-  if (originInside) return !pointInViewerCircle;
-  for (int index = 0; index < 5; index++) if (circleHit(origin, delta, smokeCircle(smoke, index))) return true;
-  return false;
-}
-
 bool boxHit(vec2 origin, vec2 delta, vec4 box) {
   vec2 low = box.xy - box.zw, high = box.xy + box.zw;
   float near = 0.001, far = 0.999;
@@ -89,9 +65,7 @@ void main(void) {
   for (int index = 0; index < ${maxOccluders}; index++) {
     if (index >= uCount) break;
     vec4 shape = uOccluders[index];
-    if ((shape.w < -1.5 && smokeHit(uOrigin, delta, shape.xyz)) ||
-        (shape.w >= -1.5 && shape.w < 0.0 && circleHit(uOrigin, delta, shape.xyz)) ||
-        (shape.w >= 0.0 && boxHit(uOrigin, delta, shape))) {
+    if ((shape.w < 0.0 && circleHit(uOrigin, delta, shape.xyz)) || (shape.w >= 0.0 && boxHit(uOrigin, delta, shape))) {
       blocked = true;
       break;
     }
@@ -135,33 +109,6 @@ fn circleHit(origin: vec2<f32>, delta: vec2<f32>, circle: vec3<f32>) -> bool {
   return far > 0.001 && near < 0.999;
 }
 
-fn smokeCircle(smoke: vec3<f32>, index: i32) -> vec3<f32> {
-  if (index == 0) { return vec3<f32>(smoke.xy, smoke.z * ${smokeCenterRadiusScale}); }
-  let offset = smoke.z * ${smokeOffsetScale};
-  var direction = vec2<f32>(0.0, -1.0);
-  if (index == 1) { direction = vec2<f32>(1.0, 0.0); }
-  else if (index == 2) { direction = vec2<f32>(-1.0, 0.0); }
-  else if (index == 3) { direction = vec2<f32>(0.0, 1.0); }
-  return vec3<f32>(smoke.xy + direction * offset, smoke.z * ${smokeOuterRadiusScale});
-}
-
-fn smokeHit(origin: vec2<f32>, delta: vec2<f32>, smoke: vec3<f32>) -> bool {
-  let point = origin + delta;
-  var originInside = false;
-  var pointInViewerCircle = false;
-  for (var index = 0; index < 5; index++) {
-    let circle = smokeCircle(smoke, index);
-    let containsOrigin = distance(origin, circle.xy) <= circle.z;
-    originInside = originInside || containsOrigin;
-    pointInViewerCircle = pointInViewerCircle || (containsOrigin && distance(point, circle.xy) <= circle.z);
-  }
-  if (originInside) { return !pointInViewerCircle; }
-  for (var index = 0; index < 5; index++) {
-    if (circleHit(origin, delta, smokeCircle(smoke, index))) { return true; }
-  }
-  return false;
-}
-
 fn boxHit(origin: vec2<f32>, delta: vec2<f32>, box: vec4<f32>) -> bool {
   let low = box.xy - box.zw;
   let high = box.xy + box.zw;
@@ -193,9 +140,7 @@ fn boxHit(origin: vec2<f32>, delta: vec2<f32>, box: vec4<f32>) -> bool {
   for (var index = 0; index < ${maxOccluders}; index++) {
     if (index >= shadow.uCount) { break; }
     let shape = shadow.uOccluders[index];
-    if ((shape.w < -1.5 && smokeHit(shadow.uOrigin, delta, shape.xyz)) ||
-        (shape.w >= -1.5 && shape.w < 0.0 && circleHit(shadow.uOrigin, delta, shape.xyz)) ||
-        (shape.w >= 0.0 && boxHit(shadow.uOrigin, delta, shape))) {
+    if ((shape.w < 0.0 && circleHit(shadow.uOrigin, delta, shape.xyz)) || (shape.w >= 0.0 && boxHit(shadow.uOrigin, delta, shape))) {
       blocked = true;
       break;
     }
@@ -214,7 +159,7 @@ export function packShadowOccluders(colliders: Collider[], origin: { x: number; 
     const offset = index * 4;
     data[offset] = collider.x; data[offset + 1] = collider.y;
     if (collider.shape === "circle") {
-      data[offset + 2] = collider.radius; data[offset + 3] = deployableByKind(collider.kind)?.conceals ? -2 : -1;
+      data[offset + 2] = collider.radius; data[offset + 3] = -1;
     } else {
       data[offset + 2] = collider.width / 2; data[offset + 3] = collider.height / 2;
     }
