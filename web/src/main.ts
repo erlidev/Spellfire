@@ -376,6 +376,10 @@ class SpellFire {
     // tier one are both cooldown-gated, and both owe the same feedback.
     const ability = abilities[slot.abilityId];
     if (!ability?.cooldown_ms) return;
+    // A cast the server will refuse for lack of mana never starts its cooldown
+    // there, so predicting one here would show a lockout on a spell that was
+    // never actually cast.
+    if (ability.cost.kind === "mana" && (this.localEntity?.mana ?? 0) < ability.cost.amount) return;
     const ready = this.cooldowns[slot.id] ?? 0;
     if (Date.now() < ready) return;
     this.cooldowns[slot.id] = Date.now() + ability.cooldown_ms;
