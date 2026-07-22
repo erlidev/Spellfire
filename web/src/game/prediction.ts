@@ -1,4 +1,4 @@
-import { combat, entityDefinitions, simulation, world } from "../tuning";
+import { combat, entityDefinitions, noMovementStatus, simulation, world, type MovementStatus } from "../tuning";
 import { Buttons, type Collider, type Entity, type InputFrame } from "../types";
 
 // Every constant below is derived from the shared tuning tables, so prediction
@@ -36,15 +36,20 @@ export class Predictor {
    * movement — weight class, scope, raised shield — and is passed in rather than
    * derived here, because prediction has no view of the loadout. The server
    * applies exactly the same multiplier, so a scoped step does not rubber-band.
+   *
+   * `status` is the other half of the same agreement: what the status layer is
+   * doing to this body, resolved from the effect IDs on its own snapshot. A
+   * slowed body predicted at full speed runs ahead of the server and is snapped
+   * back by every reconciliation, which is the stutter a slow used to cause.
    */
-  step(buttons: number, aimX: number, aimY: number, selectedSlot: number, now: number, handling = 1): InputFrame {
+  step(buttons: number, aimX: number, aimY: number, selectedSlot: number, now: number, handling = 1, status: MovementStatus = noMovementStatus): InputFrame {
     const aimLength = Math.hypot(aimX, aimY);
     if (aimLength > 0.001) { this.aimX = aimX / aimLength; this.aimY = aimY / aimLength; }
     let dx = Number(Boolean(buttons & Buttons.Right)) - Number(Boolean(buttons & Buttons.Left));
     let dy = Number(Boolean(buttons & Buttons.Down)) - Number(Boolean(buttons & Buttons.Up));
     const moveLength = Math.hypot(dx, dy);
     if (moveLength) { dx /= moveLength; dy /= moveLength; }
-    if ((buttons & Buttons.Dash) && !(this.previousButtons & Buttons.Dash) && now >= this.dashReadyAt && this.mass >= 0) {
+    if ((buttons & Buttons.Dash) && !(this.previousButtons & Buttons.Dash) && now >= this.dashReadyAt && this.mass >= 0 && !status.immobile) {
       this.dashDirX = moveLength ? dx : this.aimX; this.dashDirY = moveLength ? dy : this.aimY;
       this.dashTicksLeft = dashTicks;
       this.dashReadyAt = now + dashCooldownMS;
@@ -52,11 +57,19 @@ export class Predictor {
     let motion: Motion;
     if (this.mass < 0) {
       motion = { x: 0, y: 0 }; this.dashTicksLeft = 0;
+    } else if (status.displaced) {
+      // A knockback is driven entirely by the server — the direction it carries
+      // never reaches the wire — and it cancels an in-flight dash. Predicting
+      // nothing lets reconciliation supply the whole displacement, rather than
+      // the body fighting its own input while it is being thrown.
+      motion = { x: 0, y: 0 }; this.dashTicksLeft = 0;
+    } else if (status.immobile) {
+      motion = { x: 0, y: 0 }; this.dashTicksLeft = 0;
     } else if (this.dashTicksLeft > 0) {
       motion = { x: this.dashDirX * dashSpeed / tickRate, y: this.dashDirY * dashSpeed / tickRate };
       this.dashTicksLeft--;
     } else {
-      motion = { x: dx * speed * handling / tickRate, y: dy * speed * handling / tickRate };
+      motion = { x: dx * speed * handling * status.scale / tickRate, y: dy * speed * handling * status.scale / tickRate };
     }
     this.applyMotion(motion);
     this.previousButtons = buttons;

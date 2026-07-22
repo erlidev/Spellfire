@@ -5,7 +5,7 @@ import { Predictor } from "./game/prediction";
 import { joystickVector, movementButtons } from "./game/touch";
 import { GameView } from "./game/view";
 import { GameSocket } from "./net/socket";
-import { abilities, ammunition as ammunitionTable, damageBandFor, dangerBandAt, entityDefinitions, handlingScale, materials as materialsTable, progression as progressionTable, resourceMax, safeRadius, session, specialAmmunition, weapons, weightOf, world, xpToNext, type AdminField, type EntityDefinition, type Guard, type Weapon } from "./tuning";
+import { abilities, ammunition as ammunitionTable, damageBandFor, dangerBandAt, entityDefinitions, handlingScale, materials as materialsTable, movementStatus, progression as progressionTable, resourceMax, safeRadius, session, specialAmmunition, weapons, weightOf, world, xpToNext, type AdminField, type EntityDefinition, type Guard, type Weapon } from "./tuning";
 import { Buttons, ServerKind, type Character, type CharacterClass, type CraftedItem, type Entity, type LoadoutSet, type ServerMessage } from "./types";
 
 function element<T extends HTMLElement>(id: string): T {
@@ -342,15 +342,19 @@ class SpellFire {
     // A weapon with no scope ignores the button entirely, so holding it never
     // predicts a slowdown the server is not applying.
     const weapon = resolvedWeapon(this.loadout.weapon, this.items);
-    const scoped = Boolean(weapon?.scope) && (buttons & Buttons.Scope) !== 0;
+    // What the status layer is doing to this body rides its own snapshot, so a
+    // slow, root, stun, or knockback is predicted instead of being corrected by
+    // every reconciliation. A stun also drops both committed stances.
+    const status = movementStatus(this.localEntity?.effectIDs ?? []);
+    const scoped = Boolean(weapon?.scope) && !status.stunned && (buttons & Buttons.Scope) !== 0;
     const guard = this.selectedGuard();
     // A broken shield cannot be raised, so predicting its movement penalty while
     // the server has already dropped it would rubber-band every step. The
     // authoritative durability is on the local body's own snapshot.
     const shielded = !guard || !this.localEntity || this.localEntity.maxShield <= 0 || this.localEntity.shield > 0;
-    const guarding = Boolean(guard) && shielded && (buttons & Buttons.Fire) !== 0;
+    const guarding = Boolean(guard) && shielded && !status.stunned && (buttons & Buttons.Fire) !== 0;
     if (!scoped) buttons &= ~Buttons.Scope;
-    const input = this.predictor.step(buttons, this.aim.x, this.aim.y, this.selectedSlot, performance.now(), handlingScale(weapon, guard, scoped, guarding));
+    const input = this.predictor.step(buttons, this.aim.x, this.aim.y, this.selectedSlot, performance.now(), handlingScale(weapon, guard, scoped, guarding), status);
     this.socket?.sendInput(input);
     this.setScopeView(scoped, weapon?.scope?.view_bonus ?? 0);
     this.view?.setHeavyRecoil(this.firesExplosive(weapon));

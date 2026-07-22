@@ -200,6 +200,10 @@ the cover the shooter saw. Damage output still comes from the one `standard` ban
 tier-1 spam spell from a tier-4 signature today is cost, cooldown, telegraph, and what it does to a
 body, and 2.7's bands are what will separate their numbers. Rift repositions its caster only —
 repositioning a squad waits on Phase 5 — and Bulwark's armor lands on its caster for the same reason.
+Client prediction now mirrors the status layer as well as the equipped kit ([prediction.ts](web/src/game/prediction.ts),
+`tuning.movementStatus`): a slow, root, or stun is predicted from the effect IDs already on the local
+body's snapshot, and a knockback predicts nothing and lets reconciliation carry the body. Without it a
+controlled player ran ahead of the server and was snapped back twenty times a second.
 
 ### 2.6 Line of sight
 - [ ] Vision/targeting occlusion; trees currently block projectiles only

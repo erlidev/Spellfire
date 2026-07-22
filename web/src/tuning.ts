@@ -203,6 +203,41 @@ export function handlingScale(weapon: Weapon | undefined, guard: Guard | undefin
   return scale;
 }
 
+/** What the statuses running on a body do to its movement, for prediction. */
+export interface MovementStatus {
+  /** The slowest slow acting on the body; slows take the strongest, never compound. */
+  scale: number;
+  /** A root or a stun: the body may not move or dash under its own power. */
+  immobile: boolean;
+  /** A stun also suppresses the committed stances and every action. */
+  stunned: boolean;
+  /** A knockback drives the body from the server; nothing local may predict it. */
+  displaced: boolean;
+}
+
+export const noMovementStatus: MovementStatus = { scale: 1, immobile: false, stunned: false, displaced: false };
+
+/**
+ * What the status layer does to movement, mirroring `World.movementScale`,
+ * `rooted`, `stunned`, and `knockback`. Active effect IDs ride the local body's
+ * own snapshot, so prediction can apply the same rules the server does instead
+ * of walking at full speed and being pulled back by every reconciliation.
+ */
+export function movementStatus(effectIDs: readonly string[]): MovementStatus {
+  const status: MovementStatus = { ...noMovementStatus };
+  for (const id of effectIDs) {
+    const effect = effects[id];
+    if (!effect) continue;
+    switch (effect.kind) {
+      case "slow": status.scale = Math.min(status.scale, effect.speed_multiplier ?? 1); break;
+      case "root": status.immobile = true; break;
+      case "stun": status.immobile = true; status.stunned = true; break;
+      case "knockback": status.displaced = true; break;
+    }
+  }
+  return status;
+}
+
 // Snapshots carry only a projectile's kind, so the renderer resolves its shape
 // here. Every projectile belongs to an ability, and kinds are unique across the
 // tables, which the server validates at load.

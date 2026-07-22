@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { combat, entityDefinitions, simulation } from "../tuning";
+import { combat, effects, entityDefinitions, movementStatus, simulation } from "../tuning";
 import { Buttons, type Entity } from "../types";
 import { Predictor } from "./prediction";
 
@@ -10,6 +10,16 @@ const { speed } = combat.player;
 const { distance: dashDistance, duration_ms: dashDurationMS } = combat.dash;
 const dashTicks = Math.max(1, Math.round((dashDurationMS / 1000) * tickRate));
 const tickMS = 1000 / tickRate;
+
+// The statuses are looked up by kind rather than named, so retiring a row moves
+// the test with the tables instead of breaking it.
+function effectOfKind(kind: string): string {
+  const id = Object.keys(effects).find((key) => effects[key]!.kind === kind);
+  if (!id) throw new Error(`no shipped ${kind} effect`);
+  return id;
+}
+const slowID = effectOfKind("slow");
+const slowScale = effects[slowID]!.speed_multiplier!;
 
 function entity(overrides: Partial<Entity> = {}): Entity {
   return {
@@ -81,5 +91,42 @@ describe("client prediction", () => {
     const predictor = new Predictor(); predictor.initialize(entity({ mass: -1 }));
     predictor.step(Buttons.Right | Buttons.Dash, 1, 0, 0, 0);
     expect(predictor.x).toBe(0); expect(predictor.y).toBe(0);
+  });
+
+  it("predicts a slowed step at the slowed speed", () => {
+    const predictor = new Predictor(); predictor.initialize(entity());
+    predictor.step(Buttons.Right, 1, 0, 0, 0, 1, movementStatus([slowID]));
+    expect(predictor.x).toBeCloseTo(speed * slowScale / tickRate);
+  });
+
+  it("takes the strongest slow rather than compounding them", () => {
+    const slows = Object.keys(effects).filter((key) => effects[key]!.kind === "slow");
+    if (slows.length < 2) return;
+    const strongest = Math.min(...slows.map((id) => effects[id]!.speed_multiplier!));
+    const predictor = new Predictor(); predictor.initialize(entity());
+    predictor.step(Buttons.Right, 1, 0, 0, 0, 1, movementStatus(slows));
+    expect(predictor.x).toBeCloseTo(speed * strongest / tickRate);
+  });
+
+  it("predicts neither movement nor dash while rooted", () => {
+    const predictor = new Predictor(); predictor.initialize(entity());
+    predictor.step(Buttons.Right | Buttons.Dash, 1, 0, 0, 0, 1, movementStatus([effectOfKind("root")]));
+    expect(predictor.x).toBe(0);
+    // The dash was refused rather than merely suppressed, so once the root ends
+    // the next press still dashes: nothing was spent on the rooted press.
+    predictor.step(0, 1, 0, 0, tickMS);
+    predictor.step(Buttons.Right | Buttons.Dash, 1, 0, 0, 2 * tickMS);
+    expect(predictor.x).toBeCloseTo(dashDistance / dashTicks);
+  });
+
+  it("leaves a knockback entirely to the server and cancels the dash", () => {
+    const predictor = new Predictor(); predictor.initialize(entity());
+    predictor.step(Buttons.Right | Buttons.Dash, 1, 0, 0, 0);
+    const dashed = predictor.x;
+    predictor.step(Buttons.Right, 1, 0, 0, tickMS, 1, movementStatus([effectOfKind("knockback")]));
+    expect(predictor.x).toBe(dashed);
+    // The cancelled dash does not resume once the knockback ends.
+    predictor.step(Buttons.Right, 1, 0, 0, 2 * tickMS);
+    expect(predictor.x - dashed).toBeCloseTo(speed / tickRate);
   });
 });
