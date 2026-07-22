@@ -2,6 +2,7 @@ import { API, type AdminEntityState } from "./api";
 import { buildableAmmunition, componentOf, cost as craftCost, craftable, describe, fitting, itemLabel, lockedCraftable, materialName, resolvedWeapon, shortfall, slotsOf } from "./game/crafting";
 import { bar, barSlots, contentName, defaultLoadout, equippable, ledgerOf, loadoutProblem, locked, type Ledger, type LockedContent, type SlotKind } from "./game/loadout";
 import { Predictor } from "./game/prediction";
+import { joystickVector, movementButtons } from "./game/touch";
 import { GameView } from "./game/view";
 import { GameSocket } from "./net/socket";
 import { abilities, ammunition as ammunitionTable, damageBandFor, dangerBandAt, entityDefinitions, gadgets as gadgetsTable, handlingScale, materials as materialsTable, progression as progressionTable, resourceMax, safeRadius, session, specialAmmunition, weapons, weightOf, world, xpToNext, type AdminField, type EntityDefinition, type Guard } from "./tuning";
@@ -21,7 +22,9 @@ class SpellFire {
   private view?: GameView;
   private predictor?: Predictor;
   private inputTimer = 0;
-  private pressed = new Set<number>();
+  // Each physical control owns one entry, so releasing one finger cannot clear
+  // a button that another finger (or a hardware key) is still holding.
+  private heldInputs = new Map<string, number>();
   private aim = { x: 1, y: 0 };
   private noticeTimer = 0;
   private lastBand = "";
@@ -117,16 +120,16 @@ class SpellFire {
     element<HTMLFormElement>("auth-form").addEventListener("submit", (event) => void this.submitAuth(event));
     element<HTMLFormElement>("character-form").addEventListener("submit", (event) => void this.createCharacter(event));
     const menu = element<HTMLDialogElement>("menu-dialog");
-    element("menu-button").addEventListener("click", () => { if (menu.open) menu.close(); else { this.setMenuCollapsed(false); this.renderMenu(this.menuTab); menu.show(); } });
-    element("menu-collapse").addEventListener("click", () => this.setMenuCollapsed(!menu.classList.contains("collapsed")));
+    bindActivation(element("menu-button"), () => { if (menu.open) menu.close(); else { this.setMenuCollapsed(false); this.renderMenu(this.menuTab); menu.show(); } });
+    bindActivation(element("menu-collapse"), () => this.setMenuCollapsed(!menu.classList.contains("collapsed")));
     menu.addEventListener("pointerenter", () => { window.clearTimeout(this.menuCollapseTimer); if (menu.classList.contains("collapsed")) this.setMenuCollapsed(false); });
     menu.addEventListener("pointerleave", () => this.scheduleMenuCollapse());
     menu.addEventListener("focusout", () => { this.refreshOpenMenu(); if (!menu.matches(":hover")) this.scheduleMenuCollapse(); });
     menu.addEventListener("close", () => { window.clearTimeout(this.menuCollapseTimer); window.cancelAnimationFrame(this.menuRefreshFrame); this.menuRefreshFrame = 0; });
     element("menu-tabs").addEventListener("click", (event) => { const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-tab]"); if (button) this.renderMenu(button.dataset.tab ?? "character"); });
     element("exit-button").addEventListener("click", () => { if (confirm(`Exit to Home? Your body stays in the world for ${session.logout_linger_seconds} seconds after you leave and can still be attacked.`)) this.exitGame(); });
-    element("connection-cancel").addEventListener("click", () => this.exitGame());
-    element("respawn-button").addEventListener("click", () => this.socket?.respawn());
+    bindActivation(element("connection-cancel"), () => this.exitGame());
+    bindActivation(element("respawn-button"), () => this.socket?.respawn());
     element("developer-mode-exit").addEventListener("click", () => this.setDeveloperMode(false));
   }
 
@@ -137,34 +140,92 @@ class SpellFire {
       // spells, a Gunslinger's weapon and five gadgets.
       const slot = slotKey(event.code);
       if (slot !== undefined && !isFormField(event.target)) { event.preventDefault(); this.selectSlot(slot); return; }
-      const button = keyMap[event.code]; if (button && !isFormField(event.target)) { event.preventDefault(); this.pressed.add(button); }
+      const button = keyMap[event.code]; if (button && !isFormField(event.target)) { event.preventDefault(); this.setHeld(`key:${event.code}`, button); }
     });
-    window.addEventListener("keyup", (event) => { const button = keyMap[event.code]; if (button) this.pressed.delete(button); });
-    window.addEventListener("pointermove", (event) => { if (!this.view) return; this.aim = this.view.pointerWorld(event.clientX, event.clientY); });
-    element("canvas-host").addEventListener("pointerdown", (event) => {
+    window.addEventListener("keyup", (event) => { if (keyMap[event.code]) this.setHeld(`key:${event.code}`, 0); });
+    // Mouse aim keeps tracking outside the canvas during a held shot. Touch aim
+    // is handled only by the world or shooting stick that owns that pointer.
+    window.addEventListener("pointermove", (event) => { if (!this.view || event.pointerType !== "mouse") return; this.aim = this.view.pointerWorld(event.clientX, event.clientY); });
+    const canvas = element("canvas-host");
+    canvas.addEventListener("pointermove", (event) => {
+      if (!this.view || event.pointerType === "mouse") return;
+      this.aim = this.view.pointerWorld(event.clientX, event.clientY);
+    });
+    canvas.addEventListener("pointerdown", (event) => {
+      if (this.view) this.aim = this.view.pointerWorld(event.clientX, event.clientY);
       // The secondary button scopes, mirroring Shift, because the committed
       // aiming mode is held rather than toggled.
-      if ((event as PointerEvent).button === 2) { this.pressed.add(Buttons.Scope); return; }
-      if ((event as PointerEvent).button !== 0) return;
-      if (this.adminPositionPick || this.adminMode !== "off") { void this.useAdminPointer(event as PointerEvent); return; }
-      this.pressed.add(Buttons.Fire);
+      if (event.button === 2) { this.setHeld(`pointer:${event.pointerId}:scope`, Buttons.Scope); return; }
+      if (event.button !== 0) return;
+      if (this.adminPositionPick || this.adminMode !== "off") { void this.useAdminPointer(event); return; }
+      event.preventDefault();
+      this.setHeld(`pointer:${event.pointerId}:fire`, Buttons.Fire);
     });
     window.addEventListener("pointerup", (event) => {
-      if ((event as PointerEvent).button === 0) this.pressed.delete(Buttons.Fire);
-      if ((event as PointerEvent).button === 2) this.pressed.delete(Buttons.Scope);
+      this.setHeld(`pointer:${event.pointerId}:fire`, 0);
+      this.setHeld(`pointer:${event.pointerId}:scope`, 0);
     });
-    element("canvas-host").addEventListener("contextmenu", (event) => event.preventDefault());
+    window.addEventListener("pointercancel", (event) => {
+      this.setHeld(`pointer:${event.pointerId}:fire`, 0);
+      this.setHeld(`pointer:${event.pointerId}:scope`, 0);
+    });
+    window.addEventListener("blur", () => this.heldInputs.clear());
+    canvas.addEventListener("contextmenu", (event) => event.preventDefault());
     // The wheel steps through the same slots, wrapping in both directions.
     element("canvas-host").addEventListener("wheel", (event) => { event.preventDefault(); this.selectSlot((this.selectedSlot + (event.deltaY > 0 ? 1 : barSlots - 1)) % barSlots); }, { passive: false });
     element("touch-slots").addEventListener("click", (event) => { const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-slot]"); if (button) this.selectSlot(Number(button.dataset.slot)); });
-    const touchMap: Record<string, number> = { up: Buttons.Up, down: Buttons.Down, left: Buttons.Left, right: Buttons.Right, fire: Buttons.Fire, dash: Buttons.Dash, interact: Buttons.Interact, scope: Buttons.Scope };
+    const touchMap: Record<string, number> = { dash: Buttons.Dash, reload: Buttons.Reload, interact: Buttons.Interact, scope: Buttons.Scope };
     for (const button of document.querySelectorAll<HTMLButtonElement>("#touch-controls button")) {
       const bit = touchMap[button.dataset.button ?? ""];
       if (!bit) continue;
-      button.addEventListener("pointerdown", (event) => { event.preventDefault(); button.setPointerCapture(event.pointerId); this.pressed.add(bit); });
-      const release = () => this.pressed.delete(bit);
+      button.addEventListener("pointerdown", (event) => { event.preventDefault(); button.setPointerCapture(event.pointerId); this.setHeld(`touch:${button.dataset.button}:${event.pointerId}`, bit); });
+      const release = (event: PointerEvent) => this.setHeld(`touch:${button.dataset.button}:${event.pointerId}`, 0);
       button.addEventListener("pointerup", release); button.addEventListener("pointercancel", release); button.addEventListener("lostpointercapture", release);
     }
+    this.bindJoystick(element("move-joystick"), "move");
+    this.bindJoystick(element("shoot-joystick"), "shoot");
+  }
+
+  private setHeld(source: string, buttons: number): void {
+    if (buttons) this.heldInputs.set(source, buttons); else this.heldInputs.delete(source);
+  }
+
+  /** Fixed bases make the controls predictable; pointer capture preserves the drag. */
+  private bindJoystick(base: HTMLElement, kind: "move" | "shoot"): void {
+    const thumb = base.querySelector<HTMLElement>(".joystick-thumb");
+    if (!thumb) return;
+    let activePointer: number | undefined;
+    const update = (event: PointerEvent) => {
+      const bounds = base.getBoundingClientRect();
+      const travel = Math.max(1, (Math.min(bounds.width, bounds.height) - thumb.offsetWidth) / 2 - 5);
+      const vector = joystickVector(event.clientX, event.clientY, bounds, travel);
+      thumb.style.transform = `translate(${vector.knobX}px, ${vector.knobY}px)`;
+      if (kind === "move") {
+        const direction = movementButtons(vector.x, vector.y);
+        let buttons = 0;
+        if (direction.up) buttons |= Buttons.Up;
+        if (direction.down) buttons |= Buttons.Down;
+        if (direction.left) buttons |= Buttons.Left;
+        if (direction.right) buttons |= Buttons.Right;
+        this.setHeld("joystick:move", buttons);
+      } else {
+        const length = Math.hypot(vector.x, vector.y);
+        if (length > 0.18) this.aim = { x: vector.x / length, y: vector.y / length };
+      }
+    };
+    const release = (event: PointerEvent) => {
+      if (event.pointerId !== activePointer) return;
+      activePointer = undefined; base.classList.remove("active"); thumb.style.transform = "translate(0px, 0px)";
+      this.setHeld(`joystick:${kind}`, 0);
+    };
+    base.addEventListener("pointerdown", (event) => {
+      if (activePointer !== undefined || event.button !== 0) return;
+      event.preventDefault(); activePointer = event.pointerId; base.classList.add("active"); base.setPointerCapture(event.pointerId);
+      if (kind === "shoot") this.setHeld("joystick:shoot", Buttons.Fire);
+      update(event);
+    });
+    base.addEventListener("pointermove", (event) => { if (event.pointerId === activePointer) update(event); });
+    base.addEventListener("pointerup", release); base.addEventListener("pointercancel", release); base.addEventListener("lostpointercapture", release);
   }
 
   private bindSettings(): void {
@@ -260,7 +321,7 @@ class SpellFire {
 
   private simulateInput(): void {
     if (!this.predictor || element("game").hidden) return;
-    let buttons = 0; for (const value of this.pressed) buttons |= value;
+    let buttons = 0; for (const value of this.heldInputs.values()) buttons |= value;
     // A weapon with no scope ignores the button entirely, so holding it never
     // predicts a slowdown the server is not applying.
     const weapon = resolvedWeapon(this.loadout.weapon, this.items);
@@ -968,7 +1029,7 @@ class SpellFire {
   private selectedCharacter(): Character | undefined { const id = element<HTMLSelectElement>("character-select").value; return this.characters.find((character) => character.id === id); }
 
   private exitGame(): void {
-    window.clearInterval(this.inputTimer); this.socket?.close(); this.socket = undefined; this.view?.destroy(); this.view = undefined; this.predictor = undefined; this.pressed.clear(); this.lastBand = "";
+    window.clearInterval(this.inputTimer); this.socket?.close(); this.socket = undefined; this.view?.destroy(); this.view = undefined; this.predictor = undefined; this.heldInputs.clear(); this.lastBand = "";
     this.draft = undefined; this.selectedSlot = 0; this.inSafety = true; this.respecOwed = false; this.loadoutStatus = "";
     this.items = []; this.materials = {}; this.craftWeapon = ""; this.craftChoices = {}; this.craftStatus = "";
     this.ledger = ledgerOf([]); this.level = 1; this.xp = 0; this.xpNext = 0; this.localEntity = undefined;
@@ -979,6 +1040,22 @@ class SpellFire {
 }
 
 function heading(text: string): HTMLElement { const node = document.createElement("h3"); node.textContent = text; return node; }
+
+/**
+ * iOS can suppress a delayed click after a touch gesture. Activate important
+ * game controls on touch pointer-up, while retaining click for mouse/keyboard.
+ */
+function bindActivation(target: HTMLElement, activate: () => void): void {
+  let lastTouch = -1000;
+  target.addEventListener("pointerup", (event) => {
+    if (event.pointerType === "mouse") return;
+    event.preventDefault(); lastTouch = performance.now(); activate();
+  });
+  target.addEventListener("click", (event) => {
+    if (performance.now() - lastTouch < 500) { event.preventDefault(); return; }
+    activate();
+  });
+}
 
 /**
  * How a weapon handles, in the terms the player actually feels: its weight

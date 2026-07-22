@@ -16,6 +16,8 @@ Camera behavior must:
 - go completely white while the local player is [flashed](../design/gunslinger.md#defense), and clear as the status ends — the server is already sending nothing to draw behind it;
 - account for UI safe areas and touch controls when framing threats.
 
+The server interest area covers the complete axis-aligned square whose half-width and half-height equal the configured maximum view distance. Corners of the rectangular camera therefore do not lose entities to a circular range cutoff.
+
 ## Actor labels
 
 Visible players have a compact world-space plate with display name, health, and relevant squad/threat marker. The local plate may be stronger but cannot imply invulnerability. Enemy Mage mana stays private unless game design later makes it public.
@@ -49,7 +51,7 @@ The initial interaction binding is E on keyboard and Use on touch. The protocol 
 
 ## Slot selection
 
-The [six equipped slots](../design/progression-and-crafting.md#slots) bind to **1–6**, and the **mouse wheel** steps through them and wraps in both directions. Touch gets six slot buttons; that is the minimum viable placement rather than the settled one, and a touch layout that carries six slots without crowding the aim and movement zones is still owed. The selection travels with every input, so the server resolves the use button against the slot the player actually had selected rather than against whatever arrived last. An empty slot does nothing, visibly: it is a slot the player has not filled, not a failure to report. Bindings are remappable once [remappable controls](accessibility.md) land.
+The [six equipped slots](../design/progression-and-crafting.md#slots) bind to **1–6**, and the **mouse wheel** steps through them and wraps in both directions. Touch gets six slot buttons in a centered row above the fixed sticks; dash/interact sit beside movement and reload/scope beside aim so the utility buttons no longer consume either stick's control area. The slot row remains the minimum viable placement rather than the settled one, and a layout optimized for one-handed reach is still owed. The selection travels with every input, so the server resolves the use button against the slot the player actually had selected rather than against whatever arrived last. An empty slot does nothing, visibly: it is a slot the player has not filled, not a failure to report. Bindings are remappable once [remappable controls](accessibility.md) land.
 
 Firing is legible from outside the shooter as well as inside it: the drawn weapon sits wherever the recoil pattern has walked it, and each shot shoves it back along its own axis with a muzzle flash. Both come from the snapshot, so an opponent watching a spray sees the same walk its owner does — that is what makes a pattern something to play around. A deployed smoke cloud draws over the bodies inside it as drifting volume rather than a flat disc, and a gadget with a cooldown of its own shows the time remaining on its slot.
 

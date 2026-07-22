@@ -49,8 +49,14 @@
       <div id="death-overlay" class="connection-overlay" hidden><h2>You fell in the frontier</h2><p>Your crafted gear is safe. This foundation does not yet award carried materials.</p><button id="respawn-button" class="primary">Respawn at central hub</button></div>
       <div id="touch-slots" class="hud touch-slots" aria-label="Select equipped slot"></div>
       <div id="touch-controls" aria-label="Touch controls">
-        <div class="touch-move"><button data-button="up">▲</button><button data-button="left">◀</button><button data-button="down">▼</button><button data-button="right">▶</button></div>
-        <div class="touch-actions"><button data-button="interact">Use</button><button data-button="dash">Dash</button><button data-button="scope">Scope</button><button data-button="fire">Fire</button></div>
+        <div class="touch-cluster touch-cluster-left">
+          <div id="move-joystick" class="joystick" data-joystick="move" aria-label="Movement joystick"><div class="joystick-thumb"></div></div>
+          <div class="touch-actions"><button data-button="dash">Dash</button><button data-button="interact">Use</button></div>
+        </div>
+        <div class="touch-cluster touch-cluster-right">
+          <div class="touch-actions"><button data-button="reload">Reload</button><button data-button="scope">Scope</button></div>
+          <div id="shoot-joystick" class="joystick joystick-shoot" data-joystick="shoot" aria-label="Aim and shoot joystick"><div class="joystick-thumb"></div></div>
+        </div>
       </div>
       <div id="scope-overlay" aria-hidden="true"></div>
     </section>

@@ -284,6 +284,9 @@ stone wall sequences after it.
 
 ## Phase 7 — Interface, accessibility, and platform
 
+- [x] Fixed dual-stick mobile combat controls with independent multi-touch capture, direct world-touch firing, and reachable dash/interact/reload/scope placement ([responsive-and-mobile.md](docs/game/ui/responsive-and-mobile.md#gameplay-and-touch))
+- [x] Reliable touch-pointer activation for menu/connection/respawn actions, plus iOS gameplay selection/callout suppression without disabling form editing
+- [x] Snapshot interest coverage includes the full square of the configured maximum view distance, including both camera corners ([game-view-and-hud.md](docs/game/ui/game-view-and-hud.md#camera))
 - [ ] Actor plates: display name, health, and squad/threat marker with density-based simplification and the specified occlusion priority ([game-view-and-hud.md](docs/game/ui/game-view-and-hud.md#actor-labels))
 - [ ] Enemy Mage mana stays private
 - [ ] Lower-centre ability bar: slots, cooldowns, charges, class resource, bindings, universal dash

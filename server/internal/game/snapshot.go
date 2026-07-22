@@ -2,6 +2,7 @@ package game
 
 import (
 	"fmt"
+	"math"
 	"time"
 
 	"spellfire/server/internal/model"
@@ -27,13 +28,20 @@ func (w *World) SnapshotFor(playerID string, now time.Time, kind uint64) protoco
 			viewDistance += scope.ViewBonus
 		}
 	}
-	radiusSq := viewDistance * viewDistance
+	// The camera is rectangular. Treating the configured reach as a radius cut
+	// off both visible corners, so the interest area is the full square whose
+	// half-width and half-height are the maximum view distance.
+	outsideView := func(at Vec, extent float64) bool {
+		delta := at.Sub(viewer.Position)
+		reach := viewDistance + extent
+		return math.Abs(delta.X) > reach || math.Abs(delta.Y) > reach
+	}
 	// A flashbang takes vision whole, and a smoke cloud takes it along one line.
 	// Both are enforced here rather than drawn over on the client: what a player
 	// cannot see, a client is never sent.
 	blind := w.blinded(viewer)
 	hidden := func(at Vec) bool {
-		return at.Sub(viewer.Position).LengthSq() > radiusSq || blind || w.occluded(viewer.Position, at)
+		return outsideView(at, 0) || blind || w.occluded(viewer.Position, at)
 	}
 	for _, id := range sortedPlayerIDs(w.players) {
 		p := w.players[id]
@@ -96,7 +104,7 @@ func (w *World) SnapshotFor(playerID string, now time.Time, kind uint64) protoco
 		deployable := w.deployables[id]
 		// A cloud is never hidden by a cloud: what is standing in the world is
 		// exactly what explains why everything behind it went missing.
-		if blind || deployable.Position.Sub(viewer.Position).LengthSq() > (viewDistance+deployable.Field.Radius)*(viewDistance+deployable.Field.Radius) {
+		if blind || outsideView(deployable.Position, deployable.Field.Radius) {
 			continue
 		}
 		message.Entities = append(message.Entities, protocol.Entity{
@@ -115,7 +123,7 @@ func (w *World) SnapshotFor(playerID string, now time.Time, kind uint64) protoco
 			continue
 		}
 		extent := item.boundingRadius()
-		if item.Position.Sub(viewer.Position).LengthSq() > (viewDistance+extent)*(viewDistance+extent) {
+		if outsideView(item.Position, extent) {
 			continue
 		}
 		entity := protocol.Entity{
