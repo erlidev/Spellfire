@@ -13,10 +13,10 @@ import (
 // resolving and vanishing. Smoke is the first: a circular field with a lifetime
 // that changes what can be seen without changing where a body may walk.
 //
-// The vision rule here is deliberately narrow. General line of sight — cover,
-// walls, and the Mage/Gunslinger matchup — is Phase 2.6's substrate and is not
-// approximated here; what this file owns is the one case a smoke canister is
-// bought for: a cloud hides what stands inside it, past arm's reach.
+// The field rule here is deliberately narrower than terrain line of sight: what
+// this file owns is the one case a smoke canister is bought for. A cloud hides
+// what stands inside it past arm's reach, but does not hide a body merely
+// because the sightline passes through smoke.
 type Deployable struct {
 	Entity
 	OwnerID string

@@ -16,8 +16,8 @@ import (
 // a tree. What the wall adds is a lifetime, an owner, and the placement rules
 // that keep it from being used as a cage.
 //
-// Line of sight is Phase 2.6's substrate; when it lands the wall blocks it for
-// free, because it is already a world item and the vision rule will read those.
+// Line of sight reads this same world-item geometry, so the wall blocks sight
+// for exactly as long as it blocks movement and rounds.
 
 // wallGroup is one caster's standing wall: the segments it raised and when they
 // come down. One group per caster is the design's whole limit — raising a

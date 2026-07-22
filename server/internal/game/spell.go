@@ -133,10 +133,16 @@ func (w *World) steer(projectile *Projectile, dt float64) {
 	projectile.Velocity = rotate(heading, turn).Mul(speed)
 }
 
-// nearestPlayer is the closest living body inside a radius that an owner may
-// actually act on: never itself, never one already reached, and never one PvP
-// protection puts out of reach.
+// nearestPlayer is the closest visible living body inside a radius that an
+// owner may actually act on: never itself, never one already reached, never one
+// hidden by terrain or smoke, and never one PvP protection puts out of reach.
 func (w *World) nearestPlayer(from Vec, radius float64, exclude map[string]bool, owner *Player) *Player {
+	// Blind fire remains possible because ordinary aim is just a direction, but
+	// an automatic homing or chain choice cannot use information its owner is
+	// not receiving.
+	if owner != nil && w.blinded(owner) {
+		return nil
+	}
 	var found *Player
 	nearest := radius * radius
 	for _, id := range sortedPlayerIDs(w.players) {
@@ -145,6 +151,9 @@ func (w *World) nearestPlayer(from Vec, radius float64, exclude map[string]bool,
 			continue
 		}
 		if !w.hostileReach(owner, candidate.Position) {
+			continue
+		}
+		if !w.targetVisible(from, candidate.Position, candidate.circleRadius()) {
 			continue
 		}
 		if distance := candidate.Position.Sub(from).LengthSq(); distance <= nearest {

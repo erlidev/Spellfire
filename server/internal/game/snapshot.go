@@ -36,9 +36,10 @@ func (w *World) SnapshotFor(playerID string, now time.Time, kind uint64) protoco
 		reach := viewDistance + extent
 		return math.Abs(delta.X) > reach || math.Abs(delta.Y) > reach
 	}
-	// A flashbang takes vision whole, and a smoke cloud takes whatever it stands
-	// over. Both are enforced here rather than drawn over on the client: what a
-	// player cannot see, a client is never sent.
+	// A flashbang takes vision whole, smoke takes whatever it stands over, and
+	// solid terrain blocks the direct sightline. All are enforced here rather
+	// than drawn over on the client: what a player cannot see, a client is never
+	// sent.
 	blind := w.blinded(viewer)
 	// A cloud hides only what it covers completely, and never what the viewer
 	// owns. Concealing a body's own rounds would make its smoke read as a wall it
@@ -48,6 +49,9 @@ func (w *World) SnapshotFor(playerID string, now time.Time, kind uint64) protoco
 	// only while the drawn cloud actually covers them.
 	hidden := func(at Vec, ownerID string, extent float64) bool {
 		if outsideView(at, 0) || blind {
+			return true
+		}
+		if w.terrainOccluded(viewer.Position, at) {
 			return true
 		}
 		return ownerID != playerID && w.concealed(viewer.Position, at, extent)
@@ -116,8 +120,9 @@ func (w *World) SnapshotFor(playerID string, now time.Time, kind uint64) protoco
 	for _, id := range sortedDeployableIDs(w.deployables) {
 		deployable := w.deployables[id]
 		// A cloud is never hidden by a cloud: what is standing in the world is
-		// exactly what explains why everything inside it went missing.
-		if blind || outsideView(deployable.Position, deployable.Field.Radius) {
+		// exactly what explains why everything inside it went missing. Solid
+		// terrain still hides the field when it is wholly out of sight.
+		if blind || outsideView(deployable.Position, deployable.Field.Radius) || w.terrainOccluded(viewer.Position, deployable.Position) {
 			continue
 		}
 		message.Entities = append(message.Entities, protocol.Entity{

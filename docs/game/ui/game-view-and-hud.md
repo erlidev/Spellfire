@@ -16,7 +16,7 @@ Camera behavior must:
 - go completely white while the local player is [flashed](../design/gunslinger.md#defense), and clear as the status ends — the server is already sending nothing to draw behind it;
 - account for UI safe areas and touch controls when framing threats.
 
-The server interest area covers the complete axis-aligned square whose half-width and half-height equal the configured maximum view distance. Corners of the rectangular camera therefore do not lose entities to a circular range cutoff.
+The server interest area covers the complete axis-aligned square whose half-width and half-height equal the configured maximum view distance. Corners of the rectangular camera therefore do not lose entities to a circular range cutoff. Inside that area, solid terrain removes actors, projectiles, telegraphs, and fields whose direct sightline it crosses; terrain itself remains visible so cover never disappears and client collision prediction stays authoritative. Destroying or expiring the blocker reveals what was behind it immediately, while its visual fade finishes.
 
 ## Actor labels
 

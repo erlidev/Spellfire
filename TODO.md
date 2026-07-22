@@ -175,19 +175,17 @@ Every category shares the `standard` band and fires no faster than the 300 ms
 baseline, because with one band cadence *is* DPS. Rate-of-fire identity — the
 SMG's spray, the sniper's single heavy shot — waits on Phase 2.7's sustained,
 burst, and heavy-burst bands; what separates the nine today is handling.
-Smoke and flashbangs did not wait for 2.6. Smoke carries its own narrow rule —
-a cloud hides only what it covers completely, enforced by what the server
-*sends* rather than by what the client draws — which is the case a canister is
-bought for and nothing more. General line of sight through cover and walls is
-still Phase 2.6's substrate; the Mage's stone wall shipped with 2.5 as a
-collider and will block sight for free when that lands.
+Smoke and flashbangs did not wait for 2.6. Smoke carries its own containment
+rule — a cloud hides only what it covers completely, enforced by what the
+server *sends* rather than by what the client draws — and now participates in
+the shared automatic-target visibility check without pretending to be solid.
 
 ### 2.5 Mage kit
 - [x] Author per-spell cooldowns and costs — the second resource axis alongside mana ([mage.md](docs/game/design/mage.md#mana-and-cooldowns)); every spell spends mana and every tier above one holds its own cooldown, each costing more and locking out longer than the tier below it ([abilities.json](data/tuning/abilities.json), `TestShippedSpellsPriceThemselves`)
 - [x] Five elements as data and behaviour: Fire, Frost, Storm, Arcane, Earth ([mage.md](docs/game/design/mage.md#elements)) — each with four authored spells, its own secondary, and its own tint on bodies, rounds, telegraphs, and placed ground
 - [x] Element secondaries: burn/DoT, light mitigation, blink-on-hit, shields/dispel/teleport, walls/knockback/armor ([effects.json](data/tuning/effects.json), [spell.go](server/internal/game/spell.go)); `armor` is the one new effect kind — mitigation with no pool, taken as the strongest rather than compounded
 - [x] Author the settled 5 × 4 spell grid — all twenty rows, every element to tier 4 so affinity's 4 + 2 build is satisfiable ([spells.json](data/tuning/spells.json), `TestShippedSpellGridIsComplete`)
-- [x] Stone wall: dynamic destructible collider, one per caster, placement rules, and lifetime carried in the rewind history ([wall.go](server/internal/game/wall.go), [mage.md](docs/game/design/mage.md#stone-wall)) — it blocks movement and projectiles today and blocks line of sight for free once 2.6 lands, because its segments are ordinary world items
+- [x] Stone wall: dynamic destructible collider, one per caster, placement rules, and lifetime carried in the rewind history ([wall.go](server/internal/game/wall.go), [mage.md](docs/game/design/mage.md#stone-wall)) — its ordinary world-item segments block movement, projectiles, and line of sight through the same collision geometry
 - [x] Spell tiers 1–4 scaling mana, cooldown, telegraph, payoff, and whiff punishment — output stays on the shared band, so tier buys a bigger window rather than a bigger number until 2.7's bands land
 - [x] Mana crystals add element bias and area-shape behavior beyond projectile geometry (`area_radius` widens a blast, its field, and the telegraph that warns about both together; `element_damage` lifts one school only — [components.json](data/tuning/components.json), `crafting.Bias`)
 - [x] Test: no spell delivers instant point-and-click damage ([spell_test.go](server/internal/game/spell_test.go)), plus placed fields pulsing, traps springing once, a zone closing in a stun, blinks stopping at cover, chains arcing, homing bounded by its turn rate, dispel stripping both sides, armor mitigating without being spent, and walls standing, blocking, replacing, expiring, and being refused inside safety or on top of an actor
@@ -206,8 +204,15 @@ body's snapshot, and a knockback predicts nothing and lets reconciliation carry 
 controlled player ran ahead of the server and was snapped back twenty times a second.
 
 ### 2.6 Line of sight
-- [ ] Vision/targeting occlusion; trees currently block projectiles only
-- [ ] Substrate for smoke and for the Mage/Gunslinger LOS matchup ([combat.md](docs/game/design/combat.md#time-to-kill))
+- [x] Vision/targeting occlusion: trees, fixed walls, and Mage-created wall segments block snapshot visibility and automatic acquisition through their existing collision geometry ([visibility.go](server/internal/game/visibility.go), [architecture.md](docs/architecture.md#line-of-sight))
+- [x] Shared substrate for smoke and for the Mage/Gunslinger LOS matchup: smoke containment and terrain sightlines feed the same targeting predicate, while manual ground placement remains exempt ([combat.md](docs/game/design/combat.md#time-to-kill))
+
+LOS is authoritative absence rather than a client mask: dynamic entities behind
+solid cover are omitted from the viewer's snapshot, while terrain itself stays
+present for rendering and prediction. Homing and chain acquisition use the same
+rule, cannot select through terrain or a cloud that fully conceals a body, and
+fall through to the nearest visible target. Destroyed or expired terrain stops
+occluding immediately; its graceful fade is feedback only.
 
 ### 2.7 Roles, keystones, and band enforcement
 - [ ] Cover the seven combat roles across both classes; only Damage exists ([combat.md](docs/game/design/combat.md#shared-combat-roles))

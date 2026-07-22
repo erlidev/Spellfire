@@ -275,8 +275,8 @@ func TestArmorMitigatesWithoutAbsorbing(t *testing.T) {
 	}
 }
 
-// The wall is real terrain: it blocks movement and rounds, one per caster, and
-// it comes down on its own.
+// The wall is real terrain: it blocks movement, rounds, and sight, one per
+// caster, and it comes down on its own.
 func TestStoneWallStandsBlocksAndExpires(t *testing.T) {
 	w, now := testWorld()
 	mage := casting(t, w, addTestPlayer(w, "mage", model.Mage, Vec{1200, 0}, now), "stone-wall")
@@ -298,6 +298,9 @@ func TestStoneWallStandsBlocksAndExpires(t *testing.T) {
 	shooter := carrying(t, w, addTestPlayer(w, "shooter", model.Gunslinger, Vec{1200, 0}, now), "starter-rifle")
 	shooter.Position = Vec{segments[0].Position.X - 120, segments[0].Position.Y}
 	behind := addTestPlayer(w, "behind", model.Gunslinger, Vec{segments[0].Position.X + 120, segments[0].Position.Y}, now)
+	if visible(w, shooter.ID, behind.ID, at) {
+		t.Fatal("a body was visible through the raised wall")
+	}
 	at = castFor(w, shooter, Vec{1, 0}, at, w.tuning.TickRate/2)
 	if behind.Health < behind.MaxHealth {
 		t.Fatal("a round crossed the wall")
