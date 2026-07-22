@@ -2,11 +2,11 @@
 // the menu can lay out slots, offer only equippable content, and explain a
 // rejection before the round trip — but the server remains the authority: a
 // commit is only real once its Loadout reply confirms it.
-import { elements, gadgets, loadoutTable, spells, weapons } from "../tuning";
+import { elements, gadgets, keystones, loadoutTable, spells, weapons } from "../tuning";
 import type { CharacterClass, CraftedItem, LoadoutSet } from "../types";
 import { equippableItems, itemLabel } from "./crafting";
 
-export type SlotKind = "weapon" | "gadget" | "spell";
+export type SlotKind = "weapon" | "gadget" | "spell" | "keystone";
 
 /** One selectable position, mirroring server/internal/loadout.Slot. `abilityId`
  * is what the use button performs, so nothing downstream has to know which
@@ -71,10 +71,12 @@ export function defaultLoadout(characterClass: CharacterClass, ledger: Ledger): 
     weapon: equippable(characterClass, ledger, "weapon")[0] ?? "",
     gadgets: new Array<string>(loadoutTable.gadget_slots).fill(""),
     spells: new Array<string>(loadoutTable.spell_slots).fill(""),
+    keystones: new Array<string>(loadoutTable.keystone_slots).fill(""),
   };
   const kind: SlotKind = characterClass === "gunslinger" ? "gadget" : "spell";
   const target = characterClass === "gunslinger" ? set.gadgets : set.spells;
   equippable(characterClass, ledger, kind).slice(0, target.length).forEach((id, index) => { target[index] = id; });
+  equippable(characterClass, ledger, "keystone").slice(0, set.keystones.length).forEach((id, index) => { set.keystones[index] = id; });
   dropIllegal(set.spells);
   return set;
 }
@@ -115,6 +117,7 @@ export function equippable(characterClass: CharacterClass, ledger: Ledger, kind:
     return [...stock, ...equippableItems(characterClass, ledger, items).map((item) => item.id)];
   }
   if (kind === "gadget") return Object.keys(gadgets).filter((id) => gadgets[id]!.class === characterClass && owns(id)).sort();
+  if (kind === "keystone") return Object.keys(keystones).filter((id) => keystones[id]!.class === characterClass && owns(id)).sort();
   return characterClass === "mage" ? Object.keys(spells).filter(owns).sort() : [];
 }
 
@@ -126,7 +129,7 @@ export function equippable(characterClass: CharacterClass, ledger: Ledger, kind:
  */
 export function locked(characterClass: CharacterClass, ledger: Ledger, kind: SlotKind): LockedContent[] {
   const rows: Record<string, { name: string; unlock_level: number; class?: CharacterClass }> =
-    kind === "weapon" ? weapons : kind === "gadget" ? gadgets : (characterClass === "mage" ? spells : {});
+    kind === "weapon" ? weapons : kind === "gadget" ? gadgets : kind === "keystone" ? keystones : (characterClass === "mage" ? spells : {});
   return Object.keys(rows)
     .filter((id) => !ledger.has(id) && (rows[id]!.class ?? characterClass) === characterClass)
     .map((id) => ({ id, name: rows[id]!.name, level: rows[id]!.unlock_level }))
@@ -143,6 +146,7 @@ export function contentName(kind: SlotKind, id: string, items: readonly CraftedI
     return weapons[id]?.name ?? id;
   }
   if (kind === "gadget") return gadgets[id]?.name ?? id;
+  if (kind === "keystone") return keystones[id]?.name ?? id;
   return spells[id]?.name ?? id;
 }
 
@@ -177,6 +181,12 @@ export function loadoutProblem(characterClass: CharacterClass, ledger: Ledger, s
     if (!ledger.has(id)) return `You have not unlocked ${contentName(kind, id)}.`;
     if (seen.has(id)) return `${contentName(kind, id)} is already equipped in another slot.`;
     seen.add(id);
+  }
+  for (const id of set.keystones) {
+    if (!id) continue;
+    const keystone = keystones[id];
+    if (!keystone || keystone.class !== characterClass) return `"${id}" is not a keystone you can equip.`;
+    if (!ledger.has(id)) return `You have not unlocked ${keystone.name}.`;
   }
   for (let index = 0; index < set.spells.length; index++) {
     const shortfall = affinityShortfall(set.spells, index);

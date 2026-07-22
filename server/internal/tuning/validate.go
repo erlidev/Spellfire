@@ -34,12 +34,15 @@ func (t *Tables) validate() error {
 	t.validateAbilities(problems)
 	t.validateSpells(problems)
 	t.validateGadgets(problems)
+	t.validateKeystones(problems)
 	t.validateWeapons(problems)
 	t.validateAmmunition(problems)
 	t.validateUnlockIDs(problems)
 	t.validateMobs(problems)
 	t.validateRetired(problems)
 	t.validateProjectileKinds(problems)
+	t.validateRoleCoverage(problems)
+	t.validateVerticalBudget(problems)
 	return problems.err()
 }
 
@@ -318,8 +321,15 @@ func (t *Tables) validateCombat(r *report) {
 		band := c.DamageBands[id]
 		r.require(band.Name != "", "combat: damage band %q has no name", id)
 		r.require(band.DamagePerHit > 0, "combat: damage band %q must deal positive damage", id)
+		r.require(band.IntervalMS > 0, "combat: damage band %q must declare a positive interval_ms", id)
 		r.require(band.TargetTTKSeconds > 0, "combat: damage band %q must declare a target_ttk_seconds", id)
 		r.require(band.TTKToleranceSeconds > 0, "combat: damage band %q must declare a ttk_tolerance_seconds", id)
+		if band.DamagePerHit > 0 && band.IntervalMS > 0 {
+			hits := math.Ceil(t.Entities["player"].MaxHealth / band.DamagePerHit)
+			ttk := math.Max(0, hits-1) * float64(band.IntervalMS) / 1000
+			r.require(math.Abs(ttk-band.TargetTTKSeconds) <= band.TTKToleranceSeconds,
+				"combat: damage band %q resolves to %.2fs, outside %.2f±%.2fs", id, ttk, band.TargetTTKSeconds, band.TTKToleranceSeconds)
+		}
 	}
 }
 
@@ -332,6 +342,7 @@ func (t *Tables) validateLoadout(r *report) {
 	r.require(l.WeaponSlots == 1, "loadout: weapon_slots is %d; a character carries exactly one weapon", l.WeaponSlots)
 	r.require(l.GadgetSlots > 0, "loadout: gadget_slots must be positive")
 	r.require(l.SpellSlots > 0, "loadout: spell_slots must be positive")
+	r.require(l.KeystoneSlots == 1, "loadout: keystone_slots is %d; each class equips exactly one keystone tradeoff", l.KeystoneSlots)
 	r.require(l.WeaponSlots+l.GadgetSlots == l.SpellSlots,
 		"loadout: weapon_slots %d plus gadget_slots %d must equal spell_slots %d, or the two classes fill action bars of different widths",
 		l.WeaponSlots, l.GadgetSlots, l.SpellSlots)
@@ -392,6 +403,9 @@ func (t *Tables) validateUnlockIDs(r *report) {
 	for _, id := range sortedKeys(t.Gadgets) {
 		claim("gadgets", id, t.Gadgets[id].UnlockLevel)
 	}
+	for _, id := range sortedKeys(t.Keystones) {
+		claim("keystones", id, t.Keystones[id].UnlockLevel)
+	}
 }
 
 func (t *Tables) validateElements(r *report) {
@@ -416,6 +430,8 @@ func (t *Tables) validateComponents(r *report) {
 		r.require(contains([]string{"gun_part", "mana_crystal", "stave"}, component.Kind),
 			"components: %q has unknown kind %q", id, component.Kind)
 		r.require(component.Tier > 0, "components: %q must declare a positive tier", id)
+		_, gradeExists := t.GradeAt(component.Tier)
+		r.require(gradeExists, "components: %q has tier %d with no matching material grade", id, component.Tier)
 		// The crafting UI must state a behaviour change in plain language, so a
 		// row without one would leave a player spending materials on a mystery.
 		r.require(component.Effect != "", "components: %q must describe its behaviour in plain language for the crafting UI", id)
@@ -433,10 +449,15 @@ func (t *Tables) validateComponents(r *report) {
 		// Materials must be hauled to a safe zone and spent. A free component
 		// would put a behaviour change outside the economy entirely.
 		if r.require(len(component.Cost) > 0, "components: %q declares no material cost; crafting is what the hauled materials are for", id) {
+			maxMaterialTier := 0
 			for _, material := range sortedKeys(component.Cost) {
 				r.require(component.Cost[material] > 0, "components: %q costs a non-positive count of %q", id, material)
 				r.require(t.Live("material", material), "components: %q costs unknown material %q", id, material)
+				row := t.Materials.Materials[material]
+				maxMaterialTier = max(maxMaterialTier, t.Materials.Grades[row.Grade].Tier)
 			}
+			r.require(maxMaterialTier >= component.Tier,
+				"components: %q is tier %d but its highest material tier is %d", id, component.Tier, maxMaterialTier)
 		}
 		t.validateModifiers(r, id, component)
 	}
@@ -538,6 +559,13 @@ func (t *Tables) validateModifiers(r *report, id string, component Component) {
 			r.require(component.Kind == "mana_crystal", "components: %q modifies %q, but only a mana crystal may alter spell output", id, attribute)
 		}
 	}
+	if component.Tier > 1 {
+		horizontal := false
+		for attribute := range component.Modifiers {
+			horizontal = horizontal || !contains([]string{AttrSpellDamage, AttrSpellHealing, AttrEffectiveHealth}, attribute)
+		}
+		r.require(horizontal, "components: %q is above Common but spends no value horizontally", id)
+	}
 	// An element bias and the element it is biased toward are one choice: a
 	// crystal that names a school without favouring it, or favours one without
 	// naming it, is a modifier nothing can resolve.
@@ -578,12 +606,26 @@ func (t *Tables) blueprintHandles(blueprint string) bool {
 
 func (t *Tables) validateMaterials(r *report) {
 	tiers := map[int]string{}
+	multipliers := map[int]float64{}
 	for _, id := range sortedKeys(t.Materials.Grades) {
 		grade := t.Materials.Grades[id]
 		r.require(grade.Name != "", "materials: grade %q has no name", id)
 		r.require(grade.Tier > 0, "materials: grade %q must have a positive tier", id)
+		r.require(grade.PowerMultiplier >= 1, "materials: grade %q power_multiplier %g must be at least baseline", id, grade.PowerMultiplier)
+		r.require(grade.PowerMultiplier <= 1.45, "materials: grade %q power_multiplier %g exceeds the damage budget of 1.45", id, grade.PowerMultiplier)
 		r.require(tiers[grade.Tier] == "", "materials: grades %q and %q share tier %d", tiers[grade.Tier], id, grade.Tier)
 		tiers[grade.Tier] = id
+		multipliers[grade.Tier] = grade.PowerMultiplier
+	}
+	for tier := 1; tier <= len(tiers); tier++ {
+		r.require(tiers[tier] != "", "materials: rarity tiers are not contiguous at tier %d", tier)
+		if tier == 1 {
+			r.require(multipliers[tier] == 1, "materials: Common tier multiplier is %g, want baseline 1", multipliers[tier])
+			continue
+		}
+		r.require(multipliers[tier] > multipliers[tier-1], "materials: tier %d power %g does not exceed tier %d power %g", tier, multipliers[tier], tier-1, multipliers[tier-1])
+		r.require(multipliers[tier]/multipliers[tier-1] <= 1.26,
+			"materials: tier %d step %.3f exceeds the per-tier 1.26 cap", tier, multipliers[tier]/multipliers[tier-1])
 	}
 	for _, id := range sortedKeys(t.Materials.Kinds) {
 		kind := t.Materials.Kinds[id]
@@ -721,6 +763,12 @@ func (t *Tables) validateAbilities(r *report) {
 			continue
 		}
 		t.validateDamaging(r, "abilities", id, ability)
+		if ability.Damaging() {
+			band := t.Combat.DamageBands[ability.DamageBand]
+			r.require(ability.IntervalMS == band.IntervalMS,
+				"abilities: %q interval_ms %d disagrees with damage band %q cadence %d; cadence is band identity",
+				id, ability.IntervalMS, ability.DamageBand, band.IntervalMS)
+		}
 		r.require(contains(honouredDodgeVectors, ability.DodgeVector),
 			"abilities: %q claims dodge vector %q, which the simulation does not deliver; only %v are honoured", id, ability.DodgeVector, honouredDodgeVectors)
 		if ability.DodgeVector == "cast_time" {
@@ -858,6 +906,7 @@ func (t *Tables) validateSpells(r *report) {
 		// A spell is identity — element, tier, unlock — over one ability. Cost,
 		// cadence, cooldown, counterplay, and delivery all live on the ability.
 		r.require(t.Abilities[spell.Ability].Name != "", "spells: %q references unknown ability %q", id, spell.Ability)
+		t.validateRoles(r, "spells", id, spell.Roles)
 		// A drawn starter kit has to be a legal loadout the moment it is rolled.
 		// Tier 1 is the only tier that needs no same-element company beside it, so
 		// it is the only tier the draw may reach into.
@@ -880,6 +929,45 @@ func (t *Tables) validateGadgets(r *report) {
 		r.require(gadget.Name != "", "gadgets: %q has no name", id)
 		r.require(gadget.Class == "gunslinger", "gadgets: %q has class %q; gadgets are the Gunslinger's slot kind and the Mage's are spells", id, gadget.Class)
 		r.require(t.Abilities[gadget.Ability].Name != "", "gadgets: %q references unknown ability %q", id, gadget.Ability)
+		t.validateRoles(r, "gadgets", id, gadget.Roles)
+	}
+}
+
+func (t *Tables) validateKeystones(r *report) {
+	for _, id := range sortedKeys(t.Keystones) {
+		keystone := t.Keystones[id]
+		r.require(keystone.Name != "", "keystones: %q has no name", id)
+		r.require(keystone.Class == "gunslinger" || keystone.Class == "mage", "keystones: %q has unknown class %q", id, keystone.Class)
+		t.validateRoles(r, "keystones", id, keystone.Roles)
+		switch keystone.Behavior {
+		case KeystoneOvercharge:
+			r.require(keystone.Class == "mage", "keystones: %q overcharge belongs to %s, want mage", id, keystone.Class)
+			r.require(keystone.DamageMultiplier > 1 && keystone.CostMultiplier > keystone.DamageMultiplier,
+				"keystones: %q overcharge needs a damage benefit and a larger mana-cost tradeoff", id)
+			r.require(keystone.HeatCapacity == 0 && keystone.HeatPerShot == 0 && keystone.HeatCoolPerSecond == 0 && keystone.HeatResumeFraction == 0,
+				"keystones: %q overcharge declares heat fields it does not use", id)
+		case KeystoneOverheat:
+			r.require(keystone.Class == "gunslinger", "keystones: %q overheat belongs to %s, want gunslinger", id, keystone.Class)
+			r.require(keystone.HeatCapacity > 0 && keystone.HeatPerShot > 0 && keystone.HeatPerShot < keystone.HeatCapacity,
+				"keystones: %q overheat needs positive per-shot heat below its capacity", id)
+			r.require(keystone.HeatCoolPerSecond > 0, "keystones: %q overheat never cools", id)
+			r.require(keystone.HeatResumeFraction > 0 && keystone.HeatResumeFraction < 1,
+				"keystones: %q heat_resume_fraction must lie in (0,1)", id)
+			r.require(keystone.DamageMultiplier == 0 && keystone.CostMultiplier == 0,
+				"keystones: %q overheat also declares numeric output; behavior tradeoffs stay outside rarity", id)
+		default:
+			r.addf("keystones: %q has unknown behavior %q", id, keystone.Behavior)
+		}
+	}
+}
+
+func (t *Tables) validateRoles(r *report, table, id string, roles []string) {
+	r.require(len(roles) > 0, "%s: %q declares no combat roles", table, id)
+	seen := map[string]bool{}
+	for _, role := range roles {
+		r.require(contains(t.Combat.Roles, role), "%s: %q has unknown combat role %q", table, id, role)
+		r.require(!seen[role], "%s: %q repeats combat role %q", table, id, role)
+		seen[role] = true
 	}
 }
 
@@ -891,6 +979,7 @@ func (t *Tables) validateWeapons(r *report) {
 		r.require(weapon.Class == "gunslinger" || weapon.Class == "mage", "weapons: %q has unknown class %q", id, weapon.Class)
 		r.require(weapon.Category != "", "weapons: %q has no category", id)
 		r.require(t.Components.Blueprints[weapon.Blueprint].Name != "", "weapons: %q references unknown blueprint %q", id, weapon.Blueprint)
+		t.validateRoles(r, "weapons", id, weapon.Roles)
 		// The basic set is a pool, not one row: a new character draws one of it.
 		// A drawn weapon has to be usable as it is drawn, so it may never be one
 		// the economy withholds until it has been built.
@@ -942,6 +1031,153 @@ func (t *Tables) validateWeapons(r *report) {
 	}
 	r.require(starters["gunslinger"] > 0, "weapons: no starter weapon for gunslinger; a new character would be unarmed")
 	r.require(starters["mage"] > 0, "weapons: no starter weapon for mage; a new character would be unarmed")
+}
+
+func (t *Tables) validateRoleCoverage(r *report) {
+	coverage := map[string]map[string]bool{"gunslinger": {}, "mage": {}}
+	for _, weapon := range t.Weapons {
+		classCoverage, ok := coverage[weapon.Class]
+		if !ok {
+			continue
+		}
+		for _, role := range weapon.Roles {
+			classCoverage[role] = true
+		}
+	}
+	for _, gadget := range t.Gadgets {
+		classCoverage, ok := coverage[gadget.Class]
+		if !ok {
+			continue
+		}
+		for _, role := range gadget.Roles {
+			classCoverage[role] = true
+		}
+	}
+	for _, spell := range t.Spells {
+		for _, role := range spell.Roles {
+			coverage["mage"][role] = true
+		}
+	}
+	for _, keystone := range t.Keystones {
+		classCoverage, ok := coverage[keystone.Class]
+		if !ok {
+			continue
+		}
+		for _, role := range keystone.Roles {
+			classCoverage[role] = true
+		}
+	}
+	for _, class := range []string{"gunslinger", "mage"} {
+		for _, role := range t.Combat.Roles {
+			r.require(coverage[class][role], "combat: %s content does not cover the %q role", class, role)
+		}
+	}
+}
+
+const (
+	maxDamageMultiplier          = 1.45
+	maxEffectiveHealthMultiplier = 1.38
+	maxSingleItemPower           = 4.0 / 3.0
+	minimumRawTTKSeconds         = 2.0
+)
+
+// validateVerticalBudget enumerates every legal recipe arrangement. Bounds are
+// enforced after modifiers combine, because five individually modest parts can
+// otherwise stack into an immodest weapon.
+func (t *Tables) validateVerticalBudget(r *report) {
+	for _, weaponID := range sortedKeys(t.Components.Recipes) {
+		weapon := t.Weapons[weaponID]
+		t.eachRecipeBuild(weaponID, func(parts map[string]string) {
+			if weapon.Blueprint == "staff" {
+				crystal := t.Components.Components[parts["crystal"]]
+				stave := t.Components.Components[parts["stave"]]
+				if stave.Tier < crystal.Tier {
+					return
+				}
+			}
+			damage, effectiveHealth := t.assembledPower(parts, "")
+			if weapon.Blueprint == "staff" {
+				for element := range t.Elements {
+					candidate, defense := t.assembledPower(parts, element)
+					damage = math.Max(damage, candidate)
+					effectiveHealth = math.Max(effectiveHealth, defense)
+				}
+			}
+			label := fmt.Sprintf("%s with %v", weaponID, parts)
+			r.require(damage <= maxDamageMultiplier+1e-9, "vertical budget: %s damage multiplier %.3f exceeds %.2f", label, damage, maxDamageMultiplier)
+			r.require(effectiveHealth <= maxEffectiveHealthMultiplier+1e-9, "vertical budget: %s effective-health multiplier %.3f exceeds %.2f", label, effectiveHealth, maxEffectiveHealthMultiplier)
+			r.require(damage*effectiveHealth <= maxSingleItemPower+1e-9,
+				"vertical budget: %s combined power %.3f exceeds one item's %.3f share", label, damage*effectiveHealth, maxSingleItemPower)
+			if weapon.Blueprint == "staff" {
+				for _, spell := range t.Spells {
+					ability := t.Abilities[spell.Ability]
+					if !ability.Damaging() {
+						continue
+					}
+					ability.DamageMultiplier = damage
+					r.require(t.ResolveDamage(ability, t.Entities["player"].MaxHealth).RawTTK.Seconds() >= minimumRawTTKSeconds,
+						"vertical budget: %s pulls %s raw TTK below %.1fs", label, spell.ID, minimumRawTTKSeconds)
+					for _, keystone := range t.Keystones {
+						if keystone.Class != "mage" || keystone.Behavior != KeystoneOvercharge {
+							continue
+						}
+						ability.DamageMultiplier = damage * keystone.DamageMultiplier
+						r.require(t.ResolveDamage(ability, t.Entities["player"].MaxHealth).RawTTK.Seconds() >= minimumRawTTKSeconds,
+							"vertical budget: %s plus %s pulls %s raw TTK below %.1fs", label, keystone.ID, spell.ID, minimumRawTTKSeconds)
+					}
+				}
+			} else if ability, ok := t.Abilities[weapon.Ability]; ok && ability.Damaging() {
+				ability.DamageMultiplier = damage
+				r.require(t.ResolveDamage(ability, t.Entities["player"].MaxHealth).RawTTK.Seconds() >= minimumRawTTKSeconds,
+					"vertical budget: %s pulls raw TTK below %.1fs", label, minimumRawTTKSeconds)
+			}
+		})
+	}
+}
+
+func (t *Tables) assembledPower(parts map[string]string, element string) (damage, effectiveHealth float64) {
+	damage, effectiveHealth = t.RarityMultiplier(parts), 1
+	for _, componentID := range parts {
+		component := t.Components.Components[componentID]
+		if modifier := component.Modifiers[AttrSpellDamage]; modifier != 0 {
+			damage *= modifier
+		}
+		if component.Element == element {
+			if modifier := component.Modifiers[AttrElementDamage]; modifier != 0 {
+				damage *= modifier
+			}
+		}
+		if modifier := component.Modifiers[AttrEffectiveHealth]; modifier != 0 {
+			effectiveHealth *= modifier
+		}
+		if modifier := component.Modifiers[AttrSpellHealing]; modifier != 0 {
+			effectiveHealth *= modifier
+		}
+	}
+	return damage, effectiveHealth
+}
+
+func (t *Tables) eachRecipeBuild(weaponID string, visit func(map[string]string)) {
+	recipe := t.Components.Recipes[weaponID]
+	slots := t.Components.Blueprints[recipe.Blueprint].Slots
+	parts := make(map[string]string, len(slots))
+	var fill func(int)
+	fill = func(index int) {
+		if index == len(slots) {
+			copy := make(map[string]string, len(parts))
+			for slot, component := range parts {
+				copy[slot] = component
+			}
+			visit(copy)
+			return
+		}
+		slot := slots[index]
+		for _, component := range recipe.Slots[slot] {
+			parts[slot] = component
+			fill(index + 1)
+		}
+	}
+	fill(0)
 }
 
 // validateGunplay keeps a gun's handling coherent. Every gun declares the weight

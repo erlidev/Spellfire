@@ -64,6 +64,9 @@ func (w *World) SnapshotFor(playerID string, now time.Time, kind uint64) protoco
 		resource := p.Mana
 		if p.Class == model.Gunslinger {
 			resource = float64(p.Ammo)
+			if _, ok := w.heatKeystone(p); ok {
+				resource = p.Heat
+			}
 			// A weapon that spends crafted ammunition has no magazine to meter,
 			// so the resource it reports is what it is actually carrying.
 			if ability, ok := w.ability(p); ok && ability.Cost.Kind == tuning.CostMaterial {

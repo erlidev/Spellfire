@@ -119,7 +119,7 @@ through the authorization wrapper; client visibility alone never grants access.
 remaining slots stay empty, and an empty slot performs nothing rather than erroring. A Mage's slot one falls back to
 its staff's declared spell, so a set emptied by a content withdrawal can still fight. Loadouts cannot
 be edited outside the world at all — there is no HTTP mutation path — so logging out in the Deadlands
-is not a way to respec. Keystone slots wait on Phase 2.7. The equippable set is narrowed from "every
+is not a way to respec. The Phase 2.7 keystone is a separate class-locked slot outside the bar. The equippable set is narrowed from "every
 live row" to "what this character owns" by the Phase 2.2 unlock ledger.
 
 ### 2.2 Unlock ledger & starter kit
@@ -130,7 +130,7 @@ live row" to "what this character owns" by the Phase 2.2 unlock ledger.
 - [x] `loadout.Equippable`/`Validate`/`Resolve` intersect with the ledger, so unowned content is refused on the mutation path rather than merely hidden by the menu
 - [x] Test: a zero-material character can fill a coherent loadout immediately ([progression_test.go](server/internal/progression/progression_test.go)), plus starter-kit stability/randomness, level grants, ledger-gated validation, and the separate progression save path
 
-Only `player_kill` has a trigger: mob kills, harvesting, and outpost discovery are priced in the table and awarded by Phases 4.3, 4.1, and 3, and Phase 4.4 tunes the curve against the pacing targets. Keystone IDs share the ledger's shape but have no rows until Phase 2.7. Phase 2.4 widened the Gunslinger's basic set to four categories and its gadget pool to the riot shield, smoke, and flashbangs without touching the draw; a developer-mode level grant now reaches the rest of the ledger before mob XP lands; Phase 2.5 widened the Mage's draw to the five tier-1 spells, one per element, which is a legal six-slot set on its own because tier 1 needs no same-element company.
+Only `player_kill` has a trigger: mob kills, harvesting, and outpost discovery are priced in the table and awarded by Phases 4.3, 4.1, and 3, and Phase 4.4 tunes the curve against the pacing targets. Keystone IDs share the ledger and unlock at level 9. Phase 2.4 widened the Gunslinger's basic set to four categories and its gadget pool to the riot shield, smoke, and flashbangs without touching the draw; a developer-mode level grant now reaches the rest of the ledger before mob XP lands; Phase 2.5 widened the Mage's draw to the five tier-1 spells, one per element, which is a legal six-slot set on its own because tier 1 needs no same-element company.
 
 ### 2.3 Recipe-blueprint crafting
 - [x] Generic blueprints + independently costed component recipes + authoritative finished-weapon recipes; a complete arrangement resolves the result and ambiguous recipes fail tuning validation ([components.json](data/tuning/components.json), [crafting.go](server/internal/crafting/crafting.go), [progression-and-crafting.md](docs/game/design/progression-and-crafting.md#recipe-blueprint-crafting))
@@ -171,10 +171,9 @@ already the split the inventory surface states.
 - [x] Rare materials gate heavy weapons economically, never statistically: sniper, LMG, and launcher declare `requires_craft` and a material cost, so they have no stock configuration and must be built
 - [x] Test: pattern determinism and recovery, the walked muzzle reaching the snapshot and settling back to aim, spread widening with speed, the pellet cone dividing one band hit, weight moving handling and never damage, the withheld-category gate, scope gating hitscan, falloff and hard range, shield arc and fire lock, shield durability breaking and recovering, finite ammunition, and blast reach ([gunplay_test.go](server/internal/game/gunplay_test.go)); a canister deploying where it lands and expiring, smoke hiding only what it covers completely — never a body on its rim or past it, never one close enough to touch, and never the viewer's own rounds — a flashbang blinding without damaging and detonating exactly once where it lands, and a thrown gadget leaving the gun's pattern alone ([deployable_test.go](server/internal/game/deployable_test.go))
 
-Every category shares the `standard` band and fires no faster than the 300 ms
-baseline, because with one band cadence *is* DPS. Rate-of-fire identity — the
-SMG's spray, the sniper's single heavy shot — waits on Phase 2.7's sustained,
-burst, and heavy-burst bands; what separates the nine today is handling.
+Phase 2.7 assigns every category to sustained, burst, or heavy-burst, with the
+band owning both cadence and damage. The nine categories retain their handling,
+range, magazine, scope, pellet, and blast distinctions within those bands.
 Smoke and flashbangs did not wait for 2.6. Smoke carries its own containment
 rule — a cloud hides only what it covers completely, enforced by what the
 server *sends* rather than by what the client draws — and now participates in
@@ -186,7 +185,7 @@ the shared automatic-target visibility check without pretending to be solid.
 - [x] Element secondaries: burn/DoT, light mitigation, blink-on-hit, shields/dispel/teleport, walls/knockback/armor ([effects.json](data/tuning/effects.json), [spell.go](server/internal/game/spell.go)); `armor` is the one new effect kind — mitigation with no pool, taken as the strongest rather than compounded
 - [x] Author the settled 5 × 4 spell grid — all twenty rows, every element to tier 4 so affinity's 4 + 2 build is satisfiable ([spells.json](data/tuning/spells.json), `TestShippedSpellGridIsComplete`)
 - [x] Stone wall: dynamic destructible collider, one per caster, placement rules, and lifetime carried in the rewind history ([wall.go](server/internal/game/wall.go), [mage.md](docs/game/design/mage.md#stone-wall)) — its ordinary world-item segments block movement, projectiles, and line of sight through the same collision geometry
-- [x] Spell tiers 1–4 scaling mana, cooldown, telegraph, payoff, and whiff punishment — output stays on the shared band, so tier buys a bigger window rather than a bigger number until 2.7's bands land
+- [x] Spell tiers 1–4 scaling mana, cooldown, telegraph, payoff, and whiff punishment; Phase 2.7 assigns their resolved damage to sustained, burst, or heavy-burst rather than authoring per-spell numbers
 - [x] Mana crystals add element bias and area-shape behavior beyond projectile geometry (`area_radius` widens a blast, its field, and the telegraph that warns about both together; `element_damage` lifts one school only — [components.json](data/tuning/components.json), `crafting.Bias`)
 - [x] Test: no spell delivers instant point-and-click damage ([spell_test.go](server/internal/game/spell_test.go)), plus placed fields pulsing, traps springing once, a zone closing in a stun, blinks stopping at cover, chains arcing, homing bounded by its turn rate, dispel stripping both sides, armor mitigating without being spent, and walls standing, blocking, replacing, expiring, and being refused inside safety or on top of an actor
 
@@ -194,9 +193,9 @@ Delivery grew six shapes on the one ability path — placement, pulsing fields, 
 dispel — rather than a branch per spell, so a Phase 4.3 mob that declares the same fields gets the same
 behaviour. Rewind now resolves against the terrain that stood at the claimed moment, which the wall
 needed and which also closed the pre-2.5 gap where a tree felled inside the rewind window disagreed with
-the cover the shooter saw. Damage output still comes from the one `standard` band: what separates a
-tier-1 spam spell from a tier-4 signature today is cost, cooldown, telegraph, and what it does to a
-body, and 2.7's bands are what will separate their numbers. Rift repositions its caster only —
+the cover the shooter saw. Damage output comes from the three shared Phase 2.7 bands: what separates a
+tier-1 spam spell from a tier-4 signature is its band, cost, cooldown, telegraph, and what it does to a
+body. Rift repositions its caster only —
 repositioning a squad waits on Phase 5 — and Bulwark's armor lands on its caster for the same reason.
 Client prediction now mirrors the status layer as well as the equipped kit ([prediction.ts](web/src/game/prediction.ts),
 `tuning.movementStatus`): a slow, root, or stun is predicted from the effect IDs already on the local
@@ -215,13 +214,15 @@ fall through to the nearest visible target. Destroyed or expired terrain stops
 occluding immediately; its graceful fade is feedback only.
 
 ### 2.7 Roles, keystones, and band enforcement
-- [ ] Cover the seven combat roles across both classes; only Damage exists ([combat.md](docs/game/design/combat.md#shared-combat-roles))
-- [ ] Keystones: behaviour-changing tradeoffs (empowered-but-costlier casts, overheat-instead-of-reload)
-- [ ] Add the sustained / burst / heavy-burst damage bands to [combat.json](data/tuning/combat.json); only `standard` exists, and one band cannot carry both a shotgun and a rifle ([combat.md](docs/game/design/combat.md#damage-bands)) — Phase 2.4's nine categories all point at `standard` and are separated by handling alone until this lands
-- [ ] Damage/DPS resolver computing from item data instead of one constant
-- [ ] Automated band test: every weapon and spell lands inside the effective damage band at Common tier ([pillars.md](docs/game/design/pillars.md#p2--vertical-progression-is-real-and-bounded))
-- [ ] Rarity tiers on components and materials, with each tier's bounded multiplier applied to the band anchor and never to cadence ([progression-and-crafting.md](docs/game/design/progression-and-crafting.md#rarity-tiers))
-- [ ] Vertical-budget validation on the assembled item: total damage ≤ ×1.45, effective health ≤ ×1.38, no single item past a third of the gain, and no combination pulling raw TTK under 2.0 s ([progression-and-crafting.md](docs/game/design/progression-and-crafting.md#the-vertical-budget))
+- [x] Cover the seven combat roles across both classes, declared on weapons, spells, gadgets, and keystones and enforced by tuning validation ([combat.md](docs/game/design/combat.md#shared-combat-roles))
+- [x] Keystones: Volatile focus empowers mana casts at a larger mana premium; Thermal cycle replaces magazines/reloads with heat, lockout, and cooling
+- [x] Add the sustained / burst / heavy-burst damage bands to [combat.json](data/tuning/combat.json), each owning both its damage anchor and cadence ([combat.md](docs/game/design/combat.md#damage-bands))
+- [x] Damage/DPS resolver computing per-hit damage, DPS, and raw TTK from band plus derived item data (`Tables.ResolveDamage`)
+- [x] Automated Common-tier band test for every damaging weapon and spell ([pillars.md](docs/game/design/pillars.md#p2--vertical-progression-is-real-and-bounded))
+- [x] Rarity tiers on components and materials, using the weakest component tier and applying its bounded multiplier once to the band anchor, never cadence ([progression-and-crafting.md](docs/game/design/progression-and-crafting.md#rarity-tiers))
+- [x] Complete-recipe vertical-budget validation: damage ≤ ×1.45, effective health ≤ ×1.38, combined single-item power ≤ ×4/3, and no item/keystone combination below 2.0 s raw TTK ([progression-and-crafting.md](docs/game/design/progression-and-crafting.md#the-vertical-budget))
+
+Phase 2.7 uses prototype Signature parts, a Signature prism/stave, an Aegis crystal, and Signature essence as explicit dummy catalog rows so weakest-tier rarity, horizontal modifiers, effective health, full-tier assembly, and boss-material costs are testable before Phase 3/4 acquisition systems land. The keystone slot remains outside the six action bindings and travels in the persisted/wire loadout.
 
 ---
 

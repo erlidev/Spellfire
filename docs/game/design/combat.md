@@ -47,7 +47,12 @@ Fixed equipped slots enforce the role budget: no build covers every role, whatev
 
 ## Keystones
 
-Keystones change behavior rather than enlarge numbers. A dash might empower the next spell but double its mana cost; a gun might overheat instead of reloading and lock after sustained fire. They stay outside the [vertical budget](progression-and-crafting.md#the-vertical-budget) entirely: keystones are a build-identity axis, and letting them carry power too would put a second multiplier on top of gear.
+Keystones occupy one class-locked slot outside the six action bindings. The first two test the full behavior contract:
+
+- **Volatile focus (Mage):** every mana cast deals 6% more damage and costs 50% more mana. The small premium remains meaningful without letting a complete Signature staff cross the absolute 2-second raw-TTK floor.
+- **Thermal cycle (Gunslinger):** magazine ammunition becomes a ten-point heat bar. Shots add heat, sustained fire locks at capacity, cooling starts after a 500 ms quiet window, and fire resumes below 35% heat. Reload is disabled while it is equipped.
+
+Keystones are a build-identity axis rather than another gear tier. Their tradeoffs are authored separately from the assembled item's vertical caps, but the final gear-plus-keystone combination is still tested against the universal TTK floor.
 
 ## Universal dash
 
@@ -62,4 +67,3 @@ This floor prevents helpless builds at three-second TTK without erasing low-mobi
 Frequent third parties and dangerous 1vX fights are intended in a 100-player world. Mobility and escape let players reset; knowing when to disengage is part of combat skill. Strong players can exploit terrain and ability windows to win outnumbered, but squads remain the safe default.
 
 Class-specific delivery and counterplay are defined in [`classes.md`](classes.md), [`gunslinger.md`](gunslinger.md), and [`mage.md`](mage.md).
-

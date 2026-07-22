@@ -4,20 +4,23 @@
     "class": "gunslinger",
     "starter": true,
     "unlock_level": 3,
-    "ability": "riot-shield-raise"
+    "ability": "riot-shield-raise",
+    "roles": ["sustain", "control"]
   },
   "smoke-grenade": {
     "name": "Smoke canister",
     "class": "gunslinger",
     "starter": true,
     "unlock_level": 4,
-    "ability": "smoke-throw"
+    "ability": "smoke-throw",
+    "roles": ["zone", "control"]
   },
   "flashbang": {
     "name": "Flashbang",
     "class": "gunslinger",
     "starter": true,
     "unlock_level": 6,
-    "ability": "flash-throw"
+    "ability": "flash-throw",
+    "roles": ["control", "burst"]
   }
 }

@@ -56,6 +56,7 @@ message Loadout {
   string weapon = 1;
   repeated string gadgets = 2;
   repeated string spells = 3;
+  repeated string keystones = 4; // non-action-bar behavior tradeoffs
 }
 
 message ServerEnvelope {

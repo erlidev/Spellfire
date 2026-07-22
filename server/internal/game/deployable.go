@@ -116,7 +116,7 @@ func (w *World) pulse(deployable *Deployable, effects []string, now time.Time) b
 	owner := w.players[deployable.OwnerID]
 	damage := 0.0
 	if field.DamageBand != "" {
-		damage = w.tuning.Tables.BandDamage(field.DamageBand) * field.DamageFraction
+		damage = w.tuning.Tables.BandDamage(field.DamageBand) * field.DamageFraction * field.DamageScale()
 	}
 	reached := false
 	for _, id := range sortedPlayerIDs(w.players) {

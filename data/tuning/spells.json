@@ -5,28 +5,32 @@
     "tier": 1,
     "starter": true,
     "unlock_level": 2,
-    "ability": "fire-bolt-cast"
+    "ability": "fire-bolt-cast",
+    "roles": ["damage", "range"]
   },
   "cinder-patch": {
     "name": "Cinder patch",
     "element": "fire",
     "tier": 2,
     "unlock_level": 6,
-    "ability": "cinder-patch-cast"
+    "ability": "cinder-patch-cast",
+    "roles": ["zone", "control"]
   },
   "flame-wave": {
     "name": "Flame wave",
     "element": "fire",
     "tier": 3,
     "unlock_level": 11,
-    "ability": "flame-wave-cast"
+    "ability": "flame-wave-cast",
+    "roles": ["burst", "control"]
   },
   "firestorm": {
     "name": "Firestorm",
     "element": "fire",
     "tier": 4,
     "unlock_level": 17,
-    "ability": "firestorm-cast"
+    "ability": "firestorm-cast",
+    "roles": ["burst", "zone"]
   },
   "frost-shard": {
     "name": "Frost shard",
@@ -34,28 +38,32 @@
     "tier": 1,
     "starter": true,
     "unlock_level": 2,
-    "ability": "frost-shard-cast"
+    "ability": "frost-shard-cast",
+    "roles": ["damage", "control"]
   },
   "rime-ward": {
     "name": "Rime ward",
     "element": "frost",
     "tier": 2,
     "unlock_level": 6,
-    "ability": "rime-ward-cast"
+    "ability": "rime-ward-cast",
+    "roles": ["sustain", "control"]
   },
   "ice-trap": {
     "name": "Ice trap",
     "element": "frost",
     "tier": 3,
     "unlock_level": 11,
-    "ability": "ice-trap-cast"
+    "ability": "ice-trap-cast",
+    "roles": ["control", "zone"]
   },
   "blizzard": {
     "name": "Blizzard",
     "element": "frost",
     "tier": 4,
     "unlock_level": 17,
-    "ability": "blizzard-cast"
+    "ability": "blizzard-cast",
+    "roles": ["control", "zone"]
   },
   "spark": {
     "name": "Spark",
@@ -63,28 +71,32 @@
     "tier": 1,
     "starter": true,
     "unlock_level": 2,
-    "ability": "spark-cast"
+    "ability": "spark-cast",
+    "roles": ["damage", "range"]
   },
   "thunderstep": {
     "name": "Thunderstep",
     "element": "storm",
     "tier": 2,
     "unlock_level": 6,
-    "ability": "thunderstep-cast"
+    "ability": "thunderstep-cast",
+    "roles": ["mobility"]
   },
   "chain-lightning": {
     "name": "Chain lightning",
     "element": "storm",
     "tier": 3,
     "unlock_level": 11,
-    "ability": "chain-lightning-cast"
+    "ability": "chain-lightning-cast",
+    "roles": ["burst", "range"]
   },
   "skyfall": {
     "name": "Skyfall",
     "element": "storm",
     "tier": 4,
     "unlock_level": 17,
-    "ability": "skyfall-cast"
+    "ability": "skyfall-cast",
+    "roles": ["burst", "mobility"]
   },
   "arcane-missile": {
     "name": "Arcane missile",
@@ -92,28 +104,32 @@
     "tier": 1,
     "starter": true,
     "unlock_level": 2,
-    "ability": "arcane-missile-cast"
+    "ability": "arcane-missile-cast",
+    "roles": ["damage", "range"]
   },
   "ward": {
     "name": "Ward",
     "element": "arcane",
     "tier": 2,
     "unlock_level": 6,
-    "ability": "ward-cast"
+    "ability": "ward-cast",
+    "roles": ["sustain"]
   },
   "nullify": {
     "name": "Nullify",
     "element": "arcane",
     "tier": 3,
     "unlock_level": 11,
-    "ability": "nullify-cast"
+    "ability": "nullify-cast",
+    "roles": ["control", "sustain"]
   },
   "rift": {
     "name": "Rift",
     "element": "arcane",
     "tier": 4,
     "unlock_level": 17,
-    "ability": "rift-cast"
+    "ability": "rift-cast",
+    "roles": ["mobility", "sustain"]
   },
   "stone-shard": {
     "name": "Stone shard",
@@ -121,27 +137,31 @@
     "tier": 1,
     "starter": true,
     "unlock_level": 2,
-    "ability": "stone-shard-cast"
+    "ability": "stone-shard-cast",
+    "roles": ["damage", "control"]
   },
   "stone-wall": {
     "name": "Stone wall",
     "element": "earth",
     "tier": 2,
     "unlock_level": 6,
-    "ability": "stone-wall-cast"
+    "ability": "stone-wall-cast",
+    "roles": ["zone", "control"]
   },
   "upheaval": {
     "name": "Upheaval",
     "element": "earth",
     "tier": 3,
     "unlock_level": 11,
-    "ability": "upheaval-cast"
+    "ability": "upheaval-cast",
+    "roles": ["control", "burst"]
   },
   "bulwark": {
     "name": "Bulwark",
     "element": "earth",
     "tier": 4,
     "unlock_level": 17,
-    "ability": "bulwark-cast"
+    "ability": "bulwark-cast",
+    "roles": ["sustain", "zone"]
   }
 }

@@ -56,10 +56,10 @@ func steps(w *World, from time.Time, count int) time.Time {
 // authored on the effect, and stops when its window closes.
 func TestBurnTicksFromTheSharedBandAndExpires(t *testing.T) {
 	w, now := worldFrom(t, withEffects(t, map[string]any{
-		"burn-test": effectRow("burn", 250, map[string]any{"tick_ms": 100.0, "damage_fraction": 0.5, "damage_band": "standard"}),
+		"burn-test": effectRow("burn", 250, map[string]any{"tick_ms": 100.0, "damage_fraction": 0.5, "damage_band": "sustained"}),
 	}))
 	p := addTestPlayer(w, "p", model.Gunslinger, Vec{1200, 0}, now)
-	perTick := 0.5 * w.tuning.Tables.BandDamage("standard")
+	perTick := 0.5 * w.tuning.Tables.BandDamage("sustained")
 
 	w.applyEffects(p, []string{"burn-test"}, "source", Vec{1, 0}, now)
 	steps(w, now, 6) // 100 ms: one tick has landed
@@ -163,10 +163,10 @@ func TestKnockbackOverridesInputAndDash(t *testing.T) {
 // pool is a multiple of the shared band rather than a number of its own.
 func TestShieldAbsorbsBeforeHealthAndFallsAway(t *testing.T) {
 	w, now := worldFrom(t, withEffects(t, map[string]any{
-		"shield-test": effectRow("shield", 5000, map[string]any{"absorb_hits": 1.0, "damage_band": "standard"}),
+		"shield-test": effectRow("shield", 5000, map[string]any{"absorb_hits": 1.0, "damage_band": "sustained"}),
 	}))
 	p := addTestPlayer(w, "p", model.Gunslinger, Vec{1200, 0}, now)
-	hit := w.tuning.Tables.BandDamage("standard")
+	hit := w.tuning.Tables.BandDamage("sustained")
 	w.applyEffects(p, []string{"shield-test"}, "source", Vec{1, 0}, now)
 
 	w.damage(p, hit*1.5, "source", now)
@@ -180,6 +180,21 @@ func TestShieldAbsorbsBeforeHealthAndFallsAway(t *testing.T) {
 	w.damage(p, hit, "source", now)
 	if want := w.tuning.MaxHealth - hit*1.5; math.Abs(p.Health-want) > 0.001 {
 		t.Fatalf("health = %g, want %g: the spent shield still absorbed", p.Health, want)
+	}
+}
+
+func TestEffectiveHealthScalesShieldPoolsAndArmor(t *testing.T) {
+	w, now := testWorld()
+	p := addTestPlayer(w, "effective-health", model.Mage, Vec{1200, 0}, now)
+	w.applyEffectsScaled(p, []string{"arcane-ward"}, p.ID, Vec{1, 0}, now, 1.15)
+	wantShield := 3 * w.tuning.Tables.BandDamage("sustained") * 1.15
+	if len(p.Effects) != 1 || math.Abs(p.Effects[0].Absorb-wantShield) > 1e-9 {
+		t.Fatalf("scaled shield = %#v, want absorb %g", p.Effects, wantShield)
+	}
+	p.Effects = nil
+	w.applyEffectsScaled(p, []string{"bulwark-armor"}, p.ID, Vec{1, 0}, now, 1.15)
+	if want := 0.7 / 1.15; math.Abs(w.armorScale(p)-want) > 1e-9 {
+		t.Fatalf("scaled armor damage fraction = %g, want %g", w.armorScale(p), want)
 	}
 }
 

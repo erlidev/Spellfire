@@ -1,0 +1,22 @@
+{
+  "volatile-focus": {
+    "name": "Volatile focus",
+    "class": "mage",
+    "unlock_level": 9,
+    "behavior": "overcharge",
+    "roles": ["damage", "burst"],
+    "damage_multiplier": 1.06,
+    "cost_multiplier": 1.5
+  },
+  "thermal-cycle": {
+    "name": "Thermal cycle",
+    "class": "gunslinger",
+    "unlock_level": 9,
+    "behavior": "overheat",
+    "roles": ["damage", "zone"],
+    "heat_capacity": 10,
+    "heat_per_shot": 1,
+    "heat_cool_per_second": 4,
+    "heat_resume_fraction": 0.35
+  }
+}

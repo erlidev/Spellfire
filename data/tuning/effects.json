@@ -18,7 +18,7 @@
     "stacking": "refresh",
     "duration_ms": 4200,
     "tick_ms": 700,
-    "damage_band": "standard",
+    "damage_band": "sustained",
     "damage_fraction": 0.25
   },
   "frost-chill": {
@@ -65,7 +65,7 @@
     "kind": "shield",
     "stacking": "refresh",
     "duration_ms": 8000,
-    "damage_band": "standard",
+    "damage_band": "sustained",
     "absorb_hits": 3
   },
   "stone-knock": {

@@ -3,7 +3,7 @@
     "name": "Sentry",
     "family": "sentry",
     "silhouette": "fused_turret",
-    "damage_band": "standard",
+    "damage_band": "sustained",
     "dodge_vector": "telegraph",
     "telegraph_shape": "line",
     "turrets": 1,

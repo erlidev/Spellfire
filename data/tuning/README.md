@@ -110,6 +110,7 @@ Rules, from [`invariants.md`](../../docs/game/design/invariants.md) and
 | `world.json` | World radius, spawn radius, danger bands, procedural tree parameters, fixed fixtures |
 | `combat.json` | Role and dodge-vector vocabularies, player movement/resources, universal dash, weight classes, damage bands |
 | `loadout.json` | Slot counts per kind and the Mage affinity multiplier |
+| `keystones.json` | Class-locked passive loadout tradeoffs and their behavior parameters |
 | `progression.json` | XP curve, the XP each source awards, the starter-kit draw size, the crafted-item capacity, and the developer-mode level-grant bound |
 | `elements.json` | The five Mage elements and their roles |
 | `abilities.json` | What every action costs, how often it may be used, how it is dodged, what it delivers, and what it applies |
@@ -143,49 +144,37 @@ Rows are populated only where a design document has settled them.
   retargeted to ECS component stores later. New UI fields need no client code;
   new runtime attributes need one registry adapter.
 
-- `effects` carries one shipped row: the knockback a rocket blast applies. The
-  simulation runs all six kinds — burn ticks from a band, slows scale movement
-  and take the strongest rather than compounding, roots stop movement, stuns
-  stop everything, knockbacks override input and cancel a dash, shields absorb
-  before health — but no design document has settled a magnitude for the other
-  five. Phase 2.5's element secondaries author those rows; until then the tests
-  exercise the layer against rows they add themselves.
+- `effects` carries the full Mage-secondary and gadget status catalog. Burn
+  ticks and shields resolve against a named band; armor and shields can also
+  consume a crafted staff's bounded effective-health multiplier.
 - The starter Fire bolt exercises windups and the shared line telegraph. A cast
   pays up front, locks its origin and direction, then delivers only after the
   pending phase; death cancels it into the common resolution flash. The loader
   requires `windup_ms` and `telegraph` together and validates the exact geometry
   each of circle, cone, line, and ring consumes.
-- `gadgets` carries the riot shield. Smoke and flashbangs are deliberately
-  absent: both are line-of-sight and aim-disruption tools, and line of sight is
-  Phase 2.6 — authoring them now would ship rows the simulation cannot honour.
-  The remaining gadget slots stay empty, and an empty slot performs nothing
-  rather than erroring.
+- `gadgets` carries the riot shield, smoke canister, and flashbang. The
+  remaining gadget slots stay empty, and an empty slot performs nothing rather
+  than erroring.
 - `progression.sources` prices all four settled XP sources, but only
   `player_kill` has a trigger today. Mob kills (Phase 4.3), harvesting (Phase
   4.1), and outpost discovery (Phase 3) award their row when those systems land;
   the vocabulary is fixed in code, so the table cannot introduce a fifth source
   nothing reads. The curve itself is a placeholder shape — Phase 4.4 tunes it
   against the pacing targets.
-- The Gunslinger's basic set is four categories — pistol, SMG, shotgun, rifle —
-  so an opening draw is now a real draw. The Mage's is still one staff and one
-  spell until Phase 2.5 authors the spell grid.
-- Every gun shares the `standard` band and the same 300 ms cadence unless it is
-  *slower*. With one band, cadence **is** DPS, so rate-of-fire identity — the
-  SMG's spray, the sniper's single heavy shot — waits on the sustained,
-  burst, and heavy-burst bands in Phase 2.7. What separates the nine categories
-  today is handling: magazine, reload, range and falloff, recoil pattern,
-  spread, weight, scope, pellets, and blast.
+- The Gunslinger's opening pool covers pistol, SMG, shotgun, and rifle; the
+  Mage draws from the five tier-1 elements. Sustained, burst, and heavy-burst
+  bands now separate rate-of-fire identities while resolving to the same Common
+  raw-TTK target.
 - `materials.materials` carries the structural stock every biome yields and one
   element-aligned shard per biome, because component costs have to name
   something real. Nothing *produces* a material yet — harvest nodes and mob
   drops are Phase 4.1 — so the only source today is the bounded developer-mode
   grant in `materials.admin_grant`.
-- `components.components` covers both blueprints: five gun slots and three staff
-  slots, two options each. Their modifiers reach only the attributes the
-  simulation reads today. Recoil, spread, and scoped movement joined the
-  vocabulary with Phase 2.4 and the gun components now use them; cast-shape
-  changes beyond projectile geometry are Phase 2.5 and a component may not claim
-  one until then.
+- `components.components` covers the five-slot gun and two-slot staff
+  blueprints. Component tier is funded by matching material grades; the weakest
+  selected tier determines item rarity. Prototype Signature parts and the Aegis
+  crystal are intentional test content for full-tier rarity and effective-health
+  bounds before their eventual acquisition loops exist.
 - `mobs.sentry` carries the settled contract — family, silhouette, damage band,
   dodge vector, shared telegraph shape, turret count — and no aggro radius,
   leash, movement, cadence, telegraph timing, or projectile values.

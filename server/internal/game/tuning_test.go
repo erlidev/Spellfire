@@ -3,6 +3,7 @@ package game
 import (
 	"encoding/json"
 	"io/fs"
+	"math"
 	"reflect"
 	"testing"
 	"testing/fstest"
@@ -54,7 +55,7 @@ func edit(t *testing.T, files fstest.MapFS, name string, mutate func(document ma
 func rebalanced(t *testing.T, damagePerHit float64) *tuning.Tables {
 	t.Helper()
 	files := edit(t, shipped(t), "combat.json", func(document map[string]any) {
-		document["damage_bands"].(map[string]any)["standard"].(map[string]any)["damage_per_hit"] = damagePerHit
+		document["damage_bands"].(map[string]any)["sustained"].(map[string]any)["damage_per_hit"] = damagePerHit
 	})
 	tables, err := tuning.Parse(files)
 	if err != nil {
@@ -90,12 +91,12 @@ func damageDealt(t *testing.T, tables *tuning.Tables, shooter, target model.Char
 // classes move together, and nothing about the stored characters changes —
 // there is no migration step because they hold references, not stats.
 func TestOneTableRowRebalancesBothClassesWithoutCharacterMigration(t *testing.T) {
-	gunslinger := model.Character{ID: "stored-gunslinger", Name: "Vance", Class: model.Gunslinger, Progress: model.Progress{Level: 1}}
-	mage := model.Character{ID: "stored-mage", Name: "Ilse", Class: model.Mage, Progress: model.Progress{Level: 1}}
+	gunslinger := model.Character{ID: "stored-gunslinger", Name: "Vance", Class: model.Gunslinger, Progress: model.Progress{Level: 1}, State: model.CharacterState{Loadout: model.Loadout{Weapon: "field-pistol"}}}
+	mage := model.Character{ID: "stored-mage", Name: "Ilse", Class: model.Mage, Progress: model.Progress{Level: 1}, State: model.CharacterState{Loadout: model.Loadout{Weapon: "starter-staff", Spells: []string{"fire-bolt"}}}}
 	stored := []model.Character{gunslinger, mage}
 
 	shippedTables := tuning.MustLoad()
-	patched := rebalanced(t, 25)
+	patched := rebalanced(t, 8.05)
 
 	cases := []struct {
 		name             string
@@ -110,11 +111,11 @@ func TestOneTableRowRebalancesBothClassesWithoutCharacterMigration(t *testing.T)
 		cases[index].patched = damageDealt(t, patched, cases[index].shooter, cases[index].target)
 	}
 	for _, testCase := range cases {
-		if testCase.shipped != 10 {
-			t.Fatalf("%s dealt %g on the shipped tables, want the standard band's 10", testCase.name, testCase.shipped)
+		if testCase.shipped != 8 {
+			t.Fatalf("%s dealt %g on the shipped tables, want the sustained band's 8", testCase.name, testCase.shipped)
 		}
-		if testCase.patched != 25 {
-			t.Fatalf("%s dealt %g after the band edit, want 25", testCase.name, testCase.patched)
+		if math.Abs(testCase.patched-8.05) > 1e-9 {
+			t.Fatalf("%s dealt %g after the band edit, want 8.05", testCase.name, testCase.patched)
 		}
 	}
 	if !reflect.DeepEqual([]model.Character{gunslinger, mage}, stored) {

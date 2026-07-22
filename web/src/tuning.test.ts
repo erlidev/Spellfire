@@ -29,11 +29,15 @@ describe("shared tuning tables", () => {
     }
   });
 
-  it("puts both starter items on the same shared damage band row", () => {
-    const rifle = damageBandFor(starterWeapon("gunslinger"));
-    const staff = damageBandFor(starterWeapon("mage"));
-    expect(rifle.damage_per_hit).toBe(staff.damage_per_hit);
-    expect(rifle.damage_per_hit).toBe(combat.damage_bands.standard!.damage_per_hit);
+  it("exposes sustained, burst, and heavy-burst anchors with their cadence", () => {
+    expect(Object.keys(combat.damage_bands).sort()).toEqual(["burst", "heavy-burst", "sustained"]);
+    for (const band of Object.values(combat.damage_bands)) {
+      expect(band.damage_per_hit).toBeGreaterThan(0);
+      expect(band.interval_ms).toBeGreaterThan(0);
+      expect(band.target_ttk_seconds).toBeGreaterThanOrEqual(2);
+    }
+    expect(damageBandFor(weapons["field-pistol"]!).damage_per_hit).toBe(combat.damage_bands.sustained!.damage_per_hit);
+    expect(damageBandFor(weapons["long-sniper"]!).damage_per_hit).toBe(combat.damage_bands["heavy-burst"]!.damage_per_hit);
   });
 
   it("charges the mage mana and the gunslinger ammunition through one ability shape", () => {
@@ -44,6 +48,7 @@ describe("shared tuning tables", () => {
   it("meters the resource the equipped weapon actually spends", () => {
     const gun = starterWeapon("gunslinger");
     expect(resourceMax(gun)).toEqual({ label: "Ammo", max: gun.magazine_size, capped: true });
+    expect(resourceMax(gun, "thermal-cycle")).toEqual({ label: "Heat", max: 10, capped: true });
     expect(resourceMax(starterWeapon("mage"))).toEqual({ label: "Mana", max: combat.player.max_mana, capped: true });
     // A weapon that spends crafted ammunition meters what it carries instead of
     // a magazine, so the HUD never shows a reload that will never come.

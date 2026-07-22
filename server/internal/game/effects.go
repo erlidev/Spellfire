@@ -23,11 +23,18 @@ type ActiveEffect struct {
 	Direction Vec
 	// Absorb is a shield's remaining pool, drained by incoming damage.
 	Absorb float64
+	// ArmorMultiplier is the derived mitigation for an armor effect applied
+	// through a crafted staff. Zero falls back to the tuning row.
+	ArmorMultiplier float64
 }
 
 // applyEffects starts the statuses an ability's hit leaves behind. Direction is
 // the travel direction of the hit, which is what a knockback pushes along.
 func (w *World) applyEffects(target *Player, ids []string, sourceID string, direction Vec, now time.Time) {
+	w.applyEffectsScaled(target, ids, sourceID, direction, now, 1)
+}
+
+func (w *World) applyEffectsScaled(target *Player, ids []string, sourceID string, direction Vec, now time.Time, effectiveHealth float64) {
 	if !target.Alive {
 		return
 	}
@@ -44,7 +51,10 @@ func (w *World) applyEffects(target *Player, ids []string, sourceID string, dire
 			active.NextTickAt = now.Add(effect.Tick())
 		}
 		if effect.Kind == "shield" {
-			active.Absorb = effect.AbsorbHits * w.tuning.Tables.BandDamage(effect.DamageBand)
+			active.Absorb = effect.AbsorbHits * w.tuning.Tables.BandDamage(effect.DamageBand) * effectiveHealth
+		}
+		if effect.Kind == "armor" {
+			active.ArmorMultiplier = math.Max(0.01, effect.DamageMultiplier/effectiveHealth)
 		}
 		if effect.Stacking == tuning.StackRefresh {
 			if index := indexOfEffect(target.Effects, id); index >= 0 {
@@ -113,7 +123,11 @@ func (w *World) armorScale(p *Player) float64 {
 	scale := 1.0
 	for _, active := range p.Effects {
 		if effect := w.tuning.Tables.Effects[active.EffectID]; effect.Kind == "armor" {
-			scale = math.Min(scale, effect.DamageMultiplier)
+			candidate := effect.DamageMultiplier
+			if active.ArmorMultiplier > 0 {
+				candidate = active.ArmorMultiplier
+			}
+			scale = math.Min(scale, candidate)
 		}
 	}
 	return scale

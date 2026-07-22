@@ -29,6 +29,8 @@ Item rarity follows the material grades the [world](world.md#biomes-type--grade)
 
 Each tier must also spend at least half its value horizontally — a better sight, a wider magazine, a shorter cast, a new condition — so a Signature item plays differently from its Rare counterpart rather than being the same object with larger numbers. A tier that can only justify itself numerically is not authored.
 
+The implemented band-anchor multipliers are Common ×1.00, Uncommon ×1.08, Rare ×1.18, and Signature ×1.30. A finished item's rarity is the **lowest component tier** in its recipe: replacing one part does not promote a five-part gun, and only a completely Signature assembly receives ×1.30. The multiplier is applied once after assembly and never to cadence. Prototype Signature gun parts, a Signature prism/stave, and the Aegis effective-health crystal are dummy catalog rows retained to exercise every bound before world-boss acquisition exists.
+
 ### What the budget feels like
 
 At equal gear, [raw TTK](combat.md#time-to-kill) is the locked three seconds. Across the full gap it moves to roughly **2.1 s** for the maxed player and **4.1 s** for the starter player — close to a two-for-one exchange. Between players of equal skill that is not a tilt, it is the result: the geared player wins, and is meant to. Overturning it takes a real skill gap plus something else — a landed opener from cover, a dodged signature, terrain, or a teammate — rather than merely playing better on the day.
@@ -55,7 +57,7 @@ The loadout is one **six-slot action bar**, the same width for both classes so a
 | Gunslinger | Equipped weapon | Five gadgets |
 | Mage | Spell | Five more spells |
 
-A Mage's staff is the delivery device rather than a bar slot: it casts whichever spell is selected. The counts live in [`loadout.json`](../../../data/tuning/loadout.json) and are tunable, but the two arrangements must stay the same width, because a class with bindings the other cannot reach would need its own control scheme. Keystones join the bar's owning table when [Phase 2.7](../../../TODO.md) settles them.
+A Mage's staff is the delivery device rather than a bar slot: it casts whichever spell is selected. The counts live in [`loadout.json`](../../../data/tuning/loadout.json) and are tunable, but the two arrangements must stay the same width, because a class with bindings the other cannot reach would need its own control scheme. Each class also has one keystone slot outside the action bar.
 
 The open-world loadout lock is the economy's keystone. Players commit before leaving safety and can be countered. Owning more options improves preparation; owning rarer items improves power, but both are committed before the encounter and neither can be swapped in reply to what the fight turns out to be. Both classes can eventually unlock everything.
 
@@ -104,6 +106,8 @@ A staff is made from exactly two crafted subassemblies:
 The UI presents crystal and stave crafting as two deliberate choices, then commits both material recipes atomically with the finished staff. Loose subassemblies are not inventory items: a refusal spends nothing, while success persists only the completed staff's crystal and stave references. This preserves the reference-only item contract and avoids an intermediate inventory that cannot be equipped or traded yet.
 
 Components are where the [vertical budget](#the-vertical-budget) is actually spent. A component's tier sets both its material cost and the share of the budget it may draw, and validation caps the total a finished item can reach — the budget is enforced on the assembled weapon, not per part, or five modest parts would stack into an immodest gun.
+
+The loader enumerates every legal complete recipe arrangement, including every accepted alternative in every slot. It rejects assembled damage above ×1.45, effective health above ×1.38, combined single-item power above ×4/3, and any item—or Mage item plus overcharge keystone—that pulls raw player TTK below 2 seconds.
 
 Gun parts spend most of their value on handling and reach, and the remainder on the damage multiplier their tier allows. Mana crystals carry the Mage's equivalent: bounded `spell_damage` and `spell_healing` multipliers, general to every spell cast through the staff, which never alter a spell-specific row or the shared damage-band data itself.
 

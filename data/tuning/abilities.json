@@ -2,10 +2,10 @@
   "pistol-shot": {
     "name": "Pistol shot",
     "cost": { "kind": "ammo", "amount": 1 },
-    "interval_ms": 300,
+    "interval_ms": 240,
     "cooldown_ms": 0,
     "dodge_vector": "projectile_travel",
-    "damage_band": "standard",
+    "damage_band": "sustained",
     "projectile": {
       "kind": "pistol-round",
       "speed": 780,
@@ -17,10 +17,10 @@
   "revolver-shot": {
     "name": "Revolver shot",
     "cost": { "kind": "ammo", "amount": 1 },
-    "interval_ms": 450,
+    "interval_ms": 750,
     "cooldown_ms": 0,
     "dodge_vector": "projectile_travel",
-    "damage_band": "standard",
+    "damage_band": "burst",
     "projectile": {
       "kind": "revolver-round",
       "speed": 860,
@@ -32,10 +32,10 @@
   "smg-burst": {
     "name": "SMG burst",
     "cost": { "kind": "ammo", "amount": 1 },
-    "interval_ms": 300,
+    "interval_ms": 240,
     "cooldown_ms": 0,
     "dodge_vector": "projectile_travel",
-    "damage_band": "standard",
+    "damage_band": "sustained",
     "projectile": {
       "kind": "smg-round",
       "speed": 700,
@@ -50,10 +50,10 @@
   "shotgun-blast": {
     "name": "Shotgun blast",
     "cost": { "kind": "ammo", "amount": 1 },
-    "interval_ms": 300,
+    "interval_ms": 750,
     "cooldown_ms": 0,
     "dodge_vector": "projectile_travel",
-    "damage_band": "standard",
+    "damage_band": "burst",
     "projectile": {
       "kind": "pellet",
       "speed": 640,
@@ -67,10 +67,10 @@
   "rifle-shot": {
     "name": "Rifle shot",
     "cost": { "kind": "ammo", "amount": 1 },
-    "interval_ms": 300,
+    "interval_ms": 240,
     "cooldown_ms": 0,
     "dodge_vector": "projectile_travel",
-    "damage_band": "standard",
+    "damage_band": "sustained",
     "projectile": {
       "kind": "bullet",
       "speed": 760,
@@ -82,10 +82,10 @@
   "marksman-shot": {
     "name": "Marksman shot",
     "cost": { "kind": "ammo", "amount": 1 },
-    "interval_ms": 450,
+    "interval_ms": 750,
     "cooldown_ms": 0,
     "dodge_vector": "projectile_travel",
-    "damage_band": "standard",
+    "damage_band": "burst",
     "projectile": {
       "kind": "marksman-round",
       "speed": 1000,
@@ -97,11 +97,11 @@
   "sniper-shot": {
     "name": "Sniper shot",
     "cost": { "kind": "ammo", "amount": 1 },
-    "interval_ms": 900,
+    "interval_ms": 1500,
     "cooldown_ms": 0,
     "requires_scope": true,
     "dodge_vector": "scoped_commit",
-    "damage_band": "standard",
+    "damage_band": "heavy-burst",
     "projectile": {
       "kind": "sniper-round",
       "speed": 1400,
@@ -117,10 +117,10 @@
   "lmg-burst": {
     "name": "LMG burst",
     "cost": { "kind": "ammo", "amount": 1 },
-    "interval_ms": 300,
+    "interval_ms": 240,
     "cooldown_ms": 0,
     "dodge_vector": "projectile_travel",
-    "damage_band": "standard",
+    "damage_band": "sustained",
     "projectile": {
       "kind": "lmg-round",
       "speed": 740,
@@ -132,10 +132,10 @@
   "launcher-rocket": {
     "name": "Rocket",
     "cost": { "kind": "material", "material": "rocket", "amount": 1 },
-    "interval_ms": 900,
+    "interval_ms": 1500,
     "cooldown_ms": 0,
     "dodge_vector": "projectile_travel",
-    "damage_band": "standard",
+    "damage_band": "heavy-burst",
     "blast": { "radius": 120, "effects": ["blast-knockback"] },
     "projectile": {
       "kind": "rocket",
@@ -189,7 +189,7 @@
   "fire-bolt-cast": {
     "name": "Fire bolt",
     "cost": { "kind": "mana", "amount": 12 },
-    "interval_ms": 300,
+    "interval_ms": 240,
     "cooldown_ms": 0,
     "windup_ms": 300,
     "telegraph": {
@@ -200,7 +200,7 @@
       "resolved_ms": 150
     },
     "dodge_vector": "projectile_travel",
-    "damage_band": "standard",
+    "damage_band": "sustained",
     "effects": ["fire-burn"],
     "projectile": {
       "kind": "fireball",
@@ -224,7 +224,7 @@
       "radius": 130,
       "duration_ms": 6000,
       "tick_ms": 700,
-      "damage_band": "standard",
+      "damage_band": "sustained",
       "damage_fraction": 0.35,
       "effects": ["fire-burn"]
     }
@@ -232,12 +232,12 @@
   "flame-wave-cast": {
     "name": "Flame wave",
     "cost": { "kind": "mana", "amount": 36 },
-    "interval_ms": 500,
+    "interval_ms": 750,
     "cooldown_ms": 13000,
     "windup_ms": 600,
     "telegraph": { "shape": "cone", "length": 430, "angle_degrees": 62, "active_ms": 220, "resolved_ms": 200 },
     "dodge_vector": "telegraph",
-    "damage_band": "standard",
+    "damage_band": "burst",
     "effects": ["fire-burn"],
     "projectile": {
       "kind": "flame-wave",
@@ -263,7 +263,7 @@
       "radius": 225,
       "duration_ms": 8000,
       "tick_ms": 600,
-      "damage_band": "standard",
+      "damage_band": "heavy-burst",
       "damage_fraction": 0.4,
       "effects": ["fire-burn"]
     }
@@ -271,12 +271,12 @@
   "frost-shard-cast": {
     "name": "Frost shard",
     "cost": { "kind": "mana", "amount": 12 },
-    "interval_ms": 300,
+    "interval_ms": 240,
     "cooldown_ms": 0,
     "windup_ms": 280,
     "telegraph": { "shape": "line", "length": 760, "width": 52, "active_ms": 100, "resolved_ms": 150 },
     "dodge_vector": "projectile_travel",
-    "damage_band": "standard",
+    "damage_band": "sustained",
     "effects": ["frost-chill"],
     "projectile": {
       "kind": "frost-shard",
@@ -332,7 +332,7 @@
       "radius": 245,
       "duration_ms": 7000,
       "tick_ms": 800,
-      "damage_band": "standard",
+      "damage_band": "heavy-burst",
       "damage_fraction": 0.2,
       "effects": ["blizzard-chill"],
       "final_effects": ["blizzard-stun"]
@@ -341,12 +341,12 @@
   "spark-cast": {
     "name": "Spark",
     "cost": { "kind": "mana", "amount": 9 },
-    "interval_ms": 300,
+    "interval_ms": 240,
     "cooldown_ms": 0,
     "windup_ms": 200,
     "telegraph": { "shape": "line", "length": 700, "width": 44, "active_ms": 100, "resolved_ms": 120 },
     "dodge_vector": "projectile_travel",
-    "damage_band": "standard",
+    "damage_band": "sustained",
     "projectile": {
       "kind": "spark",
       "speed": 940,
@@ -367,12 +367,12 @@
   "chain-lightning-cast": {
     "name": "Chain lightning",
     "cost": { "kind": "mana", "amount": 36 },
-    "interval_ms": 500,
+    "interval_ms": 750,
     "cooldown_ms": 12000,
     "windup_ms": 450,
     "telegraph": { "shape": "line", "length": 620, "width": 50, "active_ms": 150, "resolved_ms": 180 },
     "dodge_vector": "cast_time",
-    "damage_band": "standard",
+    "damage_band": "burst",
     "chain": { "jumps": 2, "range": 260 },
     "projectile": {
       "kind": "chain-bolt",
@@ -385,25 +385,25 @@
   "skyfall-cast": {
     "name": "Skyfall",
     "cost": { "kind": "mana", "amount": 55 },
-    "interval_ms": 600,
+    "interval_ms": 1500,
     "cooldown_ms": 28000,
     "windup_ms": 950,
     "telegraph": { "shape": "circle", "radius": 155, "active_ms": 250, "resolved_ms": 250 },
     "dodge_vector": "ground_indicator",
     "placement": { "range": 400 },
-    "damage_band": "standard",
+    "damage_band": "heavy-burst",
     "blast": { "radius": 155, "effects": ["skyfall-shock"] },
     "blink_on_hit": true
   },
   "arcane-missile-cast": {
     "name": "Arcane missile",
     "cost": { "kind": "mana", "amount": 12 },
-    "interval_ms": 300,
+    "interval_ms": 240,
     "cooldown_ms": 0,
     "windup_ms": 260,
     "telegraph": { "shape": "line", "length": 640, "width": 50, "active_ms": 100, "resolved_ms": 150 },
     "dodge_vector": "projectile_travel",
-    "damage_band": "standard",
+    "damage_band": "sustained",
     "projectile": {
       "kind": "arcane-missile",
       "speed": 520,
@@ -439,12 +439,12 @@
   "stone-shard-cast": {
     "name": "Stone shard",
     "cost": { "kind": "mana", "amount": 13 },
-    "interval_ms": 300,
+    "interval_ms": 240,
     "cooldown_ms": 0,
     "windup_ms": 320,
     "telegraph": { "shape": "line", "length": 560, "width": 64, "active_ms": 100, "resolved_ms": 150 },
     "dodge_vector": "projectile_travel",
-    "damage_band": "standard",
+    "damage_band": "sustained",
     "effects": ["stone-knock"],
     "projectile": {
       "kind": "stone-shard",
@@ -467,25 +467,25 @@
   "upheaval-cast": {
     "name": "Upheaval",
     "cost": { "kind": "mana", "amount": 34 },
-    "interval_ms": 500,
+    "interval_ms": 750,
     "cooldown_ms": 15000,
     "windup_ms": 550,
     "telegraph": { "shape": "circle", "radius": 145, "active_ms": 220, "resolved_ms": 220 },
     "dodge_vector": "ground_indicator",
     "placement": { "range": 300 },
-    "damage_band": "standard",
+    "damage_band": "burst",
     "blast": { "radius": 145, "effects": ["upheaval-knock", "upheaval-root"] }
   },
   "bulwark-cast": {
     "name": "Bulwark",
     "cost": { "kind": "mana", "amount": 52 },
-    "interval_ms": 600,
+    "interval_ms": 1500,
     "cooldown_ms": 30000,
     "windup_ms": 600,
     "telegraph": { "shape": "ring", "radius": 205, "width": 42, "active_ms": 200, "resolved_ms": 250 },
     "dodge_vector": "telegraph",
     "placement": { "range": 0 },
-    "damage_band": "standard",
+    "damage_band": "heavy-burst",
     "blast": { "radius": 205, "effects": ["bulwark-shock"] },
     "self_effects": ["bulwark-armor"]
   }

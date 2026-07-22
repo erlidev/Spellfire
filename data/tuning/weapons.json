@@ -11,7 +11,8 @@
     "reload_ms": 900,
     "recoil": { "pattern": [0, -3.5, 4, -3], "recovery_ms": 420 },
     "spread": { "standing_degrees": 0.3, "moving_degrees": 1.4 },
-    "ability": "pistol-shot"
+    "ability": "pistol-shot",
+    "roles": ["damage", "range"]
   },
   "service-revolver": {
     "name": "Service revolver",
@@ -24,7 +25,8 @@
     "reload_ms": 1600,
     "recoil": { "pattern": [0, 8, -9, 9.5, -8, 6.5], "recovery_ms": 700 },
     "spread": { "standing_degrees": 0.2, "moving_degrees": 4.2 },
-    "ability": "revolver-shot"
+    "ability": "revolver-shot",
+    "roles": ["burst", "range"]
   },
   "compact-smg": {
     "name": "Compact SMG",
@@ -38,7 +40,8 @@
     "reload_ms": 1700,
     "recoil": { "pattern": [0, -3, 4, -5, 6, -6.5, 5, -4], "recovery_ms": 300 },
     "spread": { "standing_degrees": 1.2, "moving_degrees": 2 },
-    "ability": "smg-burst"
+    "ability": "smg-burst",
+    "roles": ["damage", "mobility"]
   },
   "breaching-shotgun": {
     "name": "Breaching shotgun",
@@ -52,7 +55,8 @@
     "reload_ms": 2200,
     "recoil": { "pattern": [0, 6, -6.5, 5], "recovery_ms": 620 },
     "spread": { "standing_degrees": 0.6, "moving_degrees": 3 },
-    "ability": "shotgun-blast"
+    "ability": "shotgun-blast",
+    "roles": ["burst", "control"]
   },
   "starter-rifle": {
     "name": "Field rifle",
@@ -66,7 +70,8 @@
     "reload_ms": 1400,
     "recoil": { "pattern": [0, -3.5, 4.5, -5.5, 6.5, -5], "recovery_ms": 450 },
     "spread": { "standing_degrees": 0.5, "moving_degrees": 3 },
-    "ability": "rifle-shot"
+    "ability": "rifle-shot",
+    "roles": ["damage", "range"]
   },
   "marksman-rifle": {
     "name": "Marksman rifle",
@@ -80,7 +85,8 @@
     "recoil": { "pattern": [0, 5.5, -6, 4.5], "recovery_ms": 600 },
     "spread": { "standing_degrees": 0.1, "moving_degrees": 7 },
     "scope": { "movement_multiplier": 0.6, "spread_multiplier": 0.35, "view_bonus": 260 },
-    "ability": "marksman-shot"
+    "ability": "marksman-shot",
+    "roles": ["damage", "range"]
   },
   "long-sniper": {
     "name": "Long sniper",
@@ -96,7 +102,8 @@
     "recoil": { "pattern": [0, 9, -10, 8], "recovery_ms": 900 },
     "spread": { "standing_degrees": 0.05, "moving_degrees": 9 },
     "scope": { "movement_multiplier": 0.45, "spread_multiplier": 0.15, "view_bonus": 420 },
-    "ability": "sniper-shot"
+    "ability": "sniper-shot",
+    "roles": ["burst", "range"]
   },
   "support-lmg": {
     "name": "Support LMG",
@@ -111,7 +118,8 @@
     "cost": { "salvaged-plate": 10, "tempered-plate": 6, "resonant-plate": 1 },
     "recoil": { "pattern": [0, -3, 4, -5, 6, -7, 7.5, -6.5, 5, -4], "recovery_ms": 380 },
     "spread": { "standing_degrees": 1.6, "moving_degrees": 6 },
-    "ability": "lmg-burst"
+    "ability": "lmg-burst",
+    "roles": ["damage", "zone"]
   },
   "field-launcher": {
     "name": "Field launcher",
@@ -124,7 +132,8 @@
     "cost": { "tempered-plate": 8, "resonant-plate": 3 },
     "recoil": { "pattern": [0, -7, 8], "recovery_ms": 1000 },
     "spread": { "standing_degrees": 0.8, "moving_degrees": 3.5 },
-    "ability": "launcher-rocket"
+    "ability": "launcher-rocket",
+    "roles": ["burst", "control", "zone"]
   },
   "starter-staff": {
     "name": "Apprentice staff",
@@ -133,6 +142,7 @@
     "category": "staff",
     "starter": true,
     "unlock_level": 2,
-    "spell": "fire-bolt"
+    "spell": "fire-bolt",
+    "roles": ["damage", "range"]
   }
 }

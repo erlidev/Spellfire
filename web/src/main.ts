@@ -45,7 +45,7 @@ class SpellFire {
   // The authoritative equipped set and the slot the use button acts through.
   // `draft` is the unconfirmed edit in the menu; nothing shows as committed
   // until a Loadout reply confirms it.
-  private loadout: LoadoutSet = { weapon: "", gadgets: [], spells: [] };
+  private loadout: LoadoutSet = { weapon: "", gadgets: [], spells: [], keystones: [] };
   private draft?: LoadoutSet;
   // The permanent axis. The ledger decides what the Loadout section may offer;
   // the server enforces the same rule, so this only avoids offering a refusal.
@@ -492,7 +492,7 @@ class SpellFire {
 
   private updateHUD(entity: Entity): void {
     const health = Math.max(0, entity.health / Math.max(1, entity.maxHealth)); element("health-bar").style.width = `${health * 100}%`; element("health-label").textContent = `${Math.ceil(entity.health)} / ${Math.ceil(entity.maxHealth)}`;
-    const { label, max, capped } = resourceMax(resolvedWeapon(this.loadout.weapon, this.items)), resource = entity.mana;
+    const { label, max, capped } = resourceMax(resolvedWeapon(this.loadout.weapon, this.items), this.loadout.keystones[0]), resource = entity.mana;
     element("resource-label").innerHTML = `${label} <span>${capped ? `${Math.floor(resource)} / ${max}` : `${Math.floor(resource)} carried`}</span>`;
     element("resource-bar").style.width = `${Math.min(1, Math.max(0, resource / Math.max(1, max))) * 100}%`;
     // A shield is a spendable object, so its durability is a readout rather than
@@ -819,6 +819,7 @@ class SpellFire {
       const stored = (character.class === "gunslinger" ? set.gadgets : set.spells)[index] ?? "";
       list.append(this.slotRow(character, slot.kind, index, stored, editable, `Slot ${slot.index + 1}`));
     }
+    list.append(this.slotRow(character, "keystone", 0, set.keystones[0] ?? "", editable, "Keystone"));
     content.append(list);
 
     const message = document.createElement("p");
@@ -1124,7 +1125,7 @@ class SpellFire {
     const options = equippable(character.class, this.ledger, kind, this.items);
     if (kind !== "weapon") select.append(new Option("Empty", ""));
     for (const option of options) select.append(new Option(contentName(kind, option, this.items), option));
-    if (!options.length && kind !== "weapon") select.append(new Option(kind === "gadget" ? "No gadgets unlocked yet" : "No spells unlocked yet", "", true, true));
+    if (!options.length && kind !== "weapon") select.append(new Option(kind === "gadget" ? "No gadgets unlocked yet" : kind === "spell" ? "No spells unlocked yet" : "No keystones unlocked yet", "", true, true));
     appendLocked(select, locked(character.class, this.ledger, kind));
     select.value = id;
     select.addEventListener("change", () => { this.editDraft(kind, index, select.value); });
@@ -1133,10 +1134,11 @@ class SpellFire {
   }
 
   private editDraft(kind: SlotKind, index: number, id: string): void {
-    const draft = this.draft ?? { weapon: this.loadout.weapon, gadgets: [...this.loadout.gadgets], spells: [...this.loadout.spells] };
+    const draft = this.draft ?? { weapon: this.loadout.weapon, gadgets: [...this.loadout.gadgets], spells: [...this.loadout.spells], keystones: [...this.loadout.keystones] };
     if (kind === "weapon") draft.weapon = id;
     else if (kind === "gadget") draft.gadgets[index] = id;
-    else draft.spells[index] = id;
+    else if (kind === "spell") draft.spells[index] = id;
+    else draft.keystones[index] = id;
     this.draft = draft; this.loadoutStatus = "";
     this.renderMenu("loadout");
   }

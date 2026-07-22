@@ -21,7 +21,7 @@ import (
 // SchemaVersion is the table shape this build understands. Bump it only when a
 // table changes shape, and add the matching forward migration; a plain balance
 // edit bumps Manifest.Version instead and needs no code change.
-const SchemaVersion = 17
+const SchemaVersion = 18
 
 type Manifest struct {
 	// Version is the content revision. Bump it on any balance edit; a change
@@ -218,6 +218,7 @@ type DamageBand struct {
 	ID                  string  `json:"-"`
 	Name                string  `json:"name"`
 	DamagePerHit        float64 `json:"damage_per_hit"`
+	IntervalMS          int     `json:"interval_ms"`
 	TargetTTKSeconds    float64 `json:"target_ttk_seconds"`
 	TTKToleranceSeconds float64 `json:"ttk_tolerance_seconds"`
 }
@@ -346,10 +347,13 @@ type Deployable struct {
 	// the shared band, TickMS is its cadence, and Effects are the statuses each
 	// pulse applies to whoever is standing inside. A field with no band deals
 	// nothing and is pure control.
-	DamageBand     string   `json:"damage_band"`
-	DamageFraction float64  `json:"damage_fraction"`
-	TickMS         int      `json:"tick_ms"`
-	Effects        []string `json:"effects"`
+	DamageBand     string  `json:"damage_band"`
+	DamageFraction float64 `json:"damage_fraction"`
+	// DamageMultiplier is derived from an equipped crafted item at cast time.
+	// It is runtime-only: persisted items continue to store component IDs.
+	DamageMultiplier float64  `json:"-"`
+	TickMS           int      `json:"tick_ms"`
+	Effects          []string `json:"effects"`
 	// FinalEffects land once, on the pulse that closes the field. It is what lets
 	// a stacking slow end in a stun rather than simply stopping.
 	FinalEffects []string `json:"final_effects"`
@@ -360,6 +364,13 @@ type Deployable struct {
 }
 
 func (d Deployable) Tick() time.Duration { return time.Duration(d.TickMS) * time.Millisecond }
+
+func (d Deployable) DamageScale() float64 {
+	if d.DamageMultiplier == 0 {
+		return 1
+	}
+	return d.DamageMultiplier
+}
 
 // Pulses reports whether the field does anything to a body standing in it.
 func (d Deployable) Pulses() bool {
@@ -564,8 +575,9 @@ type Ability struct {
 	// authored ability fields or persisted snapshots; zero means the untouched
 	// baseline of one. Healing is carried now so every future healing delivery
 	// uses the same all-spell crystal contract as damage.
-	DamageMultiplier  float64 `json:"-"`
-	HealingMultiplier float64 `json:"-"`
+	DamageMultiplier          float64 `json:"-"`
+	HealingMultiplier         float64 `json:"-"`
+	EffectiveHealthMultiplier float64 `json:"-"`
 	// RequiresScope gates the use on the weapon being scoped. It is what makes a
 	// sniper's hitscan a commitment rather than a free instant hit.
 	RequiresScope bool `json:"requires_scope"`
@@ -612,6 +624,13 @@ func (a Ability) HealingScale() float64 {
 		return 1
 	}
 	return a.HealingMultiplier
+}
+
+func (a Ability) EffectiveHealthScale() float64 {
+	if a.EffectiveHealthMultiplier == 0 {
+		return 1
+	}
+	return a.EffectiveHealthMultiplier
 }
 
 // Interval is the cadence gate between uses of any ability — the global
@@ -712,7 +731,8 @@ type Weapon struct {
 	// carried as a crafted instance, so its material Cost has to be paid before
 	// it reaches a loadout. It is how rare materials gate the heavy categories
 	// economically rather than statistically.
-	RequiresCraft bool `json:"requires_craft"`
+	RequiresCraft bool     `json:"requires_craft"`
+	Roles         []string `json:"roles"`
 }
 
 // Scoped reports whether the weapon has a committed aiming mode at all.
@@ -723,13 +743,14 @@ func (w Weapon) ReloadDuration() time.Duration {
 }
 
 type Spell struct {
-	ID          string `json:"-"`
-	Name        string `json:"name"`
-	Element     string `json:"element"`
-	Tier        int    `json:"tier"`
-	Starter     bool   `json:"starter"`
-	UnlockLevel int    `json:"unlock_level"`
-	Ability     string `json:"ability"`
+	ID          string   `json:"-"`
+	Name        string   `json:"name"`
+	Element     string   `json:"element"`
+	Tier        int      `json:"tier"`
+	Starter     bool     `json:"starter"`
+	UnlockLevel int      `json:"unlock_level"`
+	Ability     string   `json:"ability"`
+	Roles       []string `json:"roles"`
 }
 
 // Gadget is the Gunslinger's equivalent of a spell: identity over one ability,
@@ -737,12 +758,35 @@ type Spell struct {
 // flashbangs, and the rest — so today a Gunslinger's bar holds its weapon and
 // five empty slots.
 type Gadget struct {
-	ID          string `json:"-"`
-	Name        string `json:"name"`
-	Class       string `json:"class"`
-	Starter     bool   `json:"starter"`
-	UnlockLevel int    `json:"unlock_level"`
-	Ability     string `json:"ability"`
+	ID          string   `json:"-"`
+	Name        string   `json:"name"`
+	Class       string   `json:"class"`
+	Starter     bool     `json:"starter"`
+	UnlockLevel int      `json:"unlock_level"`
+	Ability     string   `json:"ability"`
+	Roles       []string `json:"roles"`
+}
+
+const (
+	KeystoneOvercharge = "overcharge"
+	KeystoneOverheat   = "overheat"
+)
+
+// Keystone is one safe-zone-committed behavior tradeoff. It never contributes
+// to item rarity or the vertical budget: its benefit and cost are inseparable.
+type Keystone struct {
+	ID                 string   `json:"-"`
+	Name               string   `json:"name"`
+	Class              string   `json:"class"`
+	UnlockLevel        int      `json:"unlock_level"`
+	Behavior           string   `json:"behavior"`
+	Roles              []string `json:"roles"`
+	DamageMultiplier   float64  `json:"damage_multiplier"`
+	CostMultiplier     float64  `json:"cost_multiplier"`
+	HeatCapacity       float64  `json:"heat_capacity"`
+	HeatPerShot        float64  `json:"heat_per_shot"`
+	HeatCoolPerSecond  float64  `json:"heat_cool_per_second"`
+	HeatResumeFraction float64  `json:"heat_resume_fraction"`
 }
 
 // Ammunition is a craftable special round: a recipe that spends materials and
@@ -837,10 +881,11 @@ type Affinity struct {
 // gadgets, a Mage with spells, and validation keeps the two arrangements the
 // same length so one binding set serves both.
 type Loadout struct {
-	WeaponSlots int      `json:"weapon_slots"`
-	GadgetSlots int      `json:"gadget_slots"`
-	SpellSlots  int      `json:"spell_slots"`
-	Affinity    Affinity `json:"affinity"`
+	WeaponSlots   int      `json:"weapon_slots"`
+	GadgetSlots   int      `json:"gadget_slots"`
+	SpellSlots    int      `json:"spell_slots"`
+	KeystoneSlots int      `json:"keystone_slots"`
+	Affinity      Affinity `json:"affinity"`
 }
 
 // BarSlots is the number of selectable action-bar slots, which the keyboard
@@ -909,6 +954,9 @@ const (
 	// rarer crystal has to earn: specialising into one school rather than adding
 	// output to all five.
 	AttrElementDamage = "element_damage"
+	// AttrEffectiveHealth scales shield pools and armor effectiveness together.
+	// It is a staff-only output axis and is validated on the assembled item.
+	AttrEffectiveHealth = "effective_health"
 )
 
 // ComponentAttributes is the set a modifier may name. Mana crystals scale the
@@ -919,12 +967,13 @@ var ComponentAttributes = []string{
 	AttrProjectileSpeed, AttrProjectileLife, AttrProjectileRadius,
 	AttrRecoilDegrees, AttrSpreadDegrees, AttrMoveSpreadDegrees, AttrScopeMovement,
 	AttrSpellDamage, AttrSpellHealing, AttrAreaRadius, AttrElementDamage,
+	AttrEffectiveHealth,
 }
 
 // CrystalAttributes are the ones only a mana crystal may claim: the all-spell
 // output scalars and the element bias. A gun part naming any of them would be
 // moving spell output from the wrong blueprint entirely.
-var CrystalAttributes = []string{AttrSpellDamage, AttrSpellHealing, AttrElementDamage}
+var CrystalAttributes = []string{AttrSpellDamage, AttrSpellHealing, AttrElementDamage, AttrEffectiveHealth}
 
 // MagazineAttributes only mean anything on a weapon that holds a magazine, so a
 // blueprint whose weapons cast spells may not modify them.
@@ -991,9 +1040,10 @@ func (t *Tables) ComponentsFor(blueprint, slot string) []string {
 }
 
 type Grade struct {
-	ID   string `json:"-"`
-	Name string `json:"name"`
-	Tier int    `json:"tier"`
+	ID              string  `json:"-"`
+	Name            string  `json:"name"`
+	Tier            int     `json:"tier"`
+	PowerMultiplier float64 `json:"power_multiplier"`
 }
 
 type MaterialKind struct {
@@ -1039,7 +1089,7 @@ type Biome struct {
 
 // RetiredKinds are the tables a retirement may name. A retired ID resolves
 // within its own kind; nothing is ever retired across tables.
-var RetiredKinds = []string{"weapon", "spell", "gadget", "ability", "effect", "component", "blueprint", "material", "element", "biome", "mob", "ammunition"}
+var RetiredKinds = []string{"weapon", "spell", "gadget", "keystone", "ability", "effect", "component", "blueprint", "material", "element", "biome", "mob", "ammunition"}
 
 // maxRetirementHops bounds a replacement chain. Validation rejects cycles, so
 // this only guards a table that somehow reached the resolver unvalidated.
@@ -1074,6 +1124,7 @@ type Tables struct {
 	Weapons     map[string]Weapon
 	Spells      map[string]Spell
 	Gadgets     map[string]Gadget
+	Keystones   map[string]Keystone
 	Ammunition  map[string]Ammunition
 	Components  Components
 	Materials   Materials
@@ -1120,6 +1171,8 @@ func (t *Tables) Live(kind, id string) bool {
 		return t.Spells[id].Name != ""
 	case "gadget":
 		return t.Gadgets[id].Name != ""
+	case "keystone":
+		return t.Keystones[id].Name != ""
 	case "ability":
 		return t.Abilities[id].Name != ""
 	case "effect":
@@ -1175,11 +1228,68 @@ func (t *Tables) BandDamage(band string) float64 {
 	return t.Combat.DamageBands[band].DamagePerHit
 }
 
+// GradeAt resolves a component tier to the rarity row that prices it.
+func (t *Tables) GradeAt(tier int) (Grade, bool) {
+	for _, grade := range t.Materials.Grades {
+		if grade.Tier == tier {
+			return grade, true
+		}
+	}
+	return Grade{}, false
+}
+
+// RarityMultiplier applies an assembled item's weakest-link rarity. Every
+// required component must reach a tier before the item receives that tier's
+// band multiplier, so one Signature part cannot upgrade four Common parts.
+func (t *Tables) RarityMultiplier(components map[string]string) float64 {
+	if len(components) == 0 {
+		return 1
+	}
+	tier := int(^uint(0) >> 1)
+	for _, id := range components {
+		component, ok := t.Components.Components[id]
+		if !ok {
+			return 1
+		}
+		if component.Tier < tier {
+			tier = component.Tier
+		}
+	}
+	if grade, ok := t.GradeAt(tier); ok {
+		return grade.PowerMultiplier
+	}
+	return 1
+}
+
+type DamageProfile struct {
+	Band     string
+	Damage   float64
+	Interval time.Duration
+	DPS      float64
+	RawTTK   time.Duration
+}
+
+// ResolveDamage computes output from the band and the derived item multiplier;
+// neither damage nor DPS is copied onto a persisted item.
+func (t *Tables) ResolveDamage(ability Ability, targetHealth float64) DamageProfile {
+	band, ok := t.Combat.DamageBands[ability.DamageBand]
+	if !ok || band.DamagePerHit <= 0 || band.IntervalMS <= 0 {
+		return DamageProfile{}
+	}
+	damage := band.DamagePerHit * ability.DamageScale()
+	interval := time.Duration(band.IntervalMS) * time.Millisecond
+	hits := math.Ceil(targetHealth / damage)
+	return DamageProfile{
+		Band: ability.DamageBand, Damage: damage, Interval: interval,
+		DPS: damage / interval.Seconds(), RawTTK: time.Duration(math.Max(0, hits-1) * float64(interval)),
+	}
+}
+
 // UnlockKinds are the tables a permanent unlock ID may name. The ledger is
 // flat, so an ID is unique across all of them — validation enforces it — and a
 // saved entry can be resolved without also storing which table it came from.
 // Keystones join the list when Phase 2.7 settles them.
-var UnlockKinds = []string{"weapon", "spell", "gadget"}
+var UnlockKinds = []string{"weapon", "spell", "gadget", "keystone"}
 
 // StarterWeapons is the basic set of the class: the pool a new character draws
 // its one opening weapon from. Validation guarantees at least one per class.
@@ -1251,6 +1361,11 @@ func (t *Tables) UnlocksThrough(level int) []string {
 			granted = append(granted, id)
 		}
 	}
+	for _, id := range sortedKeys(t.Keystones) {
+		if t.Keystones[id].UnlockLevel <= level {
+			granted = append(granted, id)
+		}
+	}
 	sort.Strings(granted)
 	return granted
 }
@@ -1317,6 +1432,7 @@ func Parse(fsys fs.FS) (*Tables, error) {
 		{"weapons.json", &tables.Weapons},
 		{"spells.json", &tables.Spells},
 		{"gadgets.json", &tables.Gadgets},
+		{"keystones.json", &tables.Keystones},
 		{"ammunition.json", &tables.Ammunition},
 		{"components.json", &tables.Components},
 		{"materials.json", &tables.Materials},
@@ -1380,6 +1496,10 @@ func (t *Tables) stampIDs() {
 	for id, gadget := range t.Gadgets {
 		gadget.ID = id
 		t.Gadgets[id] = gadget
+	}
+	for id, keystone := range t.Keystones {
+		keystone.ID = id
+		t.Keystones[id] = keystone
 	}
 	for id, ammunition := range t.Ammunition {
 		ammunition.ID = id

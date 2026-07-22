@@ -1,9 +1,10 @@
 {
   "admin_grant": { "attribute": "inventory.material_count", "label": "Grant count", "input": "number", "scope": "edit", "default": "10", "min": 1, "max": 500, "step": 1 },
   "grades": {
-    "common": { "name": "Common", "tier": 1 },
-    "uncommon": { "name": "Uncommon", "tier": 2 },
-    "rare": { "name": "Rare", "tier": 3 }
+    "common": { "name": "Common", "tier": 1, "power_multiplier": 1 },
+    "uncommon": { "name": "Uncommon", "tier": 2, "power_multiplier": 1.08 },
+    "rare": { "name": "Rare", "tier": 3, "power_multiplier": 1.18 },
+    "signature": { "name": "Signature", "tier": 4, "power_multiplier": 1.3 }
   },
   "kinds": {
     "structural": {
@@ -29,6 +30,12 @@
       "universal": true,
       "source": "craft",
       "summary": "Finite crafted rounds a heavy weapon spends instead of its magazine. No node or mob yields them."
+    },
+    "boss_reward": {
+      "name": "Boss reward",
+      "universal": true,
+      "source": "mob",
+      "summary": "Signature stock dropped only by rim world bosses; it prices the final bounded rarity step."
     }
   },
   "materials": {
@@ -43,6 +50,7 @@
     "ash-heartwood": { "name": "Ash heartwood", "grade": "common", "kind": "wood" },
     "oak-heartwood": { "name": "Runed oak heartwood", "grade": "uncommon", "kind": "wood" },
     "ironwood-heartwood": { "name": "Resonant ironwood", "grade": "rare", "kind": "wood" },
-    "rocket": { "name": "Rocket", "grade": "uncommon", "kind": "ammunition" }
+    "rocket": { "name": "Rocket", "grade": "uncommon", "kind": "ammunition" },
+    "signature-essence": { "name": "Prototype signature essence", "grade": "signature", "kind": "boss_reward" }
   }
 }

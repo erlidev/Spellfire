@@ -32,11 +32,26 @@
     }
   },
   "damage_bands": {
-    "standard": {
-      "name": "Standard",
-      "damage_per_hit": 10,
+    "sustained": {
+      "name": "Sustained",
+      "damage_per_hit": 8,
+      "interval_ms": 240,
+      "target_ttk_seconds": 2.88,
+      "ttk_tolerance_seconds": 0.15
+    },
+    "burst": {
+      "name": "Burst",
+      "damage_per_hit": 20,
+      "interval_ms": 750,
       "target_ttk_seconds": 3,
-      "ttk_tolerance_seconds": 0.6
+      "ttk_tolerance_seconds": 0.15
+    },
+    "heavy-burst": {
+      "name": "Heavy burst",
+      "damage_per_hit": 34,
+      "interval_ms": 1500,
+      "target_ttk_seconds": 3,
+      "ttk_tolerance_seconds": 0.15
     }
   }
 }

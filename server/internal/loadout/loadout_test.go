@@ -80,6 +80,27 @@ func TestDefaultIsEquippableForBothClasses(t *testing.T) {
 	}
 }
 
+func TestKeystoneSlotIsClassLockedAndOutsideTheBar(t *testing.T) {
+	tables := shipped(t)
+	inventory := everything(tables)
+	set := loadout.Default(tables, model.Mage, inventory)
+	set.Keystones = []string{"volatile-focus"}
+	if err := loadout.Validate(tables, model.Mage, inventory, set); err != nil {
+		t.Fatalf("Mage keystone was refused: %v", err)
+	}
+	if got := len(loadout.Bar(tables, model.Mage, inventory, set)); got != tables.Loadout.BarSlots() {
+		t.Fatalf("keystone changed the action bar to %d slots", got)
+	}
+	set.Keystones = []string{"thermal-cycle"}
+	if err := loadout.Validate(tables, model.Mage, inventory, set); err == nil {
+		t.Fatal("Mage equipped the Gunslinger keystone")
+	}
+	set.Keystones = []string{"volatile-focus", "volatile-focus"}
+	if err := loadout.Validate(tables, model.Mage, inventory, set); err == nil {
+		t.Fatal("loadout accepted more than one keystone")
+	}
+}
+
 func TestBarLaysClassesOutOverTheSameBindings(t *testing.T) {
 	tables := shipped(t)
 	gunslinger := loadout.Bar(tables, model.Gunslinger, kit(tables, model.Gunslinger), loadout.Default(tables, model.Gunslinger, kit(tables, model.Gunslinger)))
@@ -211,7 +232,7 @@ func TestResolveRearmsACharacterWhoseWeaponWasWithdrawn(t *testing.T) {
 
 func TestGadgetsFillTheGunslingerBar(t *testing.T) {
 	tables := edited(t, map[string]string{
-		"gadgets.json": `{"smoke": {"name": "Smoke canister", "class": "gunslinger", "starter": true, "unlock_level": 2, "ability": "rifle-shot"}}`,
+		"gadgets.json": `{"smoke": {"name": "Smoke canister", "class": "gunslinger", "starter": true, "unlock_level": 2, "ability": "rifle-shot", "roles": ["damage", "burst", "control", "mobility", "sustain", "zone", "range"]}}`,
 	})
 	set := loadout.Default(tables, model.Gunslinger, kit(tables, model.Gunslinger))
 	if set.Gadgets[0] != "smoke" {
@@ -271,10 +292,10 @@ func TestResolveUnequipsContentTheLedgerLost(t *testing.T) {
 // grid is a Fire column to tier 4, which is what the affinity rule needs to be
 // testable before Phase 2.5 authors the real twenty rows.
 const grid = `{
-  "fire-bolt": {"name": "Fire bolt", "element": "fire", "tier": 1, "starter": true, "unlock_level": 2, "ability": "fire-bolt-cast"},
-  "fire-2":    {"name": "Cinder patch", "element": "fire", "tier": 2, "unlock_level": 4, "ability": "fire-bolt-cast"},
-  "fire-3":    {"name": "Flame wave", "element": "fire", "tier": 3, "unlock_level": 7, "ability": "fire-bolt-cast"},
-  "fire-4":    {"name": "Firestorm", "element": "fire", "tier": 4, "unlock_level": 11, "ability": "fire-bolt-cast"}
+  "fire-bolt": {"name": "Fire bolt", "element": "fire", "tier": 1, "starter": true, "unlock_level": 2, "ability": "fire-bolt-cast", "roles": ["damage", "burst", "control", "mobility", "sustain", "zone", "range"]},
+  "fire-2":    {"name": "Cinder patch", "element": "fire", "tier": 2, "unlock_level": 4, "ability": "fire-bolt-cast", "roles": ["damage"]},
+  "fire-3":    {"name": "Flame wave", "element": "fire", "tier": 3, "unlock_level": 7, "ability": "fire-bolt-cast", "roles": ["damage"]},
+  "fire-4":    {"name": "Firestorm", "element": "fire", "tier": 4, "unlock_level": 11, "ability": "fire-bolt-cast", "roles": ["damage"]}
 }`
 
 // The weapon slot holds something usable: either a stock row or a crafted

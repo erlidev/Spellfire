@@ -32,7 +32,7 @@ World items use geometry matching their authoritative collision shape. Damaged d
 
 | Region | Required state | Behavior |
 |---|---|---|
-| Lower center | Weapon/abilities, slots, cooldowns, charges, class resource, bindings, universal dash | Mage shows mana; Gunslinger shows magazine/reload |
+| Lower center | Weapon/abilities, slots, cooldowns, charges, class resource, bindings, universal dash | Mage shows mana; Gunslinger shows magazine/reload, or Heat while Thermal cycle is equipped |
 | Lower center | Six equipped slots with their bindings and the selected one marked | Selection uses border and weight as well as fill, never color alone |
 | Lower center/side | Health and statuses | More precise than the actor plate |
 | Lower center/side | Shield durability, while one is carried | Reads `broken` at zero; absent for a body holding no shield |

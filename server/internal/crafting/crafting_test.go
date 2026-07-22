@@ -1,6 +1,7 @@
 package crafting_test
 
 import (
+	"math"
 	"reflect"
 	"testing"
 
@@ -78,6 +79,39 @@ func TestCostSumsEveryFilledSlot(t *testing.T) {
 	// A heavy category's own chassis cost is independent of its required parts.
 	if len(crafting.Cost(tables, "long-sniper", map[string]string{})) == 0 {
 		t.Fatal("a heavy category costs nothing to build")
+	}
+}
+
+func TestSignatureRarityRaisesDamageOnceWithoutChangingCadence(t *testing.T) {
+	tables := shipped(t)
+	gun := tables.Weapons["starter-rifle"]
+	base := tables.Abilities[gun.Ability]
+	parts := map[string]string{"receiver": "prototype-receiver", "barrel": "prototype-barrel", "action": "prototype-action", "feed": "prototype-feed", "sight": "prototype-sight"}
+	_, applied := crafting.Apply(tables, gun, base, parts)
+	if applied.DamageScale() != 1.3 {
+		t.Fatalf("Signature damage scale = %g, want one rarity multiplier of 1.3", applied.DamageScale())
+	}
+	if applied.Interval() != base.Interval() {
+		t.Fatalf("Signature parts changed cadence from %s to %s", base.Interval(), applied.Interval())
+	}
+
+	staff := tables.Weapons["starter-staff"]
+	_, defended := crafting.Apply(tables, staff, tables.Abilities[staff.Spell], map[string]string{"crystal": "aegis-prism-crystal", "stave": "oak-stave"})
+	if defended.EffectiveHealthScale() != 1.15 {
+		t.Fatalf("Aegis effective-health scale = %g, want 1.15", defended.EffectiveHealthScale())
+	}
+}
+
+func TestStaffRarityAndElementBiasReachPersistentFields(t *testing.T) {
+	tables := shipped(t)
+	staff := tables.Weapons["starter-staff"]
+	base := tables.Abilities["cinder-patch-cast"]
+	parts := map[string]string{"crystal": "pyre-heart-crystal", "stave": "oak-stave"}
+	_, applied := crafting.Apply(tables, staff, base, parts)
+	applied = crafting.Bias(tables, applied, "fire", parts)
+	want := 1.08 * 0.94 * 1.25
+	if applied.Deployable == nil || math.Abs(applied.Deployable.DamageScale()-want) > 1e-9 {
+		t.Fatalf("field damage scale = %#v, want %g", applied.Deployable, want)
 	}
 }
 

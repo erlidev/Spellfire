@@ -106,7 +106,7 @@ func (h *WebSocket) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			h.engine.Pong(client.PlayerID, message.ClientTimeMS, time.Now())
 		case protocol.ClientLoadout:
 			h.engine.SetLoadout(client.PlayerID, model.Loadout{
-				Weapon: message.Loadout.Weapon, Gadgets: message.Loadout.Gadgets, Spells: message.Loadout.Spells,
+				Weapon: message.Loadout.Weapon, Gadgets: message.Loadout.Gadgets, Spells: message.Loadout.Spells, Keystones: message.Loadout.Keystones,
 			}, time.Now())
 		case protocol.ClientCraft:
 			h.engine.Craft(client.PlayerID, game.CraftRequest{

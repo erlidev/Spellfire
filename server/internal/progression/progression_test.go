@@ -180,22 +180,22 @@ func TestSyncGivesAKitToARecordThatPredatesTheLedger(t *testing.T) {
 // than the draw, which is what makes the draw observable; the gadget pool is
 // exactly the five slots a Gunslinger has.
 const basicSpells = `{
-  "bolt-1": {"name": "Fire bolt", "element": "fire", "tier": 1, "starter": true, "unlock_level": 2, "ability": "fire-bolt-cast"},
-  "bolt-2": {"name": "Frost shard", "element": "fire", "tier": 1, "starter": true, "unlock_level": 2, "ability": "fire-bolt-cast"},
-  "bolt-3": {"name": "Spark", "element": "fire", "tier": 1, "starter": true, "unlock_level": 2, "ability": "fire-bolt-cast"},
-  "bolt-4": {"name": "Arcane dart", "element": "fire", "tier": 1, "starter": true, "unlock_level": 2, "ability": "fire-bolt-cast"},
-  "bolt-5": {"name": "Pebble", "element": "fire", "tier": 1, "starter": true, "unlock_level": 2, "ability": "fire-bolt-cast"},
-  "bolt-6": {"name": "Ember", "element": "fire", "tier": 1, "starter": true, "unlock_level": 2, "ability": "fire-bolt-cast"},
-  "bolt-7": {"name": "Cinder", "element": "fire", "tier": 1, "starter": true, "unlock_level": 2, "ability": "fire-bolt-cast"},
-  "bolt-8": {"name": "Flare", "element": "fire", "tier": 1, "starter": true, "unlock_level": 2, "ability": "fire-bolt-cast"},
-  "bolt-9": {"name": "Scorch", "element": "fire", "tier": 1, "starter": true, "unlock_level": 2, "ability": "fire-bolt-cast"},
-  "fire-bolt": {"name": "Kindle", "element": "fire", "tier": 1, "starter": true, "unlock_level": 2, "ability": "fire-bolt-cast"}
+  "bolt-1": {"name": "Fire bolt", "element": "fire", "tier": 1, "starter": true, "unlock_level": 2, "ability": "fire-bolt-cast", "roles": ["damage", "burst", "control", "mobility", "sustain", "zone", "range"]},
+  "bolt-2": {"name": "Frost shard", "element": "fire", "tier": 1, "starter": true, "unlock_level": 2, "ability": "fire-bolt-cast", "roles": ["damage"]},
+  "bolt-3": {"name": "Spark", "element": "fire", "tier": 1, "starter": true, "unlock_level": 2, "ability": "fire-bolt-cast", "roles": ["damage"]},
+  "bolt-4": {"name": "Arcane dart", "element": "fire", "tier": 1, "starter": true, "unlock_level": 2, "ability": "fire-bolt-cast", "roles": ["damage"]},
+  "bolt-5": {"name": "Pebble", "element": "fire", "tier": 1, "starter": true, "unlock_level": 2, "ability": "fire-bolt-cast", "roles": ["damage"]},
+  "bolt-6": {"name": "Ember", "element": "fire", "tier": 1, "starter": true, "unlock_level": 2, "ability": "fire-bolt-cast", "roles": ["damage"]},
+  "bolt-7": {"name": "Cinder", "element": "fire", "tier": 1, "starter": true, "unlock_level": 2, "ability": "fire-bolt-cast", "roles": ["damage"]},
+  "bolt-8": {"name": "Flare", "element": "fire", "tier": 1, "starter": true, "unlock_level": 2, "ability": "fire-bolt-cast", "roles": ["damage"]},
+  "bolt-9": {"name": "Scorch", "element": "fire", "tier": 1, "starter": true, "unlock_level": 2, "ability": "fire-bolt-cast", "roles": ["damage"]},
+  "fire-bolt": {"name": "Kindle", "element": "fire", "tier": 1, "starter": true, "unlock_level": 2, "ability": "fire-bolt-cast", "roles": ["damage"]}
 }`
 
 const basicGadgets = `{
-  "smoke":     {"name": "Smoke canister", "class": "gunslinger", "starter": true, "unlock_level": 2, "ability": "rifle-shot"},
-  "flash":     {"name": "Flashbang", "class": "gunslinger", "starter": true, "unlock_level": 2, "ability": "rifle-shot"},
-  "shield":    {"name": "Riot shield", "class": "gunslinger", "starter": true, "unlock_level": 2, "ability": "rifle-shot"},
-  "charge":    {"name": "Breaching charge", "class": "gunslinger", "starter": true, "unlock_level": 2, "ability": "rifle-shot"},
-  "beacon":    {"name": "Marker beacon", "class": "gunslinger", "starter": true, "unlock_level": 2, "ability": "rifle-shot"}
+  "smoke":     {"name": "Smoke canister", "class": "gunslinger", "starter": true, "unlock_level": 2, "ability": "rifle-shot", "roles": ["damage", "burst", "control", "mobility", "sustain", "zone", "range"]},
+  "flash":     {"name": "Flashbang", "class": "gunslinger", "starter": true, "unlock_level": 2, "ability": "rifle-shot", "roles": ["damage"]},
+  "shield":    {"name": "Riot shield", "class": "gunslinger", "starter": true, "unlock_level": 2, "ability": "rifle-shot", "roles": ["damage"]},
+  "charge":    {"name": "Breaching charge", "class": "gunslinger", "starter": true, "unlock_level": 2, "ability": "rifle-shot", "roles": ["damage"]},
+  "beacon":    {"name": "Marker beacon", "class": "gunslinger", "starter": true, "unlock_level": 2, "ability": "rifle-shot", "roles": ["damage"]}
 }`

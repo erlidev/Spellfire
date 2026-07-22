@@ -261,9 +261,11 @@ func Modifiers(tables *tuning.Tables, components map[string]string) map[string]f
 // unchanged, which is what an unmodified starter weapon resolves to.
 func Apply(tables *tuning.Tables, weapon tuning.Weapon, ability tuning.Ability, components map[string]string) (tuning.Weapon, tuning.Ability) {
 	modifiers := Modifiers(tables, components)
-	if len(modifiers) == 0 {
+	rarity := tables.RarityMultiplier(components)
+	if len(modifiers) == 0 && rarity == 1 {
 		return weapon, ability
 	}
+	ability.DamageMultiplier = ability.DamageScale() * rarity
 	if weapon.MagazineSize > 0 {
 		weapon.MagazineSize = scaleCount(weapon.MagazineSize, modifiers[tuning.AttrMagazineSize])
 		weapon.ReloadMS = scaleCount(weapon.ReloadMS, modifiers[tuning.AttrReloadMS])
@@ -279,6 +281,7 @@ func Apply(tables *tuning.Tables, weapon tuning.Weapon, ability tuning.Ability, 
 	}
 	ability.DamageMultiplier = scaleFromOne(ability.DamageScale(), modifiers[tuning.AttrSpellDamage])
 	ability.HealingMultiplier = scaleFromOne(ability.HealingScale(), modifiers[tuning.AttrSpellHealing])
+	ability.EffectiveHealthMultiplier = scaleFromOne(ability.EffectiveHealthScale(), modifiers[tuning.AttrEffectiveHealth])
 	ability.Cost = scaleCost(ability.Cost, modifiers[tuning.AttrCostAmount], weapon.MagazineSize)
 	if ability.Projectile != nil {
 		// The projectile is a pointer into the shared table, so it is copied
@@ -289,6 +292,11 @@ func Apply(tables *tuning.Tables, weapon tuning.Weapon, ability tuning.Ability, 
 		projectile.LifeSeconds = scale(projectile.LifeSeconds, modifiers[tuning.AttrProjectileLife])
 		projectile.Radius = scale(projectile.Radius, modifiers[tuning.AttrProjectileRadius])
 		ability.Projectile = &projectile
+	}
+	if ability.Deployable != nil {
+		field := *ability.Deployable
+		field.DamageMultiplier = ability.DamageScale()
+		ability.Deployable = &field
 	}
 	return weapon, applyArea(ability, modifiers[tuning.AttrAreaRadius])
 }
@@ -341,6 +349,11 @@ func Bias(tables *tuning.Tables, ability tuning.Ability, element string, compone
 		if modifier := component.Modifiers[tuning.AttrElementDamage]; modifier != 0 {
 			ability.DamageMultiplier = ability.DamageScale() * modifier
 			ability.HealingMultiplier = ability.HealingScale() * modifier
+			if ability.Deployable != nil {
+				field := *ability.Deployable
+				field.DamageMultiplier = field.DamageScale() * modifier
+				ability.Deployable = &field
+			}
 		}
 	}
 	return ability

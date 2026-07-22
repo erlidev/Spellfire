@@ -34,17 +34,18 @@ func (w *World) ability(p *Player) (tuning.Ability, bool) {
 	// the staff is the delivery device, so its parts change the cast — but never
 	// a gadget, which the weapon has no part in throwing.
 	if slot.Item.ID == "" || slot.Kind == loadout.KindGadget {
-		return ability, true
+		return w.applyKeystone(p, ability), true
 	}
 	weapon, _, resolved := w.inventory(p).Equipped(w.tuning.Tables, p.Loadout.Weapon)
 	if !resolved {
-		return ability, true
+		return w.applyKeystone(p, ability), true
 	}
 	_, ability = crafting.Apply(w.tuning.Tables, weapon, ability, slot.Item.Components)
 	// A crystal's element bias is the one modifier that depends on what is being
 	// cast rather than on what is holding it, so it is applied against the slot's
 	// element after everything the staff does to every spell alike.
-	return crafting.Bias(w.tuning.Tables, ability, slot.Element, slot.Item.Components), true
+	ability = crafting.Bias(w.tuning.Tables, ability, slot.Element, slot.Item.Components)
+	return w.applyKeystone(p, ability), true
 }
 
 // useAbility charges and delivers one use. It is the only way an action reaches
@@ -94,6 +95,17 @@ func (w *World) useAbility(p *Player, now time.Time) bool {
 func (w *World) spend(p *Player, ability tuning.Ability, now time.Time) bool {
 	switch ability.Cost.Kind {
 	case tuning.CostAmmo:
+		if keystone, ok := w.heatKeystone(p); ok {
+			if p.Overheated || p.Heat+keystone.HeatPerShot > keystone.HeatCapacity {
+				p.Overheated = true
+				return false
+			}
+			p.Heat += keystone.HeatPerShot
+			if p.Heat >= keystone.HeatCapacity {
+				p.Overheated = true
+			}
+			return true
+		}
 		if !p.ReloadEnds.IsZero() {
 			return false
 		}
@@ -170,7 +182,7 @@ func (w *World) anchor(origin, direction Vec, ability tuning.Ability) Vec {
 func (w *World) resolve(ownerID string, at, direction Vec, ability tuning.Ability, now time.Time, element string) {
 	owner := w.players[ownerID]
 	if owner != nil && len(ability.SelfEffects) > 0 {
-		w.applyEffects(owner, ability.SelfEffects, ownerID, direction, now)
+		w.applyEffectsScaled(owner, ability.SelfEffects, ownerID, direction, now, ability.EffectiveHealthScale())
 	}
 	if ability.Cleanse != nil {
 		w.cleanse(owner, at, *ability.Cleanse, now)

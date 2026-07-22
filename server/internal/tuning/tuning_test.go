@@ -112,22 +112,22 @@ func TestEditingOneBandRowMovesEveryDependentItem(t *testing.T) {
 	before := MustLoad()
 	files := edit(t, shipped(t), "combat.json", func(document map[string]any) {
 		bands := document["damage_bands"].(map[string]any)
-		standard := bands["standard"].(map[string]any)
-		standard["damage_per_hit"] = 25.0
+		sustained := bands["sustained"].(map[string]any)
+		sustained["damage_per_hit"] = 8.05
 	})
 	after, err := Parse(files)
 	if err != nil {
 		t.Fatalf("edited tables rejected: %v", err)
 	}
-	for _, class := range []string{"gunslinger", "mage"} {
-		weapon, _ := before.StarterWeapon(class)
+	for class, weaponID := range map[string]string{"gunslinger": "field-pistol", "mage": "starter-staff"} {
+		weapon := before.Weapons[weaponID]
 		original, _ := before.WeaponAbility(weapon)
 		edited, ok := after.WeaponAbility(weapon)
 		if !ok {
 			t.Fatalf("%s starter weapon stopped resolving after the edit", class)
 		}
-		if before.BandDamage(original.DamageBand) != 10 || after.BandDamage(edited.DamageBand) != 25 {
-			t.Fatalf("%s damage did not follow the band row", class)
+		if before.BandDamage(original.DamageBand) != 8 || after.BandDamage(edited.DamageBand) != 8.05 {
+			t.Fatalf("%s damage did not follow the band row: before=%g after=%g band=%s", class, before.BandDamage(original.DamageBand), after.BandDamage(edited.DamageBand), edited.DamageBand)
 		}
 		// The ability row itself was untouched: only the band it points at moved.
 		if after.Abilities[edited.ID].DamageBand != before.Abilities[original.ID].DamageBand {
@@ -143,7 +143,6 @@ func TestEditingAnAbilityRowMovesTheStaffThatReachesIt(t *testing.T) {
 	files := edit(t, shipped(t), "abilities.json", func(document map[string]any) {
 		cast := document["fire-bolt-cast"].(map[string]any)
 		cast["cost"].(map[string]any)["amount"] = 30.0
-		cast["interval_ms"] = 500.0
 	})
 	after, err := Parse(files)
 	if err != nil {
@@ -154,7 +153,7 @@ func TestEditingAnAbilityRowMovesTheStaffThatReachesIt(t *testing.T) {
 	if !ok {
 		t.Fatal("staff stopped resolving")
 	}
-	if ability.Cost.Amount != 30 || ability.Interval().Milliseconds() != 500 {
+	if ability.Cost.Amount != 30 || ability.Interval().Milliseconds() != 240 {
 		t.Fatalf("staff did not follow its ability: %#v", ability)
 	}
 }
@@ -163,14 +162,96 @@ func TestEditingAnAbilityRowMovesTheStaffThatReachesIt(t *testing.T) {
 // as a consequence of the tables rather than a number written next to them.
 func TestStarterItemsHitTheDesignTimeToKill(t *testing.T) {
 	tables := MustLoad()
-	band := tables.Combat.DamageBands["standard"]
 	for _, class := range []string{"gunslinger", "mage"} {
 		weapon, _ := tables.StarterWeapon(class)
 		ability, _ := tables.WeaponAbility(weapon)
+		band := tables.Combat.DamageBands[ability.DamageBand]
 		hits := math.Ceil(tables.Entities["player"].MaxHealth / tables.BandDamage(ability.DamageBand))
 		seconds := (hits - 1) * ability.Interval().Seconds()
 		if math.Abs(seconds-band.TargetTTKSeconds) > band.TTKToleranceSeconds {
 			t.Fatalf("%s raw TTK is %.2fs, outside %.2f±%.2fs", class, seconds, band.TargetTTKSeconds, band.TTKToleranceSeconds)
+		}
+	}
+}
+
+func TestEveryDamagingWeaponAndSpellHitsItsCommonBand(t *testing.T) {
+	tables := MustLoad()
+	target := tables.Entities["player"].MaxHealth
+	check := func(kind, id, abilityID string) {
+		t.Helper()
+		ability := tables.Abilities[abilityID]
+		if !ability.Damaging() {
+			if ability.Deployable == nil || ability.Deployable.DamageBand == "" {
+				return
+			}
+			band, ok := tables.Combat.DamageBands[ability.Deployable.DamageBand]
+			if !ok || ability.Deployable.DamageFraction <= 0 || ability.Deployable.DamageFraction > 1 || ability.Deployable.TickMS <= 0 {
+				t.Fatalf("%s %s has an invalid fractional field delivery in band %q", kind, id, ability.Deployable.DamageBand)
+			}
+			if profile := tables.ResolveDamage(Ability{DamageBand: ability.Deployable.DamageBand}, target); math.Abs(profile.RawTTK.Seconds()-band.TargetTTKSeconds) > band.TTKToleranceSeconds {
+				t.Fatalf("%s %s field references off-target band %s", kind, id, ability.Deployable.DamageBand)
+			}
+			return
+		}
+		profile := tables.ResolveDamage(ability, target)
+		band := tables.Combat.DamageBands[ability.DamageBand]
+		if math.Abs(profile.RawTTK.Seconds()-band.TargetTTKSeconds) > band.TTKToleranceSeconds {
+			t.Fatalf("%s %s resolves to %.2fs in %s, want %.2f±%.2fs", kind, id, profile.RawTTK.Seconds(), ability.DamageBand, band.TargetTTKSeconds, band.TTKToleranceSeconds)
+		}
+	}
+	for id, weapon := range tables.Weapons {
+		check("weapon", id, weapon.Ability)
+	}
+	for id, spell := range tables.Spells {
+		check("spell", id, spell.Ability)
+	}
+}
+
+func TestRarityUsesTheWeakestComponentAndCoversEveryRole(t *testing.T) {
+	tables := MustLoad()
+	signature := map[string]string{"receiver": "prototype-receiver", "barrel": "prototype-barrel", "action": "prototype-action", "feed": "prototype-feed", "sight": "prototype-sight"}
+	if got := tables.RarityMultiplier(signature); got != 1.3 {
+		t.Fatalf("complete Signature gun multiplier = %g, want 1.3", got)
+	}
+	signature["sight"] = "iron-sights"
+	if got := tables.RarityMultiplier(signature); got != 1 {
+		t.Fatalf("mixed-tier gun multiplier = %g, want weakest-tier 1", got)
+	}
+
+	for _, class := range []string{"gunslinger", "mage"} {
+		covered := map[string]bool{}
+		for _, weapon := range tables.Weapons {
+			if weapon.Class == class {
+				for _, role := range weapon.Roles {
+					covered[role] = true
+				}
+			}
+		}
+		for _, spell := range tables.Spells {
+			if class == "mage" {
+				for _, role := range spell.Roles {
+					covered[role] = true
+				}
+			}
+		}
+		for _, gadget := range tables.Gadgets {
+			if gadget.Class == class {
+				for _, role := range gadget.Roles {
+					covered[role] = true
+				}
+			}
+		}
+		for _, keystone := range tables.Keystones {
+			if keystone.Class == class {
+				for _, role := range keystone.Roles {
+					covered[role] = true
+				}
+			}
+		}
+		for _, role := range tables.Combat.Roles {
+			if !covered[role] {
+				t.Errorf("%s does not cover %s", class, role)
+			}
 		}
 	}
 }
