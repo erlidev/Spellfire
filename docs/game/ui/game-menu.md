@@ -1,6 +1,6 @@
 # In-game menu
 
-The menu opens from a persistent control as a small non-modal panel anchored to the top-right corner. Fine-pointer clients minimize it to a compact title bar shortly after the pointer leaves and restore it on hover; touch clients use the visible minimize button. The shared world **does not pause**.
+The menu opens from a persistent control as a small non-modal panel anchored to the top-right corner. Fine-pointer clients minimize it to a compact title bar shortly after the pointer leaves and restore it on hover; touch clients use the visible minimize button exclusively. Synthetic touch hover never expands or collapses the panel. The shared world **does not pause**.
 
 State this explicitly and preserve danger awareness. Movement, slot selection, aiming, and combat remain active while the panel is open; typing in a form field suppresses only the keys consumed by that field.
 
@@ -9,6 +9,11 @@ loadout replies, inventory/crafting replies, and selected-entity snapshots updat
 the open panel without requiring it to be closed and reopened. Rendering is
 coalesced to one animation frame and leaves an actively focused form control in
 place until interaction finishes.
+
+Tabs use delegated touch pointer-up activation in addition to ordinary click,
+remain at least 44 px tall, and allow horizontal panning of the tab strip. This
+avoids depending on iOS's delayed compatibility click while preserving mouse
+and keyboard activation.
 
 ## Information architecture
 

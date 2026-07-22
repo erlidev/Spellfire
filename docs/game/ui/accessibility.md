@@ -13,7 +13,8 @@ Accessibility is part of the interaction contract:
 - shape, outline, pattern, icon, or text reinforcement for every hue-coded state;
 - no essential information available only on hover.
 
+Mobile uses a fixed device-scale viewport so gameplay cannot become stranded in an accidentally zoomed state. Pinch, double-tap, focus, and Safari gesture zoom are disabled; the Home accessibility control remains the supported interface scaling path and must preserve every critical control throughout its range.
+
 **Open:** final palette, live-combat screen-reader scope, controller support, high-contrast mode, and aim/motor assistance. These need dedicated accessibility and competitive-integrity testing.
 
 The in-world channel contract is defined in [`../design/visual-direction.md#readability-system`](../design/visual-direction.md#readability-system); responsive touch behavior lives in [`responsive-and-mobile.md`](responsive-and-mobile.md).
-

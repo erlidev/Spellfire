@@ -19,13 +19,17 @@ Initial placement:
 
 - a fixed movement stick at lower left;
 - a fixed aim/fire stick at lower right; dragging aims and holds the selected action, while tapping or holding the world still aims and fires directly;
-- dash and interact beside movement, with reload and scope/class equivalent beside aim, all in reachable thumb zones;
-- the six [equipped slots](game-view-and-hud.md#slot-selection) as buttons — currently a plain row above the controls, which is functional but not yet placed for one-handed reach;
+- dash and interact directly above movement, with reload and scope/class equivalent directly above aim, all in reachable thumb zones;
+- the six [equipped slots](game-view-and-hud.md#slot-selection) as stable 44 px minimum buttons above the utility actions;
 - menu and low-frequency information near upper safe-area edges.
 
-The sticks are fixed rather than floating so their centers and travel remain predictable during multi-touch play. Aim/target assistance and orientation remain **Open** because they affect combat balance. Validate them against the [skill and dodgeability rules](../design/combat.md) through playtesting.
+The sticks are fixed rather than floating so their centers and travel remain predictable during multi-touch play. Each base is centered horizontally in its half of the usable viewport — approximately 25% and 75% — instead of hugging a screen edge. Aim/target assistance and orientation remain **Open** because they affect combat balance. Validate them against the [skill and dodgeability rules](../design/combat.md) through playtesting.
 
-Touch pointers are captured by the control that started them, so movement, aim/fire, and a utility action can be held independently. Essential overlay actions activate on touch pointer release as well as keyboard/mouse click. The gameplay surface disables iOS selection, callouts, and tap highlighting while form fields remain selectable and editable.
+Short landscape viewports reduce stick diameter and vital-panel padding without reducing button targets, preserving more readable world space while keeping the same control centers and muscle memory.
+
+Touch pointers are captured by the control that started them, so movement, aim/fire, and a utility action can be held independently. Essential overlay actions, menu tabs, and slot selection activate on touch pointer release as well as keyboard/mouse click. Hotbar button nodes remain stable across snapshot updates so an iOS pointer target cannot disappear mid-press. Touch never enters the fine-pointer hover-to-collapse menu behavior.
+
+The browser viewport is fixed at device scale: pinch, double-tap, and iOS gesture zoom are disabled on Home, overlays, and gameplay. Form inputs use at least 16 px text on mobile to avoid focus zoom. The in-app interface scale remains the deliberate sizing control. Gameplay also disables iOS selection, callouts, and tap highlighting while form fields remain selectable and editable.
 
 On small screens:
 

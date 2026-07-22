@@ -76,7 +76,7 @@ class SpellFire {
   private adminMaterialID = Object.keys(materialsTable.materials).sort()[0] ?? "";
 
   async init(): Promise<void> {
-    this.bindHome(); this.bindDialogs(); this.bindControls(); this.bindSettings();
+    this.bindViewport(); this.bindHome(); this.bindDialogs(); this.bindControls(); this.bindSettings();
     if (this.api.token) await this.loadCharacters().catch(() => undefined);
     this.renderHome();
     fetch("/api/health").catch(() => { element("service-status").textContent = "World service unavailable"; element("service-status").classList.remove("good"); });
@@ -115,6 +115,19 @@ class SpellFire {
     element<HTMLSelectElement>("character-select").addEventListener("change", (event) => sessionStorage.setItem("spellfire-character", (event.currentTarget as HTMLSelectElement).value));
   }
 
+  /** Keep the installed-app-like viewport stable on iOS, including Home. */
+  private bindViewport(): void {
+    for (const type of ["gesturestart", "gesturechange", "gestureend"]) {
+      document.addEventListener(type, (event) => event.preventDefault(), { passive: false });
+    }
+    let lastTouchEnd = -1000;
+    document.addEventListener("touchend", (event) => {
+      const now = performance.now();
+      if (now - lastTouchEnd < 350) event.preventDefault();
+      lastTouchEnd = now;
+    }, { passive: false });
+  }
+
   private bindDialogs(): void {
     element("auth-switch").addEventListener("click", () => { this.authMode = this.authMode === "login" ? "register" : "login"; this.renderAuth(); });
     element<HTMLFormElement>("auth-form").addEventListener("submit", (event) => void this.submitAuth(event));
@@ -122,11 +135,16 @@ class SpellFire {
     const menu = element<HTMLDialogElement>("menu-dialog");
     bindActivation(element("menu-button"), () => { if (menu.open) menu.close(); else { this.setMenuCollapsed(false); this.renderMenu(this.menuTab); menu.show(); } });
     bindActivation(element("menu-collapse"), () => this.setMenuCollapsed(!menu.classList.contains("collapsed")));
-    menu.addEventListener("pointerenter", () => { window.clearTimeout(this.menuCollapseTimer); if (menu.classList.contains("collapsed")) this.setMenuCollapsed(false); });
+    // Touch contact can synthesize hover transitions on iOS. Only a real fine
+    // pointer may auto-expand/collapse; touch uses the explicit toggle alone.
+    menu.addEventListener("pointerenter", (event) => {
+      if (event.pointerType !== "mouse" || !matchMedia("(hover: hover) and (pointer: fine)").matches) return;
+      window.clearTimeout(this.menuCollapseTimer); if (menu.classList.contains("collapsed")) this.setMenuCollapsed(false);
+    });
     menu.addEventListener("pointerleave", () => this.scheduleMenuCollapse());
     menu.addEventListener("focusout", () => { this.refreshOpenMenu(); if (!menu.matches(":hover")) this.scheduleMenuCollapse(); });
     menu.addEventListener("close", () => { window.clearTimeout(this.menuCollapseTimer); window.cancelAnimationFrame(this.menuRefreshFrame); this.menuRefreshFrame = 0; });
-    element("menu-tabs").addEventListener("click", (event) => { const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-tab]"); if (button) this.renderMenu(button.dataset.tab ?? "character"); });
+    bindDelegatedActivation(element("menu-tabs"), "button[data-tab]", (button) => this.renderMenu(button.dataset.tab ?? "character"));
     element("exit-button").addEventListener("click", () => { if (confirm(`Exit to Home? Your body stays in the world for ${session.logout_linger_seconds} seconds after you leave and can still be attacked.`)) this.exitGame(); });
     bindActivation(element("connection-cancel"), () => this.exitGame());
     bindActivation(element("respawn-button"), () => this.socket?.respawn());
@@ -173,7 +191,7 @@ class SpellFire {
     canvas.addEventListener("contextmenu", (event) => event.preventDefault());
     // The wheel steps through the same slots, wrapping in both directions.
     element("canvas-host").addEventListener("wheel", (event) => { event.preventDefault(); this.selectSlot((this.selectedSlot + (event.deltaY > 0 ? 1 : barSlots - 1)) % barSlots); }, { passive: false });
-    element("touch-slots").addEventListener("click", (event) => { const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-slot]"); if (button) this.selectSlot(Number(button.dataset.slot)); });
+    bindDelegatedActivation(element("touch-slots"), "button[data-slot]", (button) => this.selectSlot(Number(button.dataset.slot)));
     const touchMap: Record<string, number> = { dash: Buttons.Dash, reload: Buttons.Reload, interact: Buttons.Interact, scope: Buttons.Scope };
     for (const button of document.querySelectorAll<HTMLButtonElement>("#touch-controls button")) {
       const bit = touchMap[button.dataset.button ?? ""];
@@ -425,14 +443,24 @@ class SpellFire {
       cell.innerHTML = `<kbd>${label(slot.index)}</kbd><span>${escapeHTML(slot.name || "Empty")}</span>${left ? `<small>${left}s</small>` : ""}`;
       return cell;
     }));
-    element("touch-slots").replaceChildren(...slots.map((slot) => {
-      const button = document.createElement("button");
-      button.dataset.slot = String(slot.index); button.className = slot.index === this.selectedSlot ? "selected" : "";
-      button.textContent = label(slot.index);
-      button.setAttribute("aria-label", `Slot ${slot.index + 1}: ${slot.name || "empty"}`);
-      button.setAttribute("aria-pressed", String(slot.index === this.selectedSlot));
-      return button;
-    }));
+    // Snapshots redraw cooldowns at 20 Hz. Preserve the actual touch buttons so
+    // iOS never loses a pointer target between pointer-down and pointer-up.
+    const touchBar = element("touch-slots");
+    let touchButtons = [...touchBar.querySelectorAll<HTMLButtonElement>("button[data-slot]")];
+    if (touchButtons.length !== slots.length || touchButtons.some((button, index) => Number(button.dataset.slot) !== slots[index]?.index)) {
+      touchBar.replaceChildren(...slots.map((slot) => {
+        const button = document.createElement("button"); button.type = "button"; button.dataset.slot = String(slot.index); return button;
+      }));
+      touchButtons = [...touchBar.querySelectorAll<HTMLButtonElement>("button[data-slot]")];
+    }
+    slots.forEach((slot, index) => {
+      const button = touchButtons[index]!;
+      button.className = slot.index === this.selectedSlot ? "selected" : "";
+      const text = label(slot.index), ariaLabel = `Slot ${slot.index + 1}: ${slot.name || "empty"}`, pressed = String(slot.index === this.selectedSlot);
+      if (button.textContent !== text) button.textContent = text;
+      if (button.getAttribute("aria-label") !== ariaLabel) button.setAttribute("aria-label", ariaLabel);
+      if (button.getAttribute("aria-pressed") !== pressed) button.setAttribute("aria-pressed", pressed);
+    });
   }
 
   private connectionStatus(state: "connecting" | "connected" | "reconnecting" | "failed", detail?: string): void {
@@ -1052,8 +1080,29 @@ function bindActivation(target: HTMLElement, activate: () => void): void {
     event.preventDefault(); lastTouch = performance.now(); activate();
   });
   target.addEventListener("click", (event) => {
-    if (performance.now() - lastTouch < 500) { event.preventDefault(); return; }
+    if (performance.now() - lastTouch < 1500) { event.preventDefault(); return; }
     activate();
+  });
+}
+
+/** Delegated counterpart for stable groups such as menu tabs and the hotbar. */
+function bindDelegatedActivation(target: HTMLElement, selector: string, activate: (button: HTMLButtonElement) => void): void {
+  let lastTouch = -1000;
+  const buttonAt = (event: Event) => {
+    const origin = event.target;
+    if (!(origin instanceof Element)) return undefined;
+    const button = origin.closest<HTMLButtonElement>(selector);
+    return button && target.contains(button) ? button : undefined;
+  };
+  target.addEventListener("pointerup", (event) => {
+    if (event.pointerType === "mouse") return;
+    const button = buttonAt(event); if (!button) return;
+    event.preventDefault(); lastTouch = performance.now(); activate(button);
+  });
+  target.addEventListener("click", (event) => {
+    const button = buttonAt(event); if (!button) return;
+    if (performance.now() - lastTouch < 1500) { event.preventDefault(); return; }
+    activate(button);
   });
 }
 
