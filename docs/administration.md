@@ -51,9 +51,13 @@ The catalog and form schemas live on the archetypes in
 [`data/tuning/entities.json`](../data/tuning/entities.json). `admin.spawnable`
 controls catalog visibility. Each field declares a stable
 `component.attribute` binding, a `spawn`, `edit`, or `both` scope, and a
-number/text/select input definition including bounds, length, or options. At
-minimum every entity exposes editable X/Y position. The browser renders this
-metadata without attribute-specific UI code; the server validates it and uses
+number/text/select/position/rotation input definition. `transform.position` is
+one `[x,y]` vector rendered as adjacent axis inputs plus a pointer-based world
+picker. `transform.heading_degrees` uses an angle slider and rotating indicator
+rather than a freeform number box. Numeric HTML controls intentionally carry no
+browser min/max/step attributes; tuning bounds remain authoritative on the
+server. The browser renders this metadata without attribute-specific UI code;
+the server validates it and uses
 an explicit attribute adapter registry. Adding a field requires tuning plus a
 registry adapter, and the adapter is the only layer that must change when
 runtime storage moves to ECS components.

@@ -1,6 +1,7 @@
 package game
 
 import (
+	"encoding/json"
 	"fmt"
 	"math"
 	"strconv"
@@ -43,10 +44,54 @@ type adminAttributeAdapter struct {
 // component.attribute IDs, while this one table knows today's storage layout.
 // An ECS migration replaces these adapters, not the tuning schema or UI.
 var adminAttributeRegistry = map[string]adminAttributeAdapter{
-	"transform.position.x": numberAdapter(func(t adminTarget) *float64 { return &t.entity.Position.X }),
-	"transform.position.y": numberAdapter(func(t adminTarget) *float64 { return &t.entity.Position.Y }),
-	"physics.mass":         numberAdapter(func(t adminTarget) *float64 { return &t.entity.Mass }),
-	"vitals.max_health":    numberAdapter(func(t adminTarget) *float64 { return &t.entity.MaxHealth }),
+	"transform.position": {
+		get: func(t adminTarget) (string, bool) {
+			if t.entity == nil {
+				return "", false
+			}
+			return formatAdminPosition(t.entity.Position), true
+		},
+		set: func(t adminTarget, value string) error {
+			if t.entity == nil {
+				return unsupportedAttribute("transform.position")
+			}
+			position, err := parseAdminPosition(value)
+			if err != nil {
+				return err
+			}
+			t.entity.Position = position
+			return nil
+		},
+	},
+	"transform.heading_degrees": {
+		get: func(t adminTarget) (string, bool) {
+			var direction Vec
+			switch {
+			case t.projectile != nil:
+				direction = t.projectile.Velocity
+			case t.telegraph != nil:
+				direction = t.telegraph.Direction
+			default:
+				return "", false
+			}
+			return formatNumber(math.Atan2(direction.Y, direction.X) * 180 / math.Pi), true
+		},
+		set: func(t adminTarget, value string) error {
+			direction := adminDirection(value)
+			switch {
+			case t.projectile != nil:
+				speed := math.Sqrt(t.projectile.Velocity.LengthSq())
+				t.projectile.Velocity = direction.Mul(speed)
+			case t.telegraph != nil:
+				t.telegraph.Direction = direction
+			default:
+				return unsupportedAttribute("transform.heading_degrees")
+			}
+			return nil
+		},
+	},
+	"physics.mass":      numberAdapter(func(t adminTarget) *float64 { return &t.entity.Mass }),
+	"vitals.max_health": numberAdapter(func(t adminTarget) *float64 { return &t.entity.MaxHealth }),
 	"vitals.health": {
 		get: func(t adminTarget) (string, bool) {
 			if t.entity == nil {
@@ -289,11 +334,8 @@ func (w *World) adminEdit(entityID string, requested map[string]string, now time
 		return AdminEntityState{}, err
 	}
 	position := target.entity.Position
-	if value, found := values["transform.position.x"]; found {
-		position.X, _ = strconv.ParseFloat(value, 64)
-	}
-	if value, found := values["transform.position.y"]; found {
-		position.Y, _ = strconv.ParseFloat(value, 64)
+	if value, found := values["transform.position"]; found {
+		position, _ = parseAdminPosition(value)
 	}
 	if !adminPosition(position, w.tuning.WorldRadius-target.entity.boundingRadius()) {
 		return AdminEntityState{}, fmt.Errorf("position is outside the world")
@@ -403,12 +445,18 @@ func adminValues(fields []tuning.AdminField, scope string, requested map[string]
 func validateAdminValue(field tuning.AdminField, raw string) (string, error) {
 	raw = strings.TrimSpace(raw)
 	switch field.Input {
-	case "number":
+	case "number", "rotation":
 		value, err := strconv.ParseFloat(raw, 64)
 		if err != nil || math.IsNaN(value) || math.IsInf(value, 0) || field.Minimum == nil || field.Maximum == nil || value < *field.Minimum || value > *field.Maximum {
 			return "", fmt.Errorf("attribute %q must be between %g and %g", field.Attribute, pointerValue(field.Minimum), pointerValue(field.Maximum))
 		}
 		return formatNumber(value), nil
+	case "position":
+		position, err := parseAdminPosition(raw)
+		if err != nil || field.Minimum == nil || field.Maximum == nil || position.X < *field.Minimum || position.X > *field.Maximum || position.Y < *field.Minimum || position.Y > *field.Maximum {
+			return "", fmt.Errorf("attribute %q must contain two coordinates between %g and %g", field.Attribute, pointerValue(field.Minimum), pointerValue(field.Maximum))
+		}
+		return formatAdminPosition(position), nil
 	case "text":
 		if len(raw) > field.MaxLength {
 			return "", fmt.Errorf("attribute %q exceeds %d characters", field.Attribute, field.MaxLength)
@@ -431,6 +479,16 @@ func pointerValue(value *float64) float64 {
 		return 0
 	}
 	return *value
+}
+func parseAdminPosition(raw string) (Vec, error) {
+	values := []float64{}
+	if err := json.Unmarshal([]byte(raw), &values); err != nil || len(values) != 2 || math.IsNaN(values[0]) || math.IsNaN(values[1]) || math.IsInf(values[0], 0) || math.IsInf(values[1], 0) {
+		return Vec{}, fmt.Errorf("position must be a finite [x,y] vector")
+	}
+	return Vec{X: values[0], Y: values[1]}, nil
+}
+func formatAdminPosition(position Vec) string {
+	return "[" + formatNumber(position.X) + "," + formatNumber(position.Y) + "]"
 }
 func adminDirection(raw string) Vec {
 	degrees, _ := strconv.ParseFloat(raw, 64)

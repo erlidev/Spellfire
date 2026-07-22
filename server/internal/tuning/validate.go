@@ -1,6 +1,7 @@
 package tuning
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -110,11 +111,18 @@ func validateAdminFields(r *report, prefix string, fields []AdminField) {
 		r.require(field.Label != "", "%s field %q has no label", prefix, field.Attribute)
 		r.require(contains([]string{"spawn", "edit", "both"}, field.Scope), "%s field %q has invalid scope %q", prefix, field.Attribute, field.Scope)
 		switch field.Input {
-		case "number":
+		case "number", "rotation":
 			if r.require(field.Minimum != nil && field.Maximum != nil && field.Step != nil, "%s number field %q needs min, max, and step", prefix, field.Attribute) {
 				value, err := strconv.ParseFloat(field.Default, 64)
 				r.require(err == nil && *field.Minimum <= value && value <= *field.Maximum, "%s number field %q default is outside its bounds", prefix, field.Attribute)
 				r.require(*field.Minimum < *field.Maximum && *field.Step > 0, "%s number field %q needs min < max and positive step", prefix, field.Attribute)
+			}
+		case "position":
+			if r.require(field.Minimum != nil && field.Maximum != nil && field.Step != nil, "%s position field %q needs min, max, and step", prefix, field.Attribute) {
+				position := []float64{}
+				err := json.Unmarshal([]byte(field.Default), &position)
+				r.require(err == nil && len(position) == 2 && *field.Minimum <= position[0] && position[0] <= *field.Maximum && *field.Minimum <= position[1] && position[1] <= *field.Maximum, "%s position field %q default is outside its bounds", prefix, field.Attribute)
+				r.require(*field.Minimum < *field.Maximum && *field.Step > 0, "%s position field %q needs min < max and positive step", prefix, field.Attribute)
 			}
 		case "text":
 			r.require(field.MaxLength > 0, "%s text field %q needs a positive max_length", prefix, field.Attribute)

@@ -66,9 +66,9 @@ describe("shared tuning tables", () => {
     expect(Object.values(entityDefinitions).every((definition) => definition.admin.spawnable)).toBe(true);
     for (const definition of Object.values(entityDefinitions)) for (const field of definition.admin.fields) {
       expect(field.attribute).toContain(".");
-      expect(["number", "text", "select"]).toContain(field.input);
+      expect(["number", "text", "select", "position", "rotation"]).toContain(field.input);
     }
-    expect(entityDefinitions.player!.admin.fields.some((field) => field.attribute === "transform.position.x" && field.scope === "edit")).toBe(true);
+    expect(entityDefinitions.player!.admin.fields.some((field) => field.attribute === "transform.position" && field.input === "position" && field.scope === "edit")).toBe(true);
     expect(materials.admin_grant.attribute).toBe("inventory.material_count");
   });
 });

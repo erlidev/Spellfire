@@ -25,11 +25,19 @@ class SpellFire {
   private aim = { x: 1, y: 0 };
   private noticeTimer = 0;
   private lastBand = "";
+  private localEntity?: Entity;
   private activeCharacter?: Character;
   private adminMode: "off" | "spawn" | "select" | "delete" = "off";
   private adminSpawnID = Object.keys(entityDefinitions).filter((id) => entityDefinitions[id]!.admin.spawnable).sort()[0] ?? "";
   private adminSpawnConfig: Record<string, string> = this.defaultAdminConfig(this.adminSpawnID);
   private adminSelected?: AdminEntityState;
+  private adminEditDraft: Record<string, string> = {};
+  private adminSearch = "";
+  private adminMaterialCount = materialsTable.admin_grant.default;
+  private adminPositionPick?: string;
+  private menuRefreshFrame = 0;
+  private menuCollapseTimer = 0;
+  private renderedMenuState = "";
   // The authoritative equipped set and the slot the use button acts through.
   // `draft` is the unconfirmed edit in the menu; nothing shows as committed
   // until a Loadout reply confirms it.
@@ -102,7 +110,13 @@ class SpellFire {
     element("auth-switch").addEventListener("click", () => { this.authMode = this.authMode === "login" ? "register" : "login"; this.renderAuth(); });
     element<HTMLFormElement>("auth-form").addEventListener("submit", (event) => void this.submitAuth(event));
     element<HTMLFormElement>("character-form").addEventListener("submit", (event) => void this.createCharacter(event));
-    element("menu-button").addEventListener("click", () => { const menu = element<HTMLDialogElement>("menu-dialog"); if (menu.open) menu.close(); else { this.renderMenu(this.menuTab); menu.show(); } });
+    const menu = element<HTMLDialogElement>("menu-dialog");
+    element("menu-button").addEventListener("click", () => { if (menu.open) menu.close(); else { this.setMenuCollapsed(false); this.renderMenu(this.menuTab); menu.show(); } });
+    element("menu-collapse").addEventListener("click", () => this.setMenuCollapsed(!menu.classList.contains("collapsed")));
+    menu.addEventListener("pointerenter", () => { window.clearTimeout(this.menuCollapseTimer); if (menu.classList.contains("collapsed")) this.setMenuCollapsed(false); });
+    menu.addEventListener("pointerleave", () => this.scheduleMenuCollapse());
+    menu.addEventListener("focusout", () => { this.refreshOpenMenu(); if (!menu.matches(":hover")) this.scheduleMenuCollapse(); });
+    menu.addEventListener("close", () => { window.clearTimeout(this.menuCollapseTimer); window.cancelAnimationFrame(this.menuRefreshFrame); this.menuRefreshFrame = 0; });
     element("menu-tabs").addEventListener("click", (event) => { const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-tab]"); if (button) this.renderMenu(button.dataset.tab ?? "character"); });
     element("exit-button").addEventListener("click", () => { if (confirm(`Exit to Home? Your body stays in the world for ${session.logout_linger_seconds} seconds after you leave and can still be attacked.`)) this.exitGame(); });
     element("connection-cancel").addEventListener("click", () => this.exitGame());
@@ -123,7 +137,7 @@ class SpellFire {
     window.addEventListener("pointermove", (event) => { if (!this.view) return; this.aim = this.view.pointerWorld(event.clientX, event.clientY); });
     element("canvas-host").addEventListener("pointerdown", (event) => {
       if ((event as PointerEvent).button !== 0) return;
-      if (this.adminMode !== "off") { void this.useAdminPointer(event as PointerEvent); return; }
+      if (this.adminPositionPick || this.adminMode !== "off") { void this.useAdminPointer(event as PointerEvent); return; }
       this.pressed.add(Buttons.Fire);
     });
     window.addEventListener("pointerup", (event) => { if ((event as PointerEvent).button === 0) this.pressed.delete(Buttons.Fire); });
@@ -226,6 +240,8 @@ class SpellFire {
     this.predictor?.setColliders(message.colliders); this.view?.apply(message);
     const local = message.entities.find((entity) => entity.id === message.playerID);
     if (!local || !this.predictor) return;
+    this.localEntity = local;
+    this.updateAdminSelectedFromSnapshot(message.entities);
     if (message.kind === ServerKind.Welcome) this.predictor.initialize(local); else this.predictor.reconcile(local);
     this.updateHUD(local); element("connection-overlay").hidden = true; element("death-overlay").hidden = local.alive;
   }
@@ -251,7 +267,7 @@ class SpellFire {
     }
     if (this.selectedSlot >= barSlots) this.selectSlot(0);
     this.renderAbilityBar();
-    if (this.menuTab === "loadout" && element<HTMLDialogElement>("menu-dialog").open) this.renderMenu("loadout");
+    this.refreshOpenMenu();
     if (this.respecOwed) this.notice("A balance patch re-validated your loadout. Respec is free in any safe zone.");
   }
 
@@ -267,14 +283,14 @@ class SpellFire {
     this.ledger = ledgerOf(message.unlocks);
     const character = this.selectedCharacter();
     if (character) { character.level = message.level; character.xp = message.xp; character.unlocks = [...message.unlocks]; }
-    if (message.kind === ServerKind.Welcome) return;
+    if (message.kind === ServerKind.Welcome) { this.refreshOpenMenu(); return; }
     if (levelled) {
       const gained = this.ledger.size - before;
       this.notice(gained > 0
         ? `Level ${this.level}. ${gained} new option${gained === 1 ? "" : "s"} unlocked — respec is free in any safe zone.`
         : `Level ${this.level}.`);
     }
-    if (element<HTMLDialogElement>("menu-dialog").open) this.renderMenu(this.menuTab);
+    this.refreshOpenMenu();
   }
 
   private renderAbilityBar(): void {
@@ -314,18 +330,63 @@ class SpellFire {
     const safe = distance <= safeRadius;
     if (safe !== this.inSafety) {
       this.notice(safe ? "Safe zone: loadout unlocked." : "You left the safe zone. Your loadout is locked until you return.");
-      if (this.menuTab === "loadout" && element<HTMLDialogElement>("menu-dialog").open) this.renderMenu("loadout");
+      this.refreshOpenMenu();
     }
     this.inSafety = safe;
+    this.refreshOpenMenu();
   }
 
   private notice(message: string): void { const notice = element("world-notice"); notice.textContent = message; notice.classList.add("visible"); window.clearTimeout(this.noticeTimer); this.noticeTimer = window.setTimeout(() => notice.classList.remove("visible"), 2600); }
+
+  private scheduleMenuCollapse(): void {
+    const menu = element<HTMLDialogElement>("menu-dialog");
+    if (!menu.open || !matchMedia("(hover: hover) and (pointer: fine)").matches) return;
+    window.clearTimeout(this.menuCollapseTimer);
+    this.menuCollapseTimer = window.setTimeout(() => {
+      if (!menu.matches(":hover")) this.setMenuCollapsed(true);
+    }, 450);
+  }
+
+  private setMenuCollapsed(collapsed: boolean): void {
+    const menu = element<HTMLDialogElement>("menu-dialog"), toggle = element<HTMLButtonElement>("menu-collapse");
+    window.clearTimeout(this.menuCollapseTimer);
+    menu.classList.toggle("collapsed", collapsed);
+    toggle.textContent = collapsed ? "+" : "−";
+    toggle.setAttribute("aria-expanded", String(!collapsed));
+    toggle.setAttribute("aria-label", collapsed ? "Expand menu" : "Minimize menu");
+    if (!collapsed) this.refreshOpenMenu();
+  }
+
+  private refreshOpenMenu(): void {
+    const menu = element<HTMLDialogElement>("menu-dialog");
+    if (!menu.open || this.renderedMenuState === this.menuStateSignature() || this.menuRefreshFrame) return;
+    this.menuRefreshFrame = window.requestAnimationFrame(() => {
+      this.menuRefreshFrame = 0;
+      if (!menu.open || this.renderedMenuState === this.menuStateSignature()) return;
+      if (menu.contains(document.activeElement) && isFormField(document.activeElement)) return;
+      this.renderMenu(this.menuTab);
+    });
+  }
+
+  private menuStateSignature(): string {
+    const local = this.localEntity;
+    switch (this.menuTab) {
+      case "character": return JSON.stringify([this.level, this.xp, this.xpNext, this.ledger.size, local && Math.ceil(local.health), local && Math.ceil(local.maxHealth), local && Math.floor(local.mana), local?.alive]);
+      case "world": return this.lastBand;
+      case "loadout": return JSON.stringify([this.inSafety, this.loadout, this.draft, this.respecOwed, this.loadoutStatus, this.items]);
+      case "crafting": return JSON.stringify([this.inSafety, this.materials, this.items, this.craftWeapon, this.craftChoices, this.craftStatus, this.ledger.size]);
+      case "inventory": return JSON.stringify([this.materials, this.items, this.loadout.weapon]);
+      case "admin": return JSON.stringify([this.adminMode, this.adminSpawnID, this.adminSpawnConfig, this.adminSelected, this.adminEditDraft, this.adminSearch, this.adminMaterialID, this.adminMaterialCount, this.adminPositionPick]);
+      default: return this.menuTab;
+    }
+  }
 
   private renderMenu(tab: string): void {
     const admin = Boolean(this.api.account?.is_admin);
     const adminTab = element<HTMLButtonElement>("admin-menu-tab"); adminTab.hidden = !admin;
     if (tab === "admin" && !admin) tab = "character";
     this.menuTab = tab;
+    this.renderedMenuState = this.menuStateSignature();
     for (const button of document.querySelectorAll<HTMLButtonElement>("#menu-tabs button")) button.classList.toggle("active", button.dataset.tab === tab);
     const character = this.selectedCharacter(); const content = element("menu-content");
     if (tab === "admin") { this.renderAdminMenu(content); return; }
@@ -334,25 +395,36 @@ class SpellFire {
     if (tab === "inventory") { this.renderInventorySection(content); return; }
     const equipped = resolvedWeapon(this.loadout.weapon, this.items);
     const pages: Record<string, string> = {
-      character: `<h3>${escapeHTML(character?.name ?? "Character")}</h3><p>${titleCase(character?.class ?? "gunslinger")} · Level ${this.level}</p><p>${this.xpNext ? `${this.xp} / ${this.xpNext} XP to level ${this.level + 1}` : "Level cap reached"} · ${this.ledger.size} unlock${this.ledger.size === 1 ? "" : "s"} owned</p><p>Progression unlocks options, never raw combat power.</p>`,
-      world: `<h3>Known world</h3><p>${world.danger_bands.map((band) => escapeHTML(band.name)).join(" → ")}. The circular world is contiguous; trees are authoritative static cover.</p>`,
+      character: `<h3>${escapeHTML(character?.name ?? "Character")}</h3><p>${titleCase(character?.class ?? "gunslinger")} · Level ${this.level}</p><p>${this.xpNext ? `${this.xp} / ${this.xpNext} XP to level ${this.level + 1}` : "Level cap reached"} · ${this.ledger.size} unlock${this.ledger.size === 1 ? "" : "s"} owned</p>${this.localEntity ? `<p>Health ${Math.ceil(this.localEntity.health)} / ${Math.ceil(this.localEntity.maxHealth)} · Resource ${Math.floor(this.localEntity.mana)}</p>` : ""}<p>Progression unlocks options, never raw combat power.</p>`,
+      world: `<h3>Known world</h3><p>Current area: ${escapeHTML(this.lastBand || "Synchronizing…")}</p><p>${world.danger_bands.map((band) => escapeHTML(band.name)).join(" → ")}. The circular world is contiguous; trees are authoritative static cover.</p>`,
       reference: `<h3>Field reference</h3><p>WASD/Arrows move · pointer aims · primary pointer fires · 1–6 or the wheel select an equipped slot · Space dashes · R reloads · E interacts. The hub is safe. Combat is server-authoritative and raw time-to-kill is about ${equipped ? damageBandFor(equipped).target_ttk_seconds : 3} seconds.</p>`,
       settings: "<h3>Settings</h3><p>Accessibility and interface-scale controls remain available on Home. Opening this menu does not pause the shared world.</p>",
     };
     content.innerHTML = pages[tab] ?? pages.character!;
   }
 
-  private renderAdminMenu(content: HTMLElement, query = ""): void {
+  private renderAdminMenu(content: HTMLElement, query = this.adminSearch): void {
+    this.adminSearch = query;
     const selected = this.selectedAdminSpawn();
     const search = query.toLowerCase();
     const entries = Object.entries(entityDefinitions).filter(([, definition]) => definition.admin.spawnable && (definition.admin.name.toLowerCase().includes(search))).sort(([, left], [, right]) => left.admin.name.localeCompare(right.admin.name));
     const selectedEditor = this.adminSelected ? this.adminEditorMarkup(this.adminSelected) : "<p>Select mode lets you click any visible entity and edit the fields its archetype exposes.</p>";
-    content.innerHTML = `<h3>Developer tools</h3><p>Choose a pointer mode. The floating panel stays interactive while movement and the world remain under your control.</p><div class="admin-modes">${(["off", "spawn", "select", "delete"] as const).map((mode) => `<button data-admin-mode="${mode}" aria-pressed="${this.adminMode === mode}" class="${mode === "delete" ? "danger-button" : ""}">${titleCase(mode)}</button>`).join("")}</div><label>Search spawnables<input id="admin-spawn-search" value="${escapeHTML(query)}" placeholder="Player, projectile, tree…" /></label><div id="admin-spawn-list" class="admin-spawn-list">${entries.map(([id, definition]) => `<button data-admin-spawn="${escapeHTML(id)}" aria-pressed="${id === this.adminSpawnID}"><strong>${escapeHTML(definition.admin.name)}</strong><small>${escapeHTML(id)}</small></button>`).join("") || "<p>No spawnables match.</p>"}</div>${selected ? this.adminConfigMarkup(selected) : "<p class=\"error\">No spawnable is configured.</p>"}<section class="admin-selected"><h4>Selected entity</h4>${selectedEditor}</section><form id="admin-materials-form"><h4>Grant materials</h4><label>Material<select id="admin-material-select">${Object.keys(materialsTable.materials).sort().map((id) => `<option value="${escapeHTML(id)}"${id === this.adminMaterialID ? " selected" : ""}>${escapeHTML(materialsTable.materials[id]!.name)}</option>`).join("")}</select></label>${this.adminFieldMarkup(materialsTable.admin_grant, "admin-material-count", materialsTable.admin_grant.default)}<button class="secondary" type="submit">Grant to your character</button></form><p id="admin-notice" class="error" role="status"></p>`;
+    content.innerHTML = `<h3>Developer tools</h3><p>Choose a pointer mode. The floating panel stays interactive while movement and the world remain under your control.</p><div class="admin-modes">${(["off", "spawn", "select", "delete"] as const).map((mode) => `<button data-admin-mode="${mode}" aria-pressed="${this.adminMode === mode}" class="${mode === "delete" ? "danger-button" : ""}">${titleCase(mode)}</button>`).join("")}</div><label>Search spawnables<input id="admin-spawn-search" value="${escapeHTML(query)}" placeholder="Player, projectile, tree…" /></label><div id="admin-spawn-list" class="admin-spawn-list">${entries.map(([id, definition]) => `<button data-admin-spawn="${escapeHTML(id)}" aria-pressed="${id === this.adminSpawnID}"><strong>${escapeHTML(definition.admin.name)}</strong><small>${escapeHTML(id)}</small></button>`).join("") || "<p>No spawnables match.</p>"}</div>${selected ? this.adminConfigMarkup(selected) : "<p class=\"error\">No spawnable is configured.</p>"}<section class="admin-selected"><h4>Selected entity</h4>${selectedEditor}</section><form id="admin-materials-form" novalidate><h4>Grant materials</h4><label>Material<select id="admin-material-select">${Object.keys(materialsTable.materials).sort().map((id) => `<option value="${escapeHTML(id)}"${id === this.adminMaterialID ? " selected" : ""}>${escapeHTML(materialsTable.materials[id]!.name)}</option>`).join("")}</select></label>${this.adminFieldMarkup(materialsTable.admin_grant, "admin-material-count", this.adminMaterialCount)}<button class="secondary" type="submit">Grant to your character</button></form><p id="admin-notice" class="error" role="status"></p>`;
     for (const button of document.querySelectorAll<HTMLButtonElement>("[data-admin-mode]")) button.addEventListener("click", () => this.setAdminMode(button.dataset.adminMode as typeof this.adminMode));
-    element<HTMLInputElement>("admin-spawn-search").addEventListener("input", (event) => this.renderAdminMenu(content, (event.currentTarget as HTMLInputElement).value));
+    element<HTMLInputElement>("admin-spawn-search").addEventListener("input", (event) => { this.adminSearch = (event.currentTarget as HTMLInputElement).value; this.renderAdminMenu(content, this.adminSearch); });
     for (const button of document.querySelectorAll<HTMLButtonElement>("[data-admin-spawn]")) button.addEventListener("click", () => { this.adminSpawnID = button.dataset.adminSpawn ?? ""; this.adminSpawnConfig = this.defaultAdminConfig(this.adminSpawnID); this.renderAdminMenu(content, query); });
-    for (const input of document.querySelectorAll<HTMLInputElement>("[data-admin-config]")) input.addEventListener("input", () => { this.adminSpawnConfig[input.dataset.adminConfig ?? ""] = input.value; });
+    for (const input of document.querySelectorAll<HTMLInputElement>("[data-admin-config]")) input.addEventListener("input", () => { this.adminSpawnConfig[input.dataset.adminConfig ?? ""] = input.value; this.updateRotationDisplay(input); });
     for (const select of document.querySelectorAll<HTMLSelectElement>("select[data-admin-config]")) select.addEventListener("change", () => { this.adminSpawnConfig[select.dataset.adminConfig ?? ""] = select.value; });
+    for (const input of document.querySelectorAll<HTMLInputElement>("[data-admin-edit]")) input.addEventListener("input", () => { this.adminEditDraft[input.dataset.adminEdit ?? ""] = input.value; this.updateRotationDisplay(input); });
+    for (const select of document.querySelectorAll<HTMLSelectElement>("select[data-admin-edit]")) select.addEventListener("change", () => { this.adminEditDraft[select.dataset.adminEdit ?? ""] = select.value; });
+    for (const input of document.querySelectorAll<HTMLInputElement>("[data-admin-vector-axis]")) input.addEventListener("input", () => this.updateAdminVector(input));
+    for (const button of document.querySelectorAll<HTMLButtonElement>("[data-admin-position-pick]")) button.addEventListener("click", () => {
+      this.adminPositionPick = button.dataset.adminPositionPick;
+      this.updateAdminHUD();
+      this.setMenuCollapsed(true);
+      this.notice("Click the world to choose the new position.");
+    });
+    element<HTMLInputElement>("admin-material-count").addEventListener("input", (event) => { this.adminMaterialCount = (event.currentTarget as HTMLInputElement).value; });
     document.getElementById("admin-entity-form")?.addEventListener("submit", (event) => void this.applyAdminEntity(event as SubmitEvent));
     element<HTMLSelectElement>("admin-material-select").addEventListener("change", (event) => { this.adminMaterialID = (event.currentTarget as HTMLSelectElement).value; });
     element<HTMLFormElement>("admin-materials-form").addEventListener("submit", (event) => void this.grantAdminMaterials(event));
@@ -367,14 +439,59 @@ class SpellFire {
     const binding = dataAttribute ? `${dataAttribute}="${escapeHTML(field.attribute)}"` : "";
     if (field.input === "select") return `<label>${escapeHTML(field.label)}<select id="${escapeHTML(inputID)}" ${binding}>${(field.options ?? []).map((option) => `<option value="${escapeHTML(option.value)}"${option.value === value ? " selected" : ""}>${escapeHTML(option.label)}</option>`).join("")}</select></label>`;
     if (field.input === "text") return `<label>${escapeHTML(field.label)}<input id="${escapeHTML(inputID)}" ${binding} type="text" maxlength="${field.max_length ?? 1}" value="${escapeHTML(value)}" /></label>`;
-    return `<label>${escapeHTML(field.label)}<input id="${escapeHTML(inputID)}" ${binding} type="number" min="${field.min ?? 0}" max="${field.max ?? 0}" step="${field.step ?? 1}" value="${escapeHTML(value)}" /></label>`;
+    if (field.input === "position") {
+      const [x, y] = adminPositionValue(value);
+      return `<div class="admin-vector"><span>${escapeHTML(field.label)}</span><div class="admin-vector-inputs"><label>X<input type="number" data-admin-vector-axis="x" data-admin-vector-field="${escapeHTML(field.attribute)}" value="${escapeHTML(String(x))}" /></label><label>Y<input type="number" data-admin-vector-axis="y" data-admin-vector-field="${escapeHTML(field.attribute)}" value="${escapeHTML(String(y))}" /></label></div><button type="button" class="secondary" data-admin-position-pick="${escapeHTML(field.attribute)}">Pick from world</button><input id="${escapeHTML(inputID)}" type="hidden" ${binding} data-admin-vector-value="${escapeHTML(field.attribute)}" value="${escapeHTML(value)}" /></div>`;
+    }
+    if (field.input === "rotation") {
+      const angle = Number(value) || 0;
+      return `<label class="admin-rotation"><span>${escapeHTML(field.label)}</span><div class="admin-rotation-row"><span class="rotation-indicator"><i style="transform:rotate(${angle}deg)"></i></span><input id="${escapeHTML(inputID)}" ${binding} type="range" min="${field.min ?? -180}" max="${field.max ?? 180}" step="${field.step ?? 1}" value="${escapeHTML(String(angle))}" /><output>${Math.round(angle)}°</output></div></label>`;
+    }
+    return `<label>${escapeHTML(field.label)}<input id="${escapeHTML(inputID)}" ${binding} type="number" value="${escapeHTML(value)}" /></label>`;
   }
 
   private adminEditorMarkup(state: AdminEntityState): string {
     const definition = entityDefinitions[state.definition_id];
     if (!definition) return `<p class="error">${escapeHTML(state.id)} has no client tuning schema.</p>`;
     const fields = definition.admin.fields.filter((field) => (field.scope === "edit" || field.scope === "both") && state.values[field.attribute] !== undefined);
-    return `<form id="admin-entity-form"><p><strong>${escapeHTML(state.id)}</strong> · ${escapeHTML(definition.admin.name)}</p>${fields.map((field) => this.adminFieldMarkup(field, `admin-edit-${field.attribute}`, state.values[field.attribute]!, "data-admin-edit")).join("")}<button class="secondary" type="submit">Apply entity attributes</button></form>`;
+    return `<form id="admin-entity-form" novalidate><p><strong>${escapeHTML(state.id)}</strong> · ${escapeHTML(definition.admin.name)}</p>${fields.map((field) => this.adminFieldMarkup(field, `admin-edit-${field.attribute}`, this.adminEditDraft[field.attribute] ?? state.values[field.attribute]!, "data-admin-edit")).join("")}<button class="secondary" type="submit">Apply entity attributes</button></form>`;
+  }
+
+  private updateAdminSelectedFromSnapshot(entities: Entity[]): void {
+    if (!this.adminSelected) return;
+    const entity = entities.find((candidate) => candidate.id === this.adminSelected?.id);
+    if (!entity) return;
+    const values = { ...this.adminSelected.values };
+    const update = (attribute: string, value: string) => { if (values[attribute] !== undefined) values[attribute] = value; };
+    update("transform.position", JSON.stringify([roundAdminCoordinate(entity.x), roundAdminCoordinate(entity.y)]));
+    update("physics.mass", formatAdminNumber(entity.mass));
+    update("vitals.health", formatAdminNumber(entity.health));
+    update("vitals.max_health", formatAdminNumber(entity.maxHealth));
+    update("player.name", entity.name);
+    update("player.class", entity.className);
+    update("render.element", entity.element || "none");
+    if (values["transform.heading_degrees"] !== undefined) {
+      const x = entity.vx || entity.aimX, y = entity.vy || entity.aimY;
+      update("transform.heading_degrees", formatAdminNumber(Math.atan2(y, x) * 180 / Math.PI));
+    }
+    if (JSON.stringify(values) !== JSON.stringify(this.adminSelected.values)) this.adminSelected = { ...this.adminSelected, values };
+  }
+
+  private updateAdminVector(input: HTMLInputElement): void {
+    const field = input.dataset.adminVectorField ?? "", root = input.closest<HTMLElement>(".admin-vector");
+    const x = root?.querySelector<HTMLInputElement>('[data-admin-vector-axis="x"]'), y = root?.querySelector<HTMLInputElement>('[data-admin-vector-axis="y"]'), hidden = root?.querySelector<HTMLInputElement>("[data-admin-vector-value]");
+    if (!x || !y || !hidden) return;
+    hidden.value = `[${x.value},${y.value}]`;
+    if (hidden.dataset.adminEdit !== undefined) this.adminEditDraft[field] = hidden.value;
+    if (hidden.dataset.adminConfig !== undefined) this.adminSpawnConfig[field] = hidden.value;
+  }
+
+  private updateRotationDisplay(input: HTMLInputElement): void {
+    if (input.type !== "range") return;
+    const row = input.closest<HTMLElement>(".admin-rotation-row");
+    const indicator = row?.querySelector<HTMLElement>(".rotation-indicator i"), output = row?.querySelector<HTMLOutputElement>("output");
+    if (indicator) indicator.style.transform = `rotate(${Number(input.value) || 0}deg)`;
+    if (output) output.value = `${Math.round(Number(input.value) || 0)}°`;
   }
 
   private selectedAdminSpawn(): EntityDefinition | undefined { return entityDefinitions[this.adminSpawnID]; }
@@ -392,21 +509,37 @@ class SpellFire {
   private setAdminMode(mode: typeof this.adminMode): void {
     if (mode !== "off" && !this.api.account?.is_admin) return;
     this.adminMode = mode;
+    this.adminPositionPick = undefined;
     document.body.classList.toggle("developer-mode", mode !== "off");
-    const hud = element("developer-mode-hud"); hud.hidden = mode === "off";
-    const label = this.selectedAdminSpawn()?.admin.name ?? "entity";
-    element("developer-mode-selection").textContent = mode === "spawn" ? `Placing: ${label}` : mode === "select" ? "Selecting entity attributes" : mode === "delete" ? "Deleting entities" : "";
+    this.updateAdminHUD();
     const menu = element<HTMLDialogElement>("menu-dialog"); if (menu.open && this.menuTab === "admin") this.renderAdminMenu(element("menu-content"));
   }
 
+  private updateAdminHUD(): void {
+    const hud = element("developer-mode-hud"), label = this.selectedAdminSpawn()?.admin.name ?? "entity";
+    hud.hidden = this.adminMode === "off" && !this.adminPositionPick;
+    element("developer-mode-selection").textContent = this.adminPositionPick ? "Pick a world position" : this.adminMode === "spawn" ? `Placing: ${label}` : this.adminMode === "select" ? "Selecting entity attributes" : this.adminMode === "delete" ? "Deleting entities" : "";
+  }
+
   private async useAdminPointer(event: PointerEvent): Promise<void> {
+    if (this.adminPositionPick && this.adminSelected && this.view) {
+      event.preventDefault();
+      const point = this.view.worldAtPointer(event.clientX, event.clientY);
+      this.adminEditDraft[this.adminPositionPick] = JSON.stringify([roundAdminCoordinate(point.x), roundAdminCoordinate(point.y)]);
+      this.adminPositionPick = undefined;
+      this.updateAdminHUD();
+      this.setMenuCollapsed(false);
+      this.renderMenu("admin");
+      this.notice("World position selected. Apply entity attributes to commit it.");
+      return;
+    }
     if (this.adminMode === "spawn") { await this.placeAdminEntity(event); return; }
     const character = this.activeCharacter, target = this.view?.entityAtPointer(event.clientX, event.clientY);
     if (!character || !target) { this.notice("No entity at that point."); return; }
     event.preventDefault();
     try {
       if (this.adminMode === "delete") { await this.api.adminEntityDelete(character.id, target.id); this.adminSelected = undefined; this.notice(`Removed ${target.name || target.className || target.id}.`); }
-      else { this.adminSelected = await this.api.adminEntityInspect(character.id, target.id); this.notice(`Selected ${target.name || target.className || target.id}.`); }
+      else { this.adminSelected = await this.api.adminEntityInspect(character.id, target.id); this.adminEditDraft = {}; this.notice(`Selected ${target.name || target.className || target.id}.`); }
       const menu = element<HTMLDialogElement>("menu-dialog"); if (menu.open && this.menuTab === "admin") this.renderAdminMenu(element("menu-content"));
     } catch (error) { this.notice(`Admin action rejected: ${messageOf(error)}`); }
   }
@@ -444,7 +577,7 @@ class SpellFire {
     const attributes: Record<string, string> = {};
     for (const input of document.querySelectorAll<HTMLInputElement | HTMLSelectElement>("[data-admin-edit]")) attributes[input.dataset.adminEdit ?? ""] = input.value;
     const notice = element("admin-notice"); notice.textContent = "";
-    try { this.adminSelected = await this.api.adminEntityEdit(this.activeCharacter.id, this.adminSelected.id, attributes); notice.textContent = "Entity attributes applied."; notice.classList.remove("error"); this.renderAdminMenu(element("menu-content")); }
+    try { this.adminSelected = await this.api.adminEntityEdit(this.activeCharacter.id, this.adminSelected.id, attributes); this.adminEditDraft = {}; this.notice("Entity attributes applied."); this.renderMenu("admin"); }
     catch (error) { notice.textContent = messageOf(error); notice.classList.add("error"); }
   }
 
@@ -499,7 +632,7 @@ class SpellFire {
       if (message.error) this.notice(message.error); else this.craftChoices = {};
     }
     this.renderAbilityBar();
-    if (element<HTMLDialogElement>("menu-dialog").open && (this.menuTab === "crafting" || this.menuTab === "inventory" || this.menuTab === "loadout")) this.renderMenu(this.menuTab);
+    this.refreshOpenMenu();
   }
 
   /**
@@ -706,7 +839,8 @@ class SpellFire {
     window.clearInterval(this.inputTimer); this.socket?.close(); this.socket = undefined; this.view?.destroy(); this.view = undefined; this.predictor = undefined; this.pressed.clear(); this.lastBand = "";
     this.draft = undefined; this.selectedSlot = 0; this.inSafety = true; this.respecOwed = false; this.loadoutStatus = "";
     this.items = []; this.materials = {}; this.craftWeapon = ""; this.craftChoices = {}; this.craftStatus = "";
-    this.ledger = ledgerOf([]); this.level = 1; this.xp = 0; this.xpNext = 0;
+    this.ledger = ledgerOf([]); this.level = 1; this.xp = 0; this.xpNext = 0; this.localEntity = undefined;
+    this.adminSelected = undefined; this.adminEditDraft = {}; this.adminPositionPick = undefined; this.renderedMenuState = "";
     element("ability-bar").replaceChildren(); element("touch-slots").replaceChildren();
     const menu = element<HTMLDialogElement>("menu-dialog"); if (menu.open) menu.close(); this.activeCharacter = undefined; this.setDeveloperMode(false); element("game").hidden = true; element("home").hidden = false; element("death-overlay").hidden = true; element("connection-overlay").hidden = true;
   }
@@ -723,6 +857,17 @@ function slotKey(code: string): number | undefined {
 }
 
 function isFormField(target: EventTarget | null): boolean { return target instanceof HTMLInputElement || target instanceof HTMLSelectElement || target instanceof HTMLTextAreaElement; }
+
+function adminPositionValue(value: string): [number, number] {
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (Array.isArray(parsed) && parsed.length === 2 && parsed.every((coordinate) => typeof coordinate === "number" && Number.isFinite(coordinate))) return [parsed[0], parsed[1]];
+  } catch { /* The server will report malformed submitted values. */ }
+  return [0, 0];
+}
+
+function roundAdminCoordinate(value: number): number { return Math.round(value * 100) / 100; }
+function formatAdminNumber(value: number): string { return Number.isFinite(value) ? String(Math.round(value * 100) / 100) : "0"; }
 function messageOf(error: unknown): string { return error instanceof Error ? error.message : "Something went wrong."; }
 function titleCase(value: string): string { return value.charAt(0).toUpperCase() + value.slice(1); }
 function escapeHTML(value: string): string { const span = document.createElement("span"); span.textContent = value; return span.innerHTML; }

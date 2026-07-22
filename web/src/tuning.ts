@@ -28,7 +28,7 @@ export interface Simulation { tick_rate: number; send_rate: number; aoi_radius: 
 export interface DangerBand { id: string; name: string; tier: number; outer_radius: number; material_grade: string; pvp: string; shape: string; summary: string }
 export interface CollisionObject { type: "circle" | "box"; offset_x?: number; offset_y?: number; radius?: number; width?: number; height?: number }
 export interface AdminOption { value: string; label: string }
-export interface AdminField { attribute: string; label: string; input: "number" | "text" | "select"; scope: "spawn" | "edit" | "both"; default: string; min?: number; max?: number; step?: number; max_length?: number; options?: AdminOption[] }
+export interface AdminField { attribute: string; label: string; input: "number" | "text" | "select" | "position" | "rotation"; scope: "spawn" | "edit" | "both"; default: string; min?: number; max?: number; step?: number; max_length?: number; options?: AdminOption[] }
 export interface EntityDefinition { mass: number; max_health: number; collision_objects: CollisionObject[]; admin: { name: string; spawnable: boolean; fields: AdminField[] } }
 export interface Trees { count: number; seed: number; radius_spread: number; inner_margin: number; outer_margin: number; spacing: number }
 export interface Fixture { id: string; entity: string; position: [number, number] }

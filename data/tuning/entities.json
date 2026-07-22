@@ -7,8 +7,7 @@
       "name": "Player",
       "spawnable": true,
       "fields": [
-        { "attribute": "transform.position.x", "label": "Position X", "input": "number", "scope": "edit", "default": "0", "min": -3000, "max": 3000, "step": 10 },
-        { "attribute": "transform.position.y", "label": "Position Y", "input": "number", "scope": "edit", "default": "0", "min": -3000, "max": 3000, "step": 10 },
+        { "attribute": "transform.position", "label": "Position", "input": "position", "scope": "edit", "default": "[0,0]", "min": -3000, "max": 3000, "step": 1 },
         { "attribute": "player.name", "label": "Name", "input": "text", "scope": "both", "default": "Training Player", "max_length": 20 },
         { "attribute": "player.class", "label": "Class", "input": "select", "scope": "spawn", "default": "gunslinger", "options": [{ "value": "gunslinger", "label": "Gunslinger" }, { "value": "mage", "label": "Mage" }] },
         { "attribute": "player.speed_multiplier", "label": "Movement speed", "input": "number", "scope": "both", "default": "1", "min": 0.25, "max": 4, "step": 0.25 },
@@ -29,9 +28,8 @@
       "fields": [
         { "attribute": "projectile.ability", "label": "Ability", "input": "select", "scope": "spawn", "default": "rifle-shot", "options": [{ "value": "rifle-shot", "label": "Rifle shot" }, { "value": "fire-bolt-cast", "label": "Fire bolt" }] },
         { "attribute": "render.element", "label": "Element", "input": "select", "scope": "both", "default": "none", "options": [{ "value": "none", "label": "None" }, { "value": "fire", "label": "Fire" }, { "value": "frost", "label": "Frost" }, { "value": "storm", "label": "Storm" }, { "value": "arcane", "label": "Arcane" }, { "value": "earth", "label": "Earth" }] },
-        { "attribute": "transform.heading_degrees", "label": "Heading", "input": "number", "scope": "spawn", "default": "0", "min": -360, "max": 360, "step": 5 },
-        { "attribute": "transform.position.x", "label": "Position X", "input": "number", "scope": "edit", "default": "0", "min": -3000, "max": 3000, "step": 10 },
-        { "attribute": "transform.position.y", "label": "Position Y", "input": "number", "scope": "edit", "default": "0", "min": -3000, "max": 3000, "step": 10 },
+        { "attribute": "transform.heading_degrees", "label": "Heading", "input": "rotation", "scope": "both", "default": "0", "min": -180, "max": 180, "step": 1 },
+        { "attribute": "transform.position", "label": "Position", "input": "position", "scope": "edit", "default": "[0,0]", "min": -3000, "max": 3000, "step": 1 },
         { "attribute": "physics.mass", "label": "Mass", "input": "number", "scope": "edit", "default": "0", "min": -1, "max": 1000, "step": 0.25 },
         { "attribute": "vitals.health", "label": "Health", "input": "number", "scope": "edit", "default": "-1", "min": -1, "max": 10000, "step": 1 }
       ]
@@ -47,9 +45,8 @@
       "fields": [
         { "attribute": "telegraph.ability", "label": "Ability", "input": "select", "scope": "spawn", "default": "fire-bolt-cast", "options": [{ "value": "fire-bolt-cast", "label": "Fire bolt" }] },
         { "attribute": "render.element", "label": "Element", "input": "select", "scope": "both", "default": "fire", "options": [{ "value": "fire", "label": "Fire" }, { "value": "frost", "label": "Frost" }, { "value": "storm", "label": "Storm" }, { "value": "arcane", "label": "Arcane" }, { "value": "earth", "label": "Earth" }] },
-        { "attribute": "transform.heading_degrees", "label": "Heading", "input": "number", "scope": "spawn", "default": "0", "min": -360, "max": 360, "step": 5 },
-        { "attribute": "transform.position.x", "label": "Position X", "input": "number", "scope": "edit", "default": "0", "min": -3000, "max": 3000, "step": 10 },
-        { "attribute": "transform.position.y", "label": "Position Y", "input": "number", "scope": "edit", "default": "0", "min": -3000, "max": 3000, "step": 10 },
+        { "attribute": "transform.heading_degrees", "label": "Heading", "input": "rotation", "scope": "both", "default": "0", "min": -180, "max": 180, "step": 1 },
+        { "attribute": "transform.position", "label": "Position", "input": "position", "scope": "edit", "default": "[0,0]", "min": -3000, "max": 3000, "step": 1 },
         { "attribute": "physics.mass", "label": "Mass", "input": "number", "scope": "edit", "default": "0", "min": -1, "max": 1000, "step": 0.25 }
       ]
     }
@@ -62,8 +59,7 @@
       "name": "Tree",
       "spawnable": true,
       "fields": [
-        { "attribute": "transform.position.x", "label": "Position X", "input": "number", "scope": "edit", "default": "0", "min": -3000, "max": 3000, "step": 10 },
-        { "attribute": "transform.position.y", "label": "Position Y", "input": "number", "scope": "edit", "default": "0", "min": -3000, "max": 3000, "step": 10 },
+        { "attribute": "transform.position", "label": "Position", "input": "position", "scope": "edit", "default": "[0,0]", "min": -3000, "max": 3000, "step": 1 },
         { "attribute": "physics.mass", "label": "Mass", "input": "number", "scope": "edit", "default": "-1", "min": -1, "max": 1000, "step": 0.25 },
         { "attribute": "vitals.health", "label": "Health", "input": "number", "scope": "edit", "default": "500", "min": -1, "max": 10000, "step": 1 },
         { "attribute": "vitals.max_health", "label": "Maximum health", "input": "number", "scope": "edit", "default": "500", "min": -1, "max": 10000, "step": 1 }
@@ -78,8 +74,7 @@
       "name": "Wall",
       "spawnable": true,
       "fields": [
-        { "attribute": "transform.position.x", "label": "Position X", "input": "number", "scope": "edit", "default": "0", "min": -3000, "max": 3000, "step": 10 },
-        { "attribute": "transform.position.y", "label": "Position Y", "input": "number", "scope": "edit", "default": "0", "min": -3000, "max": 3000, "step": 10 },
+        { "attribute": "transform.position", "label": "Position", "input": "position", "scope": "edit", "default": "[0,0]", "min": -3000, "max": 3000, "step": 1 },
         { "attribute": "physics.mass", "label": "Mass", "input": "number", "scope": "edit", "default": "-1", "min": -1, "max": 1000, "step": 0.25 },
         { "attribute": "vitals.health", "label": "Health", "input": "number", "scope": "edit", "default": "-1", "min": -1, "max": 10000, "step": 1 },
         { "attribute": "vitals.max_health", "label": "Maximum health", "input": "number", "scope": "edit", "default": "-1", "min": -1, "max": 10000, "step": 1 }

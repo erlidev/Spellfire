@@ -92,7 +92,10 @@ Rows are populated only where a design document has settled them.
   normalized entries. See [`administration.md`](../../docs/administration.md).
 - `entities.*.admin` is the developer catalog and editor contract. A spawnable
   row appears automatically, and each field uses a stable `component.attribute`
-  binding with spawn/edit scope plus number, text, or select input metadata.
+  binding with spawn/edit scope plus number, text, select, position, or rotation
+  input metadata. Position is a canonical `[x,y]` vector and rotation is
+  degrees; bounds remain server-side even though numeric HTML inputs do not
+  expose them.
   The explicit server registry resolves those bindings today and can be
   retargeted to ECS component stores later. New UI fields need no client code;
   new runtime attributes need one registry adapter.

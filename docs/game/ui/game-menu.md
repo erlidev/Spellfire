@@ -1,8 +1,14 @@
 # In-game menu
 
-The menu opens from a persistent control as a non-modal floating panel. It stays compact on desktop and becomes a bounded floating sheet on mobile rather than taking over the game. The shared world **does not pause**.
+The menu opens from a persistent control as a small non-modal panel anchored to the top-right corner. Fine-pointer clients minimize it to a compact title bar shortly after the pointer leaves and restore it on hover; touch clients use the visible minimize button. The shared world **does not pause**.
 
 State this explicitly and preserve danger awareness. Movement, slot selection, aiming, and combat remain active while the panel is open; typing in a form field suppresses only the keys consumed by that field.
+
+Visible state is reactive: progression, health/resource, zone, safety locks,
+loadout replies, inventory/crafting replies, and selected-entity snapshots update
+the open panel without requiring it to be closed and reopened. Rendering is
+coalesced to one animation frame and leaves an actively focused form control in
+place until interaction finishes.
 
 ## Information architecture
 
@@ -29,6 +35,10 @@ editor built from each archetype's admin metadata. Off, spawn, select, and delet
 pointer modes are explicit toggles. The menu stays open during pointer actions;
 a compact HUD states the current mode and offers an immediate exit. Delete mode
 fades every entity and keeps connected players compatible with death/respawn.
+Positions use adjacent X/Y inputs and a “pick from world” action that minimizes
+the panel for the next click. Headings use a rotation slider with a directional
+indicator. Plain numeric admin inputs omit browser bounds while the server still
+enforces tuning bounds.
 
 The client may never treat the tab or HUD as authority: the server verifies the
 administrator session, character ownership, catalog row, field values, and

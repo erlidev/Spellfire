@@ -21,7 +21,7 @@ import (
 // SchemaVersion is the table shape this build understands. Bump it only when a
 // table changes shape, and add the matching forward migration; a plain balance
 // edit bumps Manifest.Version instead and needs no code change.
-const SchemaVersion = 11
+const SchemaVersion = 12
 
 type Manifest struct {
 	// Version is the content revision. Bump it on any balance edit; a change

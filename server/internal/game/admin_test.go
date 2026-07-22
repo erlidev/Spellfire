@@ -1,6 +1,7 @@
 package game
 
 import (
+	"math"
 	"testing"
 	"time"
 
@@ -29,6 +30,12 @@ func TestEntityMetadataSpawnsLiveEntitiesAndRegistryAppliesOverrides(t *testing.
 	if projectile == nil || projectile.Position != (Vec{X: 100, Y: 25}) || projectile.Velocity.Y <= 0 || projectile.Velocity.X > .001 {
 		t.Fatalf("projectile = %#v", projectile)
 	}
+	if _, err := world.adminEdit(projectile.ID, map[string]string{"transform.heading_degrees": "-90"}, now); err != nil {
+		t.Fatalf("rotate projectile: %v", err)
+	}
+	if projectile.Velocity.Y >= 0 || math.Abs(projectile.Velocity.X) > .001 {
+		t.Fatalf("rotated projectile velocity = %#v", projectile.Velocity)
+	}
 	if err := world.adminSpawn(AdminSpawn{ID: "telegraph", Position: Vec{X: 200, Y: 20}, Config: map[string]string{"telegraph.ability": "fire-bolt-cast", "transform.heading_degrees": "180"}}, now); err != nil {
 		t.Fatalf("spawn telegraph: %v", err)
 	}
@@ -51,11 +58,14 @@ func TestAdminCanInspectEditAndGracefullyDeleteAnyEntity(t *testing.T) {
 	now := time.Unix(1_700_000_000, 0)
 	world := NewWorld(DefaultTuning())
 	player := world.AddPlayer(model.Character{ID: "connected", AccountID: "account", Name: "Connected", Class: model.Gunslinger}, now)
-	if _, err := world.adminEdit(player.ID, map[string]string{"transform.position.x": "120", "transform.position.y": "-40", "player.speed_multiplier": "1.75"}, now); err != nil {
+	if _, err := world.adminEdit(player.ID, map[string]string{"transform.position": "[120,-40]", "player.speed_multiplier": "1.75"}, now); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := world.adminEdit(player.ID, map[string]string{"transform.position": "[1,2,3]"}, now); err == nil {
+		t.Fatal("position with the wrong vector size was accepted")
+	}
 	state, err := world.adminInspect(player.ID)
-	if err != nil || state.DefinitionID != "player" || state.Values["transform.position.x"] != "120" || player.SpeedMultiplier != 1.75 {
+	if err != nil || state.DefinitionID != "player" || state.Values["transform.position"] != "[120,-40]" || player.SpeedMultiplier != 1.75 {
 		t.Fatalf("state=%#v player=%#v err=%v", state, player, err)
 	}
 

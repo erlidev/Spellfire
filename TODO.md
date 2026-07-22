@@ -96,6 +96,7 @@ while Sentry cadence, projectile values, and full AI remain deliberately deferre
 - [x] Provide and test an opt-in server-side admin wrapper (`401` unauthenticated, `403` non-admin) for future privileged features ([administration.md](docs/administration.md))
 - [x] Entity-owned admin metadata with spawnability, generic input schemas, and explicit ECS-ready `component.attribute` adapters; pointer spawn/select/edit/delete for every live entity family, death-compatible player removal, and graceful frontend fades ([entities.json](data/tuning/entities.json), [admin.go](server/internal/game/admin.go))
 - [x] Non-modal floating Field menu keeps movement/combat control while open and supports live admin pointer tools ([game-menu.md](docs/game/ui/game-menu.md), [main.ts](web/src/main.ts))
+- [x] Reactive compact top-right Field menu with fine-pointer auto-minimize, manual touch minimize, vector world-position picking, and rotation controls; server tuning still validates numeric bounds ([main.ts](web/src/main.ts), [entities.json](data/tuning/entities.json))
 - [x] Conditional in-game Admin tab with searchable catalog, persistent placement HUD, and bounded self speed/view-distance overrides
 
 Developer fixtures and overrides are intentionally in-memory and reset with the
