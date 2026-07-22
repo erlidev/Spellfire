@@ -308,6 +308,8 @@ Phase 2.7 uses prototype Signature parts, a Signature prism/stave, an Aegis crys
 - [ ] Reconcile hitbox honesty: radius-20 collision ([world.go:38](server/internal/game/world.go#L38)) vs. the ~35×33 drawn Gunslinger ([view.ts:124](web/src/game/view.ts#L124))
 - [ ] Colourblind redundancy audit as a per-visual checklist, enforced on every new visual rather than retrofitted
 - [ ] ⚠ Validate final element hues against real fights ([open-decisions.md](docs/game/design/open-decisions.md)) — build the palette swappable and ship before this resolves
+- [ ] Remove the line telegraph from the Mage's ordinary bolt cast; replace it with a glow on the staff's mana crystal, tinted by the spell's element, as the sole windup cue ([telegraph.ts](web/src/game/telegraph.ts))
+- [ ] Ground-placed spells (fields, walls, other placement deliveries) get a magic-circle telegraph drawn on the ground at the resolved location instead of the generic shape telegraph
 
 ---
 
