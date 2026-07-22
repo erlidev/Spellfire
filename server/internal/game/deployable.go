@@ -13,10 +13,9 @@ import (
 // resolving and vanishing. Smoke is the first: a circular field with a lifetime
 // that changes what can be seen without changing where a body may walk.
 //
-// The field rule here is deliberately narrower than terrain line of sight: what
-// this file owns is the one case a smoke canister is bought for. A cloud hides
-// what stands inside it past arm's reach, but does not hide a body merely
-// because the sightline passes through smoke.
+// Containment supplies smoke's close-range exception; visibility.go separately
+// treats an authored smoke field as a circular LOS occluder without making it
+// physical collision.
 type Deployable struct {
 	Entity
 	OwnerID string

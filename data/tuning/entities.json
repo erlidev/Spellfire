@@ -43,7 +43,7 @@
     "mass": 0,
     "max_health": -1,
     "occludes_vision": false,
-    "visible_in_shadow": false,
+    "visible_in_shadow": true,
     "collision_objects": [],
     "admin": {
       "name": "Telegraph",
@@ -77,8 +77,8 @@
   "smoke": {
     "mass": -1,
     "max_health": -1,
-    "occludes_vision": false,
-    "visible_in_shadow": false,
+    "occludes_vision": true,
+    "visible_in_shadow": true,
     "collision_objects": [],
     "admin": {
       "name": "Smoke cloud",
@@ -94,7 +94,7 @@
     "mass": -1,
     "max_health": -1,
     "occludes_vision": false,
-    "visible_in_shadow": false,
+    "visible_in_shadow": true,
     "collision_objects": [],
     "admin": {
       "name": "Cinder patch",
@@ -111,7 +111,7 @@
     "mass": -1,
     "max_health": -1,
     "occludes_vision": false,
-    "visible_in_shadow": false,
+    "visible_in_shadow": true,
     "collision_objects": [],
     "admin": {
       "name": "Firestorm",
@@ -128,7 +128,7 @@
     "mass": -1,
     "max_health": -1,
     "occludes_vision": false,
-    "visible_in_shadow": false,
+    "visible_in_shadow": true,
     "collision_objects": [],
     "admin": {
       "name": "Chilling aura",
@@ -145,7 +145,7 @@
     "mass": -1,
     "max_health": -1,
     "occludes_vision": false,
-    "visible_in_shadow": false,
+    "visible_in_shadow": true,
     "collision_objects": [],
     "admin": {
       "name": "Ice trap",
@@ -162,7 +162,7 @@
     "mass": -1,
     "max_health": -1,
     "occludes_vision": false,
-    "visible_in_shadow": false,
+    "visible_in_shadow": true,
     "collision_objects": [],
     "admin": {
       "name": "Blizzard",

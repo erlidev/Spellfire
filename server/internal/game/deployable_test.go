@@ -70,11 +70,10 @@ func TestSmokeDeploysWhereItLandsAndExpires(t *testing.T) {
 	}
 }
 
-// Smoke hides what it covers, and the rule has to be the one the player can see:
-// a body the drawn cloud swallows whole stops reaching the snapshot, while a
-// body clipping its edge or standing past it does not — that body is visibly
-// half out of the smoke on every client.
-func TestSmokeHidesOnlyWhatItCoversCompletely(t *testing.T) {
+// Smoke blocks crossed sightlines and retains the close-range reveal exception.
+// Once the cloud covers the complete silhouette—or stands between viewer and
+// silhouette—the server omits the body.
+func TestSmokeBlocksSightAndKeepsContactReveal(t *testing.T) {
 	w, now := testWorld()
 	field := *w.tuning.Tables.Abilities["smoke-throw"].Deployable
 	viewer := addTestPlayer(w, "viewer", model.Gunslinger, Vec{1200, 0}, now)
@@ -88,19 +87,19 @@ func TestSmokeHidesOnlyWhatItCoversCompletely(t *testing.T) {
 	if visible(w, viewer.ID, target.ID, now) {
 		t.Fatal("a cloud covering a body whole hid nothing")
 	}
-	// On the rim, half in: the client draws it half out of the smoke, so the
-	// wire has to agree.
+	// On the far rim, the entire silhouette is still behind the crossed cloud
+	// from this viewer's angle.
 	target.Position = Vec{cloud.X + field.Radius, 0}
 	w.recordHistory(target, now)
-	if !visible(w, viewer.ID, target.ID, now) {
-		t.Fatal("a body clipping the edge of the cloud vanished")
+	if visible(w, viewer.ID, target.ID, now) {
+		t.Fatal("a body on the far rim remained visible through smoke")
 	}
-	// Straight through and out the far side. The cloud is on the sightline and
-	// covers nothing of the body, which is exactly what the renderer shows.
+	// Straight through and out the far side. The cloud now casts an LOS shadow,
+	// so a body wholly inside that shadow is omitted.
 	target.Position = Vec{cloud.X + field.Radius + 2*w.tuning.PlayerRadius, 0}
 	w.recordHistory(target, now)
-	if !visible(w, viewer.ID, target.ID, now) {
-		t.Fatal("a body past the cloud was hidden by a sightline rule the client never draws")
+	if visible(w, viewer.ID, target.ID, now) {
+		t.Fatal("a body wholly behind smoke remained visible")
 	}
 	// Inside the reveal gap the cloud stops hiding: a contact fight is not
 	// decided by who threw the canister.
@@ -170,10 +169,9 @@ func TestThrowingAGadgetDoesNotWalkTheGun(t *testing.T) {
 	}
 }
 
-// Smoke changes what an opponent can see, never where a round may fly. Occluding
-// the thrower's own bullets made the cloud read as a wall it could not shoot
-// through, so a body always reaches its own rounds.
-func TestSmokeDoesNotHideYourOwnRounds(t *testing.T) {
+// Smoke changes visibility, never collision. Projectiles are one of the two
+// entity classes deliberately omitted in shadow, regardless of ownership.
+func TestSmokeHidesProjectilesWithoutStoppingThem(t *testing.T) {
 	w, now := testWorld()
 	field := *w.tuning.Tables.Abilities["smoke-throw"].Deployable
 	shooter := carrying(t, w, addTestPlayer(w, "shooter", model.Gunslinger, Vec{1200, 0}, now), "starter-rifle")
@@ -195,17 +193,16 @@ func TestSmokeDoesNotHideYourOwnRounds(t *testing.T) {
 	if mine == nil || theirs == nil {
 		t.Fatalf("expected one round from each body, got %d", len(w.projectiles))
 	}
-	if !visible(w, shooter.ID, mine.ID, now) {
-		t.Fatal("the cloud swallowed the shooter's own round, which reads as a wall rather than a sightline")
+	if visible(w, shooter.ID, mine.ID, now) {
+		t.Fatal("the cloud exposed the shooter's own round despite projectile shadow rules")
 	}
 	if visible(w, shooter.ID, theirs.ID, now) {
 		t.Fatal("the cloud failed to hide an opponent's round")
 	}
-	// A round only clipping the cloud is drawn half out of it, so it stays on
-	// the wire: rounds follow the same containment rule bodies do.
+	// From inside this cloud, the far rim is still behind its LOS boundary.
 	theirs.Position = Vec{1350 + field.Radius, 0}
-	if !visible(w, shooter.ID, theirs.ID, now) {
-		t.Fatal("a round crossing the edge of the cloud vanished instead of flying past it")
+	if visible(w, shooter.ID, theirs.ID, now) {
+		t.Fatal("a projectile behind the cloud's far rim remained visible")
 	}
 }
 

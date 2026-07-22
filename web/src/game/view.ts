@@ -15,6 +15,8 @@ interface ActorView {
   shots: number; firedAt: number;
   /** Deterministic puff layout, for a deployable field. Empty for everything else. */
   puffs: Puff[]; bornAt: number;
+  /** Snapshot visibility fades independently from death/expiry presentation. */
+  visibility: number; visibilityTarget: number; visibilityUpdatedAt: number; baseAlpha: number;
 }
 interface Puff { graphic: Graphics; distance: number; angle: number; radius: number; drift: number }
 
@@ -38,6 +40,9 @@ const shakeDistance = 6;
 const puffCount = 18;
 const puffCoreCount = 6;
 const puffFadeMS = 320;
+// LOS changes are authoritative immediately; this short visual transition only
+// softens the first/last rendered frame and never retains an interpolation sample.
+const visibilityFadeMS = 140;
 
 const colors = {
   ground: 0x16233a, grid: 0x2c405e, safe: 0x7ee1bb, rim: 0x8d5260, self: 0xffffff, hostile: 0xff6f69,
@@ -54,17 +59,15 @@ const elementColors: Record<string, number> = { fire: 0xff754d, frost: 0x75dbf0,
 export class GameView {
   readonly app = new Application();
   private world = new Container();
-  private overlayWorld = new Container();
   private ground = new Graphics();
   private telegraphLayer = new Container();
   private entityLayer = new Container();
-  // A low-opacity veil covers terrain the local sightline cannot reach. Static
-  // landmarks explicitly marked visible_in_shadow render in the layer above it.
+  // The veil is a stage overlay above the complete world. The server retains
+  // authored shadow-visible entities, while the shader still darkens precisely
+  // the pixels of bodies, labels, and health bars that lie behind cover.
   private shadow = new Graphics();
   private shadowFilter = new SightShadowFilter();
-  private shadowVisibleLayer = new Container();
-  // Fields draw over bodies: a cloud that players rendered on top of would show
-  // exactly what the server just stopped sending.
+  // Fields draw over ordinary bodies but remain below the sight veil.
   private fogLayer = new Container();
   // The blackout a flashbang leaves. It lives on the stage rather than in the
   // world container, because it is the viewer's eyes rather than a place.
@@ -88,10 +91,9 @@ export class GameView {
   async init(host: HTMLElement): Promise<void> {
     await this.app.init({ resizeTo: window, antialias: true, backgroundColor: colors.ground, resolution: Math.min(2, devicePixelRatio), autoDensity: true });
     host.replaceChildren(this.app.canvas);
-    this.world.addChild(this.ground, this.telegraphLayer, this.entityLayer);
-    this.overlayWorld.addChild(this.shadowVisibleLayer, this.fogLayer);
+    this.world.addChild(this.ground, this.telegraphLayer, this.entityLayer, this.fogLayer);
     this.shadow.filters = [this.shadowFilter];
-    this.app.stage.addChild(this.world, this.shadow, this.overlayWorld, this.blackout);
+    this.app.stage.addChild(this.world, this.shadow, this.blackout);
     this.app.ticker.add(() => this.renderFrame());
     this.initialized = true;
   }
@@ -128,6 +130,7 @@ export class GameView {
     const present = new Set<string>();
     for (const entity of message.entities) {
       present.add(entity.id); this.latestEntities.set(entity.id, entity);
+      this.setActorVisible(entity.id, true, receivedAt);
       if (entity.id === this.localID) continue;
       const buffer = this.samples.get(entity.id) ?? [];
       buffer.push({ at: receivedAt, entity });
@@ -135,9 +138,14 @@ export class GameView {
       this.samples.set(entity.id, buffer);
     }
     if (message.kind === ServerKind.Snapshot || message.kind === ServerKind.Welcome) {
-      // Snapshot omission is the authoritative LOS result. Keeping the last
-      // interpolation sample made a fully covered opponent linger for 500 ms.
-      for (const id of this.samples.keys()) if (!present.has(id)) this.removeActor(id);
+      // Snapshot omission takes the entity out of interpolation immediately.
+      // Its already-rendered container gets only a short alpha transition.
+      for (const id of this.samples.keys()) {
+        if (present.has(id)) continue;
+        this.samples.delete(id);
+        this.latestEntities.delete(id);
+        this.setActorVisible(id, false, receivedAt);
+      }
     }
   }
 
@@ -183,17 +191,16 @@ export class GameView {
     const shake = this.cameraShake(now);
     const cameraX = predictor.x + this.scopeOffset.x + shake.x, cameraY = predictor.y + this.scopeOffset.y + shake.y;
     this.world.position.set(width / 2 - cameraX, height / 2 - cameraY);
-    this.overlayWorld.position.copyFrom(this.world.position);
     this.drawGround(cameraX, cameraY, width, height);
     this.drawSightShadow(predictor.x, predictor.y, cameraX, cameraY, width, height);
     const local = this.latestEntities.get(this.localID);
     if (local) this.drawEntity({ ...local, x: predictor.x, y: predictor.y, aimX: predictor.aimX, aimY: predictor.aimY }, true, now);
     const renderAt = now - simulation.interpolation_delay_ms;
-    for (const [id, samples] of this.samples) {
+    for (const samples of this.samples.values()) {
       const entity = interpolate(samples, renderAt);
       if (entity) this.drawEntity(entity, false, now);
-      else if (!this.latestEntities.has(id)) this.removeActor(id);
     }
+    this.stepActorVisibility(now);
     this.drawBlackout(local, now, width, height);
   }
 
@@ -260,7 +267,8 @@ export class GameView {
       this.layerFor(entity).addChild(view.root);
     }
     view.root.position.set(entity.x, entity.y);
-    view.root.alpha = entity.deleting ? Math.max(0, 1 - entity.deleteProgress) : entity.alive ? entity.lingering ? .62 : 1 : .32;
+    view.baseAlpha = entity.deleting ? Math.max(0, 1 - entity.deleteProgress) : entity.alive ? entity.lingering ? .62 : 1 : .32;
+    view.root.alpha = view.baseAlpha * view.visibility;
     if (entity.type === EntityType.Deployable) { this.drawField(view, now); return; }
     if (entity.type === EntityType.Player) {
       this.drawRecoil(view, entity, self, now);
@@ -280,14 +288,12 @@ export class GameView {
   }
 
   /**
-   * Which layer an entity is drawn in. Only a concealing field draws over
-   * bodies — that is exactly what the server has stopped sending behind it.
-   * A burning patch or a blizzard is ground the server still shows everything
-   * inside, so painting over it would hide what the player is entitled to see.
+   * Which world layer an entity is drawn in. The sight veil sits above all of
+   * these layers, so shadow-visible means retained beneath it, not exempt from
+   * its subtle darkening.
    */
   private layerFor(entity: Entity): Container {
     if (entity.type === EntityType.Telegraph) return this.telegraphLayer;
-    if (entityDefinitions[entity.className]?.visible_in_shadow) return this.shadowVisibleLayer;
     if (entity.type !== EntityType.Deployable) return this.entityLayer;
     return deployableByKind(entity.className)?.conceals ? this.fogLayer : this.telegraphLayer;
   }
@@ -430,7 +436,10 @@ export class GameView {
     const label = new Text({ text: entity.name, style: { fontFamily: "system-ui", fontSize: 12, fill: 0xffffff, stroke: { color: colors.outline, width: 3 } } }); label.anchor.set(.5); label.position.set(0, -50);
     root.addChild(body, stance, weapon, health, label);
     if (entity.type === EntityType.Deployable) label.visible = false;
-    return { root, body, weapon, health, stance, label, type: entity.type, shots: entity.shots, firedAt: 0, puffs, bornAt: now };
+    return {
+      root, body, weapon, health, stance, label, type: entity.type, shots: entity.shots, firedAt: 0, puffs, bornAt: now,
+      visibility: 0, visibilityTarget: 1, visibilityUpdatedAt: now, baseAlpha: 1,
+    };
   }
 
   /**
@@ -475,6 +484,28 @@ export class GameView {
     }
     if (entity.telegraphShape !== "ring") body.fill({ color, alpha: style.fillAlpha }).stroke({ color, width: style.strokeWidth, alpha: style.strokeAlpha });
     else body.circle(0, 0, entity.radius).stroke({ color, width: style.strokeWidth, alpha: style.strokeAlpha });
+  }
+
+  private setActorVisible(id: string, visible: boolean, now: number): void {
+    const view = this.actors.get(id);
+    if (!view) return;
+    this.advanceActorVisibility(view, now);
+    view.visibilityTarget = visible ? 1 : 0;
+  }
+
+  private advanceActorVisibility(view: ActorView, now: number): void {
+    const amount = Math.max(0, now - view.visibilityUpdatedAt) / visibilityFadeMS;
+    view.visibilityUpdatedAt = now;
+    if (view.visibility < view.visibilityTarget) view.visibility = Math.min(view.visibilityTarget, view.visibility + amount);
+    else if (view.visibility > view.visibilityTarget) view.visibility = Math.max(view.visibilityTarget, view.visibility - amount);
+    view.root.alpha = view.baseAlpha * view.visibility;
+  }
+
+  private stepActorVisibility(now: number): void {
+    for (const [id, view] of this.actors) {
+      this.advanceActorVisibility(view, now);
+      if (view.visibilityTarget === 0 && view.visibility === 0) this.removeActor(id);
+    }
   }
 
   private removeActor(id: string): void { const view = this.actors.get(id); if (view) { view.root.destroy({ children: true }); this.actors.delete(id); } this.samples.delete(id); this.latestEntities.delete(id); }
