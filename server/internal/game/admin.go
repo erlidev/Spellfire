@@ -268,9 +268,9 @@ func (w *World) adminSpawn(request AdminSpawn, now time.Time) error {
 		return w.adminProjectile(request.Position, values)
 	case "telegraph":
 		return w.adminTelegraph(request.Position, values, now)
-	case "smoke":
+	case "smoke", "cinder", "firestorm", "rime-aura", "ice-trap", "blizzard":
 		return w.adminDeployable(request.Position, values, now)
-	case "tree", "wall":
+	case "tree", "wall", "stone-wall":
 		w.nextAdminEntity++
 		entity := newEntity(fmt.Sprintf("admin-%s-%d", request.ID, w.nextAdminEntity), request.ID, request.Position, definition, EntityOverrides{})
 		entity.AdminSpawned = true

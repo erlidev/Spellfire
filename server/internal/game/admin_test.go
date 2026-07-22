@@ -54,6 +54,30 @@ func TestEntityMetadataSpawnsLiveEntitiesAndRegistryAppliesOverrides(t *testing.
 	}
 }
 
+func TestAdminCanSpawnEveryDeployableSpellAndTheStoneWall(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0)
+	world := NewWorld(DefaultTuning())
+	for _, id := range []string{"smoke", "cinder", "firestorm", "rime-aura", "ice-trap", "blizzard"} {
+		definition := world.tuning.Tables.Entities[id]
+		ability := definition.Admin.Fields[0].Default
+		if err := world.adminSpawn(AdminSpawn{ID: id, Position: Vec{X: 40, Y: 0}, Config: map[string]string{"deployable.ability": ability}}, now); err != nil {
+			t.Fatalf("spawn %q: %v", id, err)
+		}
+	}
+	if err := world.adminSpawn(AdminSpawn{ID: "stone-wall", Position: Vec{X: 60, Y: 0}, Config: map[string]string{}}, now); err != nil {
+		t.Fatalf("spawn stone-wall: %v", err)
+	}
+	found := false
+	for _, item := range world.worldItems {
+		if item.DefinitionID == "stone-wall" && item.AdminSpawned {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("stone-wall was not placed as an admin-spawned world item")
+	}
+}
+
 func TestAdminCanInspectEditAndGracefullyDeleteAnyEntity(t *testing.T) {
 	now := time.Unix(1_700_000_000, 0)
 	world := NewWorld(DefaultTuning())
