@@ -39,7 +39,7 @@ Effective fire requires scoping. The scope exposes only a controllable area near
 Military equipment covers two needs:
 
 - **Vision and aim disruption:** smoke breaks line of sight; flashbangs disrupt aim. These excel against other Gunslingers but are weaker against forgiving, ground-targeted magic.
-  - A **smoke canister** is thrown and leaves a standing cloud for a fixed window. Anyone on the far side of it stops being visible at all — the server stops sending them — while two bodies close enough to touch still see each other, so a cloud is cover rather than a personal blindfold. It blocks nothing physically: bullets, blasts, and bodies pass straight through.
+  - A **smoke canister** is thrown and leaves a standing cloud for a fixed window. Anyone the cloud covers completely stops being visible at all — the server stops sending them — while a body on its rim, a body past it, and two bodies close enough to touch all stay visible: the cloud hides what is *in* it, not what is behind it, which is the same thing everyone can see it doing. Rounds follow the same rule, so a bullet crossing the fog is still drawn crossing it. It blocks nothing physically: bullets, blasts, and bodies pass straight through.
   - A **flashbang** is thrown and goes off as an area that takes vision *whole* for a short window, without dealing damage or slowing anyone. Its counterplay is the travel time of the canister and the ground it covers, which is why it disrupts a fight rather than deciding one.
   - Both carry long cooldowns of their own on top of the shared cadence: they are openers and disengages, not a rate of fire.
 - **Burst denial:** the universal dash and a deployable riot shield answer a Mage opener.

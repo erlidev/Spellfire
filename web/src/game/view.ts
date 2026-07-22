@@ -26,8 +26,11 @@ const kickDistance = 9;
 // gunfire never shakes the view it has to be aimed through.
 const shakeMS = 220;
 const shakeDistance = 6;
-// Smoke is drawn as a handful of overlapping puffs that drift around the centre
-// rather than one flat disc, so a cloud reads as volume the moment it lands.
+// Smoke is drawn as a body of volume rather than one flat disc: an exact disc of
+// the authoritative radius, with drifting puffs on top of it for texture. The
+// disc is what makes the drawn edge the same edge the server hides bodies
+// inside; the puffs are kept within it so nothing ever drifts past that edge and
+// claims cover the simulation does not give.
 const puffCount = 9;
 const puffFadeMS = 320;
 
@@ -283,12 +286,17 @@ export class GameView {
   private drawField(view: ActorView, now: number): void {
     const age = now - view.bornAt;
     const arriving = Math.min(1, age / puffFadeMS);
+    // The whole cloud fades in together, disc and puffs, so the edge never
+    // arrives before the volume behind it.
+    view.body.alpha = .62 * arriving;
     for (const puff of view.puffs) {
       const angle = puff.angle + (age / 1000) * puff.drift;
-      const breathe = 1 + Math.sin(age / 620 + puff.angle) * .08;
+      // The puffs breathe inward only: growing past the disc would put drawn
+      // smoke outside the radius the server actually hides bodies inside.
+      const breathe = 1 - Math.abs(Math.sin(age / 620 + puff.angle)) * .1;
       puff.graphic.position.set(Math.cos(angle) * puff.distance, Math.sin(angle) * puff.distance);
       puff.graphic.scale.set(breathe);
-      puff.graphic.alpha = .5 * arriving;
+      puff.graphic.alpha = .5;
     }
   }
 
@@ -317,13 +325,19 @@ export class GameView {
       // The puffs are laid out from a hash of the field's ID, so a cloud looks
       // the same to everyone watching it and never reshuffles between frames.
       const seed = hash(entity.id), radius = entity.radius || 120;
+      // The disc is the authoritative field, drawn at exactly the radius the
+      // server conceals bodies inside, so the edge a player reads is the edge
+      // the rule uses.
+      body.circle(0, 0, radius).fill({ color: 0xdfe6ef, alpha: 1 });
       for (let index = 0; index < puffCount; index++) {
         const spin = fraction(seed + index * 97);
         const puff = new Graphics();
-        const size = radius * (.4 + fraction(seed + index * 31) * .25);
+        const size = radius * (.34 + fraction(seed + index * 31) * .22);
         puff.circle(0, 0, size).fill({ color: 0xdfe6ef, alpha: 1 });
         puffs.push({
-          graphic: puff, distance: radius * .55 * fraction(seed + index * 53),
+          // Bounded by what is left of the radius, so a drifting puff can never
+          // reach past the edge and promise cover that is not there.
+          graphic: puff, distance: (radius - size) * fraction(seed + index * 53),
           angle: spin * Math.PI * 2, radius: size, drift: (spin - .5) * .5,
         });
         body.addChild(puff);

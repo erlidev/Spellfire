@@ -13,11 +13,10 @@ import (
 // resolving and vanishing. Smoke is the first: a circular field with a lifetime
 // that changes what can be seen without changing where a body may walk.
 //
-// The occlusion rule here is deliberately narrow. General line of sight — cover,
+// The vision rule here is deliberately narrow. General line of sight — cover,
 // walls, and the Mage/Gunslinger matchup — is Phase 2.6's substrate and is not
 // approximated here; what this file owns is the one case a smoke canister is
-// bought for: a cloud between two bodies hides each from the other, and a body
-// inside one is blind past arm's reach.
+// bought for: a cloud hides what stands inside it, past arm's reach.
 type Deployable struct {
 	Entity
 	OwnerID string
@@ -66,26 +65,33 @@ func (w *World) stepDeployables(now time.Time) {
 	}
 }
 
-// occluded reports whether a cloud stands between two points, hiding whatever is
-// at one from a viewer at the other. Two bodies closer together than the field's
+// concealed reports whether a cloud has swallowed something whole, hiding it
+// from a viewer standing elsewhere. Two things closer together than the field's
 // reveal radius always see each other, so standing in your own smoke does not
 // blind you to the body you are touching.
 //
-// A fading cloud stops occluding the moment it expires: the fade is a render
+// Containment rather than the sightline is what decides this, because the cloud
+// is drawn as a circle of exactly this radius on every client: a body clipping
+// the edge is visibly half out of the smoke, so hiding it would be a rule the
+// player can see being broken. Anything the cloud does not cover completely —
+// a body at the rim, a round crossing in front of it — stays on the wire.
+//
+// A fading cloud stops concealing the moment it expires: the fade is a render
 // courtesy, and vision has to match what the simulation says is there.
-func (w *World) occluded(from, to Vec) bool {
+func (w *World) concealed(viewer, at Vec, extent float64) bool {
 	// Iterated unordered on purpose: this runs once per candidate entity per
 	// viewer per send, and the answer is a boolean that no ordering can change.
 	for _, cloud := range w.deployables {
 		if cloud.Deleting || cloud.Field.Radius <= 0 {
 			continue
 		}
-		if to.Sub(from).LengthSq() <= cloud.Field.RevealRadius*cloud.Field.RevealRadius {
+		if math.Sqrt(at.Sub(cloud.Position).LengthSq())+extent > cloud.Field.Radius {
 			continue
 		}
-		if segmentCircle(from, to, cloud.Position, cloud.Field.Radius) {
-			return true
+		if viewer.Sub(at).LengthSq() <= cloud.Field.RevealRadius*cloud.Field.RevealRadius {
+			continue
 		}
+		return true
 	}
 	return false
 }

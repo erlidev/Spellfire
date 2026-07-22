@@ -47,8 +47,9 @@ Rules, from [`invariants.md`](../../docs/game/design/invariants.md) and
   instead of throwing anything.
 - **A deployable is a field, not a wall.** A `deployable` row names an
   `entities.json` archetype with no collision geometry, a radius, a lifetime,
-  and a `reveal_radius` inside which it stops hiding anyone. It changes what can
-  be seen, never where a body may walk, and it must carry a cooldown so one body
+  and a `reveal_radius` inside which it stops hiding anyone. It hides only what
+  its radius covers completely, so the rule matches the circle the client draws.
+  It changes what can be seen, never where a body may walk, and it must carry a cooldown so one body
   cannot cover the world in them.
 - **A guard is spent, not held.** A `guard` row carries `durability` — the
   barrier's own health, which every blocked round is charged to and whose

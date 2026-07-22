@@ -23,7 +23,7 @@ func throwing(t *testing.T, w *World, p *Player, gadgetID string, aim Vec, at ti
 }
 
 // visible reports whether one body reaches another's snapshot at all. It is the
-// only honest test of an occlusion rule: what a player cannot see, the client is
+// only honest test of a concealment rule: what a player cannot see, the client is
 // never sent, so hiding is absence from the wire rather than a render flag.
 func visible(w *World, viewerID, targetID string, now time.Time) bool {
 	for _, entity := range w.SnapshotFor(viewerID, now, protocol.ServerSnapshot).Entities {
@@ -70,27 +70,45 @@ func TestSmokeDeploysWhereItLandsAndExpires(t *testing.T) {
 	}
 }
 
-// Smoke is bought to break a sightline, so the rule it has to satisfy is that a
-// body behind a cloud stops reaching the snapshot at all — while one close
-// enough to touch still does, or standing in your own smoke would be suicide.
-func TestSmokeHidesWhatIsBehindItButNotWhatIsTouchingIt(t *testing.T) {
+// Smoke hides what it covers, and the rule has to be the one the player can see:
+// a body the drawn cloud swallows whole stops reaching the snapshot, while a
+// body clipping its edge or standing past it does not — that body is visibly
+// half out of the smoke on every client.
+func TestSmokeHidesOnlyWhatItCoversCompletely(t *testing.T) {
 	w, now := testWorld()
 	field := *w.tuning.Tables.Abilities["smoke-throw"].Deployable
 	viewer := addTestPlayer(w, "viewer", model.Gunslinger, Vec{1200, 0}, now)
-	behind := addTestPlayer(w, "behind", model.Gunslinger, Vec{1500, 0}, now)
+	target := addTestPlayer(w, "target", model.Gunslinger, Vec{1350, 0}, now)
+	cloud := Vec{1350, 0}
 
-	if !visible(w, viewer.ID, behind.ID, now) {
+	if !visible(w, viewer.ID, target.ID, now) {
 		t.Fatal("a body in the open was already invisible")
 	}
-	w.deploy("", field, Vec{1350, 0}, now)
-	if visible(w, viewer.ID, behind.ID, now) {
-		t.Fatal("a cloud on the sightline hid nothing")
+	w.deploy("", field, cloud, now)
+	if visible(w, viewer.ID, target.ID, now) {
+		t.Fatal("a cloud covering a body whole hid nothing")
+	}
+	// On the rim, half in: the client draws it half out of the smoke, so the
+	// wire has to agree.
+	target.Position = Vec{cloud.X + field.Radius, 0}
+	w.recordHistory(target, now)
+	if !visible(w, viewer.ID, target.ID, now) {
+		t.Fatal("a body clipping the edge of the cloud vanished")
+	}
+	// Straight through and out the far side. The cloud is on the sightline and
+	// covers nothing of the body, which is exactly what the renderer shows.
+	target.Position = Vec{cloud.X + field.Radius + 2*w.tuning.PlayerRadius, 0}
+	w.recordHistory(target, now)
+	if !visible(w, viewer.ID, target.ID, now) {
+		t.Fatal("a body past the cloud was hidden by a sightline rule the client never draws")
 	}
 	// Inside the reveal gap the cloud stops hiding: a contact fight is not
 	// decided by who threw the canister.
-	behind.Position = Vec{1200 + field.RevealRadius/2, 0}
-	w.recordHistory(behind, now)
-	if !visible(w, viewer.ID, behind.ID, now) {
+	viewer.Position = cloud
+	target.Position = Vec{cloud.X + field.RevealRadius/2, 0}
+	w.recordHistory(viewer, now)
+	w.recordHistory(target, now)
+	if !visible(w, viewer.ID, target.ID, now) {
 		t.Fatal("the cloud hid a body close enough to touch")
 	}
 }
@@ -182,6 +200,12 @@ func TestSmokeDoesNotHideYourOwnRounds(t *testing.T) {
 	}
 	if visible(w, shooter.ID, theirs.ID, now) {
 		t.Fatal("the cloud failed to hide an opponent's round")
+	}
+	// A round only clipping the cloud is drawn half out of it, so it stays on
+	// the wire: rounds follow the same containment rule bodies do.
+	theirs.Position = Vec{1350 + field.Radius, 0}
+	if !visible(w, shooter.ID, theirs.ID, now) {
+		t.Fatal("a round crossing the edge of the cloud vanished instead of flying past it")
 	}
 }
 

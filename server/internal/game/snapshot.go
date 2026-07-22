@@ -36,24 +36,25 @@ func (w *World) SnapshotFor(playerID string, now time.Time, kind uint64) protoco
 		reach := viewDistance + extent
 		return math.Abs(delta.X) > reach || math.Abs(delta.Y) > reach
 	}
-	// A flashbang takes vision whole, and a smoke cloud takes it along one line.
-	// Both are enforced here rather than drawn over on the client: what a player
-	// cannot see, a client is never sent.
+	// A flashbang takes vision whole, and a smoke cloud takes whatever it stands
+	// over. Both are enforced here rather than drawn over on the client: what a
+	// player cannot see, a client is never sent.
 	blind := w.blinded(viewer)
-	// A cloud never hides what the viewer owns. Occluding a body's own rounds
-	// would make its smoke read as a wall it cannot shoot through: the round
-	// would vanish at the edge of the cloud and reappear past it, which is a
-	// vision rule pretending to be collision. What smoke is bought for is
-	// hiding the *opponent* and the shots they fire.
-	hidden := func(at Vec, ownerID string) bool {
+	// A cloud hides only what it covers completely, and never what the viewer
+	// owns. Concealing a body's own rounds would make its smoke read as a wall it
+	// cannot shoot through: the round would vanish at the edge of the cloud and
+	// reappear past it, which is a vision rule pretending to be collision. What
+	// smoke is bought for is hiding the *opponent* and the shots they fire, and
+	// only while the drawn cloud actually covers them.
+	hidden := func(at Vec, ownerID string, extent float64) bool {
 		if outsideView(at, 0) || blind {
 			return true
 		}
-		return ownerID != playerID && w.occluded(viewer.Position, at)
+		return ownerID != playerID && w.concealed(viewer.Position, at, extent)
 	}
 	for _, id := range sortedPlayerIDs(w.players) {
 		p := w.players[id]
-		if id != playerID && hidden(p.Position, p.ID) {
+		if id != playerID && hidden(p.Position, p.ID, p.circleRadius()) {
 			continue
 		}
 		resource := p.Mana
@@ -81,7 +82,7 @@ func (w *World) SnapshotFor(playerID string, now time.Time, kind uint64) protoco
 	}
 	for _, id := range sortedProjectileIDs(w.projectiles) {
 		p := w.projectiles[id]
-		if hidden(p.Position, p.OwnerID) {
+		if hidden(p.Position, p.OwnerID, p.circleRadius()) {
 			continue
 		}
 		message.Entities = append(message.Entities, protocol.Entity{
@@ -94,7 +95,10 @@ func (w *World) SnapshotFor(playerID string, now time.Time, kind uint64) protoco
 	}
 	for _, id := range sortedTelegraphIDs(w.telegraphs) {
 		telegraph := w.telegraphs[id]
-		if hidden(telegraph.Position, telegraph.OwnerID) {
+		// A telegraph is ground geometry rather than a body: it is hidden only
+		// when the point it is anchored at is inside a cloud, since the shape it
+		// warns about reaches well outside its own origin.
+		if hidden(telegraph.Position, telegraph.OwnerID, 0) {
 			continue
 		}
 		message.Entities = append(message.Entities, protocol.Entity{
@@ -112,7 +116,7 @@ func (w *World) SnapshotFor(playerID string, now time.Time, kind uint64) protoco
 	for _, id := range sortedDeployableIDs(w.deployables) {
 		deployable := w.deployables[id]
 		// A cloud is never hidden by a cloud: what is standing in the world is
-		// exactly what explains why everything behind it went missing.
+		// exactly what explains why everything inside it went missing.
 		if blind || outsideView(deployable.Position, deployable.Field.Radius) {
 			continue
 		}
@@ -124,7 +128,7 @@ func (w *World) SnapshotFor(playerID string, now time.Time, kind uint64) protoco
 			Deleting:   deployable.Deleting, DeleteProgress: float32(deployable.deleteProgress(now)),
 		})
 	}
-	// Terrain is deliberately outside the occlusion rule: static cover blinking
+	// Terrain is deliberately outside the concealment rule: static cover blinking
 	// in and out as a cloud drifts would desynchronise the client's own
 	// collision prediction, and the cloud drawn over it already hides it.
 	for _, item := range w.worldItems {
