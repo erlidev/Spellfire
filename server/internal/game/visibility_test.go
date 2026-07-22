@@ -63,6 +63,7 @@ func TestCollisionDoesNotImplyVisionOcclusion(t *testing.T) {
 	}
 }
 
+<<<<<<< HEAD
 func TestAnyVisiblePartKeepsBodyInSnapshot(t *testing.T) {
 	w, now := testWorld()
 	viewer := addTestPlayer(w, "viewer", model.Gunslinger, Vec{1200, 0}, now)
@@ -101,11 +102,13 @@ func TestSmokeBlocksSightlineAndSuppliesShadowCollider(t *testing.T) {
 	}
 }
 
+=======
+>>>>>>> b44abae (Revert "fix los")
 func TestAutomaticTargetingRequiresLineOfSight(t *testing.T) {
 	w, now := testWorld()
 	owner := addTestPlayer(w, "owner", model.Mage, Vec{1200, 0}, now)
-	blocked := addTestPlayer(w, "blocked", model.Gunslinger, Vec{1500, 0}, now)
-	open := addTestPlayer(w, "open", model.Gunslinger, Vec{1200, 300}, now)
+	blocked := addTestPlayer(w, "blocked", model.Gunslinger, Vec{1380, 0}, now)
+	open := addTestPlayer(w, "open", model.Gunslinger, Vec{1450, 300}, now)
 	w.worldItems = []*Entity{testWorldItem(w, "wall", "wall", Vec{1300, 0}, CollisionObject{Type: CollisionBox, HalfWidth: 18, HalfHeight: 60})}
 
 	if got := w.nearestPlayer(owner.Position, 500, map[string]bool{owner.ID: true}, owner); got != open {
@@ -117,7 +120,7 @@ func TestAutomaticTargetingRequiresLineOfSight(t *testing.T) {
 	}
 
 	// Smoke participates in the same acquisition rule without becoming solid:
-	// it blocks the crossed sightline and leaves a target in another direction.
+	// it hides only the body it completely covers.
 	w.worldItems = nil
 	field := *w.tuning.Tables.Abilities["smoke-throw"].Deployable
 	w.deploy("", field, blocked.Position, "", now)

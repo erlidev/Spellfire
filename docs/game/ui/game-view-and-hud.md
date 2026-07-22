@@ -16,9 +16,13 @@ Camera behavior must:
 - go completely white while the local player is [flashed](../design/gunslinger.md#defense), and clear as the status ends — the server is already sending nothing to draw behind it;
 - account for UI safe areas and touch controls when framing threats.
 
+<<<<<<< HEAD
 The server interest area covers the complete axis-aligned square whose half-width and half-height equal the configured maximum view distance. Corners of the rectangular camera therefore do not lose entities to a circular range cutoff. Inside it, world geometry and fields marked `occludes_vision` always cast authoritative sight shadows; walls and each of smoke's five overlapping circles block sight, while trees remain non-blocking landmarks. A player inside smoke sees the union of circles containing them and receives shadow everywhere outside that pocket. Players and projectiles are omitted only when their complete silhouette is hidden: the server samples their perimeter and keeps them on the wire if any part remains visible. Every other shipped entity is marked `visible_in_shadow` and remains readable beneath the veil.
 
 A half-resolution shadow shader gives blocked pixels a restrained 27%-opacity dark overlay—not opaque fog. The veil is composited above the complete world, so it darkens only the covered parts of retained bodies, terrain, decorations, names, and health bars. If any portion of a player is visible, its complete name and health bar are still drawn; portions crossing the shadow receive the same darkening as the world beneath them. Appearance and disappearance use a short 140 ms opacity transition, but snapshot omission discards interpolation data immediately and cannot prolong authoritative visibility.
+=======
+The server interest area covers the complete axis-aligned square whose half-width and half-height equal the configured maximum view distance. Corners of the rectangular camera therefore do not lose entities to a circular range cutoff. Inside that area, terrain marked `occludes_vision` removes actors, projectiles, telegraphs, and fields whose direct sightline it crosses. A half-resolution shadow shader gives those occluded pixels a restrained 27%-opacity dark overlay—not an opaque fog—while entities marked `visible_in_shadow`, including trees, decorations, and walls, remain above it. Trees are landmarks rather than sight blockers. Snapshot omission removes a newly hidden actor immediately; destroying or expiring the blocker reveals what was behind it immediately while its visual fade finishes.
+>>>>>>> b44abae (Revert "fix los")
 
 ## Actor labels
 

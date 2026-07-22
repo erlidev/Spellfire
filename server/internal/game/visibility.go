@@ -1,7 +1,5 @@
 package game
 
-import "math"
-
 // terrainOccluded reports whether vision-blocking world geometry crosses the
 // direct line between two points. The entity attribute opts a collider into
 // sight blocking, so a tree can remain physical without becoming visual cover;
@@ -22,6 +20,7 @@ func (w *World) terrainOccluded(from, to Vec) bool {
 	return false
 }
 
+<<<<<<< HEAD
 // visionOccluded extends standing terrain with authored field occluders. Smoke
 // expands into the same five enterable circles drawn by the client; other field
 // occluders use their authored circle directly.
@@ -88,4 +87,13 @@ func (w *World) anyPartVisible(from, center Vec, extent float64) bool {
 // onto the ground.
 func (w *World) targetVisible(from, to Vec, extent float64) bool {
 	return w.anyPartVisible(from, to, extent)
+=======
+// targetVisible is the authoritative visibility rule for automatic targeting.
+// Terrain blocks the sightline, while concealing fields hide only a body they
+// cover completely and preserve their close-range reveal rule. Manual ground
+// placement deliberately does not call this: walls stop sight and aimed
+// projectiles, not area effects placed onto the ground.
+func (w *World) targetVisible(from, to Vec, extent float64) bool {
+	return !w.terrainOccluded(from, to) && !w.concealed(from, to, extent)
+>>>>>>> b44abae (Revert "fix los")
 }
