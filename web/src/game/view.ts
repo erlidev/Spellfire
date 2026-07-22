@@ -26,12 +26,15 @@ const kickDistance = 9;
 // gunfire never shakes the view it has to be aimed through.
 const shakeMS = 220;
 const shakeDistance = 6;
-// Smoke is drawn as a body of volume rather than one flat disc: an exact disc of
-// the authoritative radius, with drifting puffs on top of it for texture. The
-// disc is what makes the drawn edge the same edge the server hides bodies
-// inside; the puffs are kept within it so nothing ever drifts past that edge and
-// claims cover the simulation does not give.
-const puffCount = 9;
+// Smoke is drawn as overlapping puffs and nothing else — no disc underneath it,
+// which reads as a hard bubble the moment the puffs move off it. A few large
+// core puffs fill the middle and a jittered ring of smaller ones carries the
+// edge, so the cloud covers its authoritative radius with a soft, ragged rim
+// that may spill a little past it. The spill is deliberate: the server's rule is
+// the exact radius, and a body the fog only laps at is one the server still
+// shows, which is what keeps a half-covered opponent from vanishing.
+const puffCount = 15;
+const puffCoreCount = 4;
 const puffFadeMS = 320;
 
 const colors = {
@@ -279,24 +282,26 @@ export class GameView {
   }
 
   /**
-   * A deployed field, drawn as drifting puffs rather than a disc. The layout is
-   * seeded from the field's own identity so it is stable frame to frame, and it
-   * fades in on arrival and out with the shared removal fade.
+   * A deployed field, drawn as drifting puffs and no disc. The layout is seeded
+   * from the field's own identity so it is stable frame to frame, and it fades
+   * in on arrival and out with the shared removal fade.
+   *
+   * Each puff carries a modest alpha and the overlaps do the rest: the middle,
+   * where the most puffs stack, ends up the densest part of the cloud and the
+   * rim thins out on its own, which is what gives it depth without a flat edge.
    */
   private drawField(view: ActorView, now: number): void {
     const age = now - view.bornAt;
     const arriving = Math.min(1, age / puffFadeMS);
-    // The whole cloud fades in together, disc and puffs, so the edge never
-    // arrives before the volume behind it.
-    view.body.alpha = .62 * arriving;
+    view.body.alpha = arriving;
     for (const puff of view.puffs) {
+      // Each puff rotates around the centre at its own rate and breathes on its
+      // own phase, so the cloud is never caught pulsing as one body.
       const angle = puff.angle + (age / 1000) * puff.drift;
-      // The puffs breathe inward only: growing past the disc would put drawn
-      // smoke outside the radius the server actually hides bodies inside.
-      const breathe = 1 - Math.abs(Math.sin(age / 620 + puff.angle)) * .1;
+      const breathe = 1 + Math.sin(age / 620 + puff.angle) * .07;
       puff.graphic.position.set(Math.cos(angle) * puff.distance, Math.sin(angle) * puff.distance);
       puff.graphic.scale.set(breathe);
-      puff.graphic.alpha = .5;
+      puff.graphic.alpha = .38;
     }
   }
 
@@ -325,20 +330,26 @@ export class GameView {
       // The puffs are laid out from a hash of the field's ID, so a cloud looks
       // the same to everyone watching it and never reshuffles between frames.
       const seed = hash(entity.id), radius = entity.radius || 120;
-      // The disc is the authoritative field, drawn at exactly the radius the
-      // server conceals bodies inside, so the edge a player reads is the edge
-      // the rule uses.
-      body.circle(0, 0, radius).fill({ color: 0xdfe6ef, alpha: 1 });
+      const ring = puffCount - puffCoreCount;
+      // The rim turns as one slow body with only a little play between puffs.
+      // Letting each one pick its own rate tears the ring open after a few
+      // seconds, and a cloud with a hole in it is worse than a still one.
+      const turn = (fraction(seed + 11) - .5) * .12;
       for (let index = 0; index < puffCount; index++) {
-        const spin = fraction(seed + index * 97);
+        const spin = fraction(seed + index * 97), spread = fraction(seed + index * 53);
+        const core = index < puffCoreCount;
         const puff = new Graphics();
-        const size = radius * (.34 + fraction(seed + index * 31) * .22);
+        // The core is a few fat puffs near the middle; the rim is smaller ones
+        // walked evenly around the circle with enough jitter that the edge never
+        // reads as a polygon, and enough overlap that it never opens a gap.
+        const size = radius * (core ? .42 + fraction(seed + index * 31) * .14 : .28 + fraction(seed + index * 31) * .14);
+        const angle = core
+          ? spin * Math.PI * 2
+          : ((index - puffCoreCount + (spin - .5) * .35) / ring) * Math.PI * 2;
         puff.circle(0, 0, size).fill({ color: 0xdfe6ef, alpha: 1 });
         puffs.push({
-          // Bounded by what is left of the radius, so a drifting puff can never
-          // reach past the edge and promise cover that is not there.
-          graphic: puff, distance: (radius - size) * fraction(seed + index * 53),
-          angle: spin * Math.PI * 2, radius: size, drift: (spin - .5) * .5,
+          graphic: puff, distance: radius * (core ? .2 * spread : .6 + spread * .14),
+          angle, radius: size, drift: turn + (spin - .5) * (core ? .3 : .05),
         });
         body.addChild(puff);
       }
