@@ -187,11 +187,12 @@ func resolveWeapon(tables *tuning.Tables, class model.Class, inventory crafting.
 }
 
 // stockWeapons lists the plain weapon rows of a class the ledger owns, in stable
-// order.
+// order. A row that may only be carried as a crafted instance has no stock
+// configuration and never appears here.
 func stockWeapons(tables *tuning.Tables, class model.Class, inventory crafting.Inventory) []string {
 	ids := make([]string, 0, len(tables.Weapons))
 	for id, weapon := range tables.Weapons {
-		if weapon.Class == string(class) && inventory.Ledger.Has(id) {
+		if weapon.Class == string(class) && !weapon.RequiresCraft && inventory.Ledger.Has(id) {
 			ids = append(ids, id)
 		}
 	}
@@ -274,6 +275,9 @@ func Validate(tables *tuning.Tables, class model.Class, inventory crafting.Inven
 			}
 		}
 		if row, live := tables.Weapons[set.Weapon]; live {
+			if row.RequiresCraft {
+				return fmt.Errorf("%s has to be built before it can be carried", row.Name)
+			}
 			return fmt.Errorf("you have not unlocked %s", row.Name)
 		}
 		return fmt.Errorf("%q is not a weapon you can equip", set.Weapon)

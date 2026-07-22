@@ -58,6 +58,12 @@ func (w *World) useAbility(p *Player, now time.Time) bool {
 	if now.Before(p.NextFire) || now.Before(p.Cooldowns[ability.ID]) {
 		return false
 	}
+	// A shield is held rather than fired, and an ability that requires a scope
+	// may not be used from the hip at all: the committed vulnerability is the
+	// counterplay it is sold against.
+	if ability.Guard != nil || (ability.RequiresScope && !p.Scoped) {
+		return false
+	}
 	if !w.spend(p, ability, now) {
 		return false
 	}
@@ -90,6 +96,16 @@ func (w *World) spend(p *Player, ability tuning.Ability, now time.Time) bool {
 			return false
 		}
 		p.Mana -= ability.Cost.Amount
+	case tuning.CostMaterial:
+		// Special ammunition is finite and carried: there is no reload to fall
+		// back on, so running out is running out until more is built.
+		amount := int(ability.Cost.Amount)
+		if p.Materials[ability.Cost.Material] < amount {
+			return false
+		}
+		if p.Materials[ability.Cost.Material] -= amount; p.Materials[ability.Cost.Material] <= 0 {
+			delete(p.Materials, ability.Cost.Material)
+		}
 	}
 	return true
 }
@@ -105,7 +121,11 @@ func (w *World) deliver(p *Player, ability tuning.Ability, now time.Time) {
 	if ability.Projectile == nil {
 		return
 	}
-	w.spawnRewoundProjectile(p, ability, now)
+	// One use may put several bodies into the world — a shotgun's cone — and
+	// each leaves on its own direction, walked off aim by recoil and spread.
+	for _, direction := range w.firingDirections(p, ability, now) {
+		w.spawnRewoundProjectile(p, ability, direction, now)
+	}
 }
 
 // playerElement is the element the selected slot delivers, which is what the
@@ -118,7 +138,7 @@ func (w *World) playerElement(p *Player) string {
 	return slot.Element
 }
 
-func (w *World) spawnRewoundProjectile(p *Player, ability tuning.Ability, now time.Time) {
+func (w *World) spawnRewoundProjectile(p *Player, ability tuning.Ability, direction Vec, now time.Time) {
 	shotAt := time.UnixMilli(int64(p.Input.ClientTimeMS))
 	oldest := now.Add(-w.tuning.MaxRewind)
 	if shotAt.Before(oldest) {
@@ -128,16 +148,34 @@ func (w *World) spawnRewoundProjectile(p *Player, ability tuning.Ability, now ti
 		shotAt = now
 	}
 	origin := w.positionAt(p.ID, shotAt)
+	muzzle := origin.Add(direction.Mul(p.circleRadius() + ability.Projectile.Radius + 2))
+	// A hitscan round never becomes an entity inside its instant reach: it is
+	// resolved along the line, and only what it fails to reach travels on.
+	if ability.Projectile.HitscanRange > 0 && p.Scoped {
+		if w.hitscan(p, ability, muzzle, direction, shotAt) {
+			return
+		}
+	}
 	projectile := &Projectile{
 		OwnerID:   p.ID,
 		Element:   w.playerElement(p),
-		Damage:    w.tuning.Tables.BandDamage(ability.DamageBand),
+		Damage:    w.pelletDamage(ability),
 		Remaining: ability.Projectile.LifeSeconds, Effects: ability.Effects,
+		Spec: *ability.Projectile, Blast: ability.Blast,
 	}
-	projectile.Entity = w.newProjectileEntity(fmt.Sprintf("p-%d", w.nextProjectile), Vec{}, p.Aim.Mul(ability.Projectile.Speed), ability.Projectile.Radius)
+	if ability.Blast != nil {
+		projectile.BlastEffects = ability.Blast.Effects
+	}
+	projectile.Entity = w.newProjectileEntity(fmt.Sprintf("p-%d", w.nextProjectile), Vec{}, direction.Mul(ability.Projectile.Speed), ability.Projectile.Radius)
 	projectile.Kind = ability.Projectile.Kind
 	w.nextProjectile++
-	projectile.Position = origin.Add(p.Aim.Mul(p.circleRadius() + ability.Projectile.Radius + 2))
+	projectile.Position = muzzle
+	// A round that starts past its instant reach has already covered it, so its
+	// falloff continues from there rather than restarting at the muzzle.
+	if ability.Projectile.HitscanRange > 0 && p.Scoped {
+		projectile.Position = origin.Add(direction.Mul(ability.Projectile.HitscanRange))
+		projectile.Travelled = ability.Projectile.HitscanRange
+	}
 	step := time.Second / time.Duration(w.tuning.TickRate)
 	for at := shotAt; at.Before(now); at = at.Add(step) {
 		duration := step
@@ -161,8 +199,12 @@ func (w *World) deliverAt(ownerID string, origin, direction Vec, ability tuning.
 	}
 	projectile := &Projectile{
 		OwnerID: ownerID, Element: element,
-		Damage:    w.tuning.Tables.BandDamage(ability.DamageBand),
+		Damage:    w.pelletDamage(ability),
 		Remaining: ability.Projectile.LifeSeconds, Effects: ability.Effects,
+		Spec: *ability.Projectile, Blast: ability.Blast,
+	}
+	if ability.Blast != nil {
+		projectile.BlastEffects = ability.Blast.Effects
 	}
 	projectile.Entity = w.newProjectileEntity(fmt.Sprintf("p-%d", w.nextProjectile), Vec{}, direction.Mul(ability.Projectile.Speed), ability.Projectile.Radius)
 	projectile.Kind = ability.Projectile.Kind

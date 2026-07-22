@@ -193,7 +193,9 @@ func TestAbilityEffectsTravelWithTheProjectileAndRespectPvPProtection(t *testing
 	}, "slow-test")
 
 	w, now := worldFrom(t, files)
-	shooter := addTestPlayer(w, "shooter", model.Gunslinger, Vec{1200, 0}, now)
+	// The edited row is the rifle's, so the shooter carries a rifle rather than
+	// whatever category its starter draw happened to hand it.
+	shooter := carrying(t, w, addTestPlayer(w, "shooter", model.Gunslinger, Vec{1200, 0}, now), "starter-rifle")
 	target := addTestPlayer(w, "target", model.Mage, Vec{1300, 0}, now)
 	fire(w, shooter, 1, now)
 	for i := 1; i <= 60 && len(target.Effects) == 0; i++ {
@@ -207,7 +209,7 @@ func TestAbilityEffectsTravelWithTheProjectileAndRespectPvPProtection(t *testing
 	}
 
 	protected, protectedNow := worldFrom(t, files)
-	inside := addTestPlayer(protected, "inside", model.Gunslinger, Vec{100, 0}, protectedNow)
+	inside := carrying(t, protected, addTestPlayer(protected, "inside", model.Gunslinger, Vec{100, 0}, protectedNow), "starter-rifle")
 	bystander := addTestPlayer(protected, "bystander", model.Mage, Vec{200, 0}, protectedNow)
 	fire(protected, inside, 1, protectedNow)
 	for i := 1; i <= 60; i++ {

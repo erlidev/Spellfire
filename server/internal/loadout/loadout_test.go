@@ -198,8 +198,11 @@ func TestResolveDropsWhatNoLongerValidates(t *testing.T) {
 func TestResolveRearmsACharacterWhoseWeaponWasWithdrawn(t *testing.T) {
 	tables := shipped(t)
 	set, respec := loadout.Resolve(tables, model.Gunslinger, everything(tables), model.Loadout{Weapon: "withdrawn-gun"})
-	if set.Weapon != "starter-rifle" {
-		t.Fatalf("weapon resolved to %q, want the class starter", set.Weapon)
+	// The fallback is a stock row of the class the character owns, never a
+	// category the economy withholds until it has been built.
+	rearmed, live := tables.Weapons[set.Weapon]
+	if !live || rearmed.Class != "gunslinger" || rearmed.RequiresCraft {
+		t.Fatalf("weapon resolved to %q, want a carryable gunslinger row", set.Weapon)
 	}
 	if !respec {
 		t.Fatal("a rearmed character was not granted a respec")

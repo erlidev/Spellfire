@@ -31,11 +31,13 @@ describe("crafting recipes", () => {
 
   it("adds the cost of every filled slot rather than overwriting it", () => {
     const muzzle = componentIn("muzzle"), barrel = componentIn("barrel");
-    const total = cost({ muzzle, barrel });
+    const total = cost(gun, { muzzle, barrel });
     for (const [material, count] of Object.entries(components.components[muzzle]!.cost)) {
       expect(total[material]).toBe(count + (components.components[barrel]!.cost[material] ?? 0));
     }
-    expect(cost({})).toEqual({});
+    expect(cost(gun, {})).toEqual({});
+    // A heavy category's own material cost is charged even with every slot stock.
+    expect(cost("long-sniper", {})).not.toEqual({});
   });
 
   it("names what is missing instead of refusing as a whole", () => {

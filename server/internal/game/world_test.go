@@ -33,34 +33,57 @@ func worldItemByKind(w *World, kind string) *Entity {
 	return nil
 }
 
-// starterWeapon and starterAbility resolve what a fresh character of the class
-// actually carries, so the tests assert against the tuning tables rather than
-// against numbers copied out of them.
-func starterWeapon(w *World, class model.Class) tuning.Weapon {
-	weapon, ok := w.tuning.Tables.StarterWeapon(string(class))
+// equippedWeapon and equippedAbility resolve what a body is actually holding,
+// so the tests assert against the tuning tables rather than against numbers
+// copied out of them — and against the row this character drew rather than a
+// category the basic set happens to sort first.
+func equippedWeapon(w *World, p *Player) tuning.Weapon {
+	weapon, ok := w.weapon(p)
 	if !ok {
-		panic("no starter weapon for " + class)
+		panic("player " + p.ID + " carries no weapon")
 	}
 	return weapon
 }
 
-func starterAbility(w *World, class model.Class) tuning.Ability {
-	ability, ok := w.tuning.Tables.WeaponAbility(starterWeapon(w, class))
+func equippedAbility(w *World, p *Player) tuning.Ability {
+	ability, ok := w.ability(p)
 	if !ok {
-		panic("unresolvable starter ability for " + class)
+		panic("player " + p.ID + " has no ability on its selected slot")
 	}
 	return ability
 }
 
-// starterDamage is what one starter hit takes off, read through the shared band.
-func starterDamage(w *World, class model.Class) float64 {
-	return w.tuning.Tables.BandDamage(starterAbility(w, class).DamageBand)
+// equippedDamage is what one hit of the equipped weapon takes off, read through
+// the shared band and divided between the pellets a use puts into the world.
+func equippedDamage(w *World, p *Player) float64 {
+	return w.pelletDamage(equippedAbility(w, p))
 }
 
 func addTestPlayer(world *World, id string, class model.Class, position Vec, now time.Time) *Player {
 	p := world.AddPlayer(model.Character{ID: id, Name: id, Class: class, Progress: model.Progress{Level: 1}}, now)
 	p.Position = position
 	world.recordHistory(p, now)
+	return p
+}
+
+// carrying equips a specific weapon row on a test body, for the tests that are
+// about one category's behaviour rather than about whatever a character drew. A
+// category the economy withholds is given as the built instance it can only be
+// carried as, which is the same shape a real craft produces.
+func carrying(t *testing.T, w *World, p *Player, weaponID string) *Player {
+	t.Helper()
+	p.Unlocks, _ = p.Unlocks.With(weaponID)
+	p.Loadout.Weapon = weaponID
+	if w.tuning.Tables.Weapons[weaponID].RequiresCraft {
+		item := model.CraftedItem{ID: "itm-" + p.ID + "-" + weaponID, CharacterID: p.ID, Weapon: weaponID, Components: map[string]string{}}
+		p.Items = append(p.Items, item)
+		p.Loadout.Weapon = item.ID
+	}
+	weapon, ok := w.weapon(p)
+	if !ok {
+		t.Fatalf("%s is not equippable as a stock row", weaponID)
+	}
+	p.Ammo = weapon.MagazineSize
 	return p
 }
 
@@ -73,7 +96,9 @@ func TestMovementNormalizesDiagonalsAndAcknowledgesInput(t *testing.T) {
 	}
 	w.Step(now.Add(time.Second / 60))
 	got, _ := w.PlayerState(p.ID)
-	expectedAxis := w.tuning.PlayerSpeed / math.Sqrt2 / 60
+	// Movement is scaled by the weight class of whatever the character drew, so
+	// the expectation reads the same handling the simulation applied.
+	expectedAxis := w.tuning.PlayerSpeed * w.handlingScale(p) / math.Sqrt2 / 60
 	if math.Abs(got.Position.X-expectedAxis) > .001 || math.Abs(got.Position.Y-expectedAxis) > .001 {
 		t.Fatalf("position = %#v, want axis %f", got.Position, expectedAxis)
 	}
@@ -165,17 +190,17 @@ func TestPlayerCannotMoveThroughTreeOrWorldBoundary(t *testing.T) {
 
 func TestProjectileCombatOutsidePvPProtection(t *testing.T) {
 	w, now := testWorld()
-	shooter := addTestPlayer(w, "shooter", model.Gunslinger, Vec{1200, 0}, now)
+	shooter := carrying(t, w, addTestPlayer(w, "shooter", model.Gunslinger, Vec{1200, 0}, now), "starter-rifle")
 	target := addTestPlayer(w, "target", model.Mage, Vec{1400, 0}, now)
 	w.ApplyInput(shooter.ID, protocol.Input{Sequence: 1, Buttons: ButtonFire, AimX: 1, ClientTimeMS: uint64(now.UnixMilli())})
 	w.Step(now)
 	for i := 1; i <= 30 && target.Health == w.tuning.MaxHealth; i++ {
 		w.Step(now.Add(time.Duration(i) * time.Second / 60))
 	}
-	if target.Health != w.tuning.MaxHealth-starterDamage(w, model.Gunslinger) {
+	if target.Health != w.tuning.MaxHealth-equippedDamage(w, shooter) {
 		t.Fatalf("target health = %f", target.Health)
 	}
-	if shooter.Ammo >= starterWeapon(w, model.Gunslinger).MagazineSize {
+	if shooter.Ammo >= equippedWeapon(w, shooter).MagazineSize {
 		t.Fatalf("firing did not consume ammo: %d", shooter.Ammo)
 	}
 }
@@ -197,7 +222,7 @@ func TestPvPProtectedFringePreventsDamage(t *testing.T) {
 func TestServerRewindHitsHistoricalPosition(t *testing.T) {
 	w, now := testWorld()
 	shotAt := now.Add(-150 * time.Millisecond)
-	shooter := addTestPlayer(w, "shooter", model.Gunslinger, Vec{1200, 0}, now.Add(-200*time.Millisecond))
+	shooter := carrying(t, w, addTestPlayer(w, "shooter", model.Gunslinger, Vec{1200, 0}, now.Add(-200*time.Millisecond)), "starter-rifle")
 	target := addTestPlayer(w, "target", model.Mage, Vec{1300, 0}, now.Add(-200*time.Millisecond))
 	w.SetPlayerPosition(shooter.ID, Vec{1200, 0}, shotAt)
 	w.SetPlayerPosition(target.ID, Vec{1300, 0}, shotAt)
@@ -205,16 +230,16 @@ func TestServerRewindHitsHistoricalPosition(t *testing.T) {
 	w.SetPlayerPosition(target.ID, Vec{1300, 200}, now)
 	w.ApplyInput(shooter.ID, protocol.Input{Sequence: 1, Buttons: ButtonFire, AimX: 1, ClientTimeMS: uint64(shotAt.UnixMilli())})
 	w.Step(now)
-	if target.Health != w.tuning.MaxHealth-starterDamage(w, model.Gunslinger) {
+	if target.Health != w.tuning.MaxHealth-equippedDamage(w, shooter) {
 		t.Fatalf("rewound shot missed, health = %f", target.Health)
 	}
 }
 
 func TestDeathAndRespawnResetAuthoritativeState(t *testing.T) {
 	w, now := testWorld()
-	shooter := addTestPlayer(w, "shooter", model.Gunslinger, Vec{1200, 0}, now)
+	shooter := carrying(t, w, addTestPlayer(w, "shooter", model.Gunslinger, Vec{1200, 0}, now), "starter-rifle")
 	target := addTestPlayer(w, "target", model.Mage, Vec{1280, 0}, now)
-	target.Health = starterDamage(w, model.Gunslinger)
+	target.Health = equippedDamage(w, shooter)
 	w.ApplyInput(shooter.ID, protocol.Input{Sequence: 1, Buttons: ButtonFire, AimX: 1, ClientTimeMS: uint64(now.UnixMilli())})
 	w.Step(now)
 	for i := 1; i <= 10 && target.Alive; i++ {
@@ -236,9 +261,9 @@ func TestDeathAndRespawnResetAuthoritativeState(t *testing.T) {
 
 func TestResourcesEnforceReloadAndManaCosts(t *testing.T) {
 	w, now := testWorld()
-	rifle := starterWeapon(w, model.Gunslinger)
-	cadence := starterAbility(w, model.Gunslinger).Interval() + time.Millisecond
-	gunner := addTestPlayer(w, "gunner", model.Gunslinger, Vec{1500, 0}, now)
+	gunner := carrying(t, w, addTestPlayer(w, "gunner", model.Gunslinger, Vec{1500, 0}, now), "starter-rifle")
+	rifle := equippedWeapon(w, gunner)
+	cadence := equippedAbility(w, gunner).Interval() + time.Millisecond
 	for i := 0; i < rifle.MagazineSize; i++ {
 		at := now.Add(time.Duration(i) * cadence)
 		w.ApplyInput(gunner.ID, protocol.Input{Sequence: uint32(i + 1), Buttons: ButtonFire, AimX: 1, ClientTimeMS: uint64(at.UnixMilli())})
@@ -258,8 +283,8 @@ func TestResourcesEnforceReloadAndManaCosts(t *testing.T) {
 	if gunner.Ammo != rifle.MagazineSize {
 		t.Fatalf("reloaded ammo = %d", gunner.Ammo)
 	}
-	cost := starterAbility(w, model.Mage).Cost.Amount
 	mage := addTestPlayer(w, "mage", model.Mage, Vec{1800, 0}, now)
+	cost := equippedAbility(w, mage).Cost.Amount
 	mage.Mana = cost
 	w.ApplyInput(mage.ID, protocol.Input{Sequence: 1, Buttons: ButtonFire, AimX: 1, ClientTimeMS: uint64(now.UnixMilli())})
 	w.Step(now.Add(5 * time.Second))

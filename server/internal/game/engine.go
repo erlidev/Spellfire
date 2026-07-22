@@ -422,6 +422,26 @@ func (e *Engine) Craft(playerID string, request CraftRequest) {
 	e.enqueue(pending)
 }
 
+// CraftAmmunition builds one batch of special ammunition and answers the client
+// either way, on the same reply an ordinary craft uses: what it changes is the
+// carried inventory, which is exactly what that reply carries.
+func (e *Engine) CraftAmmunition(playerID, recipeID string) {
+	e.mu.Lock()
+	_, err := e.world.CraftAmmunition(playerID, recipeID)
+	var pending []characterSave
+	if err == nil {
+		if state, ok := e.world.StateOf(playerID, time.Now()); ok {
+			pending = append(pending, characterSave{id: playerID, state: &state})
+		}
+	}
+	reply := e.craftMessageLocked(playerID, err)
+	if client := e.clients[playerID]; client != nil {
+		e.queue(client, protocol.EncodeServer(reply))
+	}
+	e.mu.Unlock()
+	e.enqueue(pending)
+}
+
 // craftMessageLocked reports what the character owns and carries after a craft
 // attempt. The caller holds the engine lock.
 func (e *Engine) craftMessageLocked(playerID string, err error) protocol.ServerEnvelope {

@@ -59,9 +59,9 @@ Unlocked outposts round-trip through the world but nothing mutates them yet — 
 - [x] Status-effect layer: burn/DoT, slow, root, stun, knockback, shields ([effects.go](server/internal/game/effects.go), [effects_test.go](server/internal/game/effects_test.go))
 - [x] Reject at load any damaging ability with no declared dodge vector — and any that claims one the simulation does not deliver ([validate.go](server/internal/tuning/validate.go))
 
-`effects.json` ships empty: the layer runs all six kinds, but no design document has settled a
-magnitude, so Phase 2.4's gadgets and Phase 2.5's element secondaries author the rows and the tests
-exercise the layer against rows they add themselves. Active effect IDs already reach the client in
+`effects.json` carries one shipped row — the knockback a rocket blast applies. The layer runs all six
+kinds, but no design document has settled a magnitude for the other five, so Phase 2.5's element
+secondaries author those rows and the tests exercise the layer against rows they add themselves. Active effect IDs already reach the client in
 the expanded entity state. Windups and telegraphs now run through the same ability path; the starter
 Fire bolt exercises them without prematurely authoring Phase 2's element-secondary values.
 
@@ -115,8 +115,8 @@ through the authorization wrapper; client visibility alone never grants access.
 - [x] Menu Loadout section: view anywhere, edit only in safety, with an explicit lock reason ([system-interfaces.md](docs/game/ui/system-interfaces.md#safe-zone-loadout-and-crafting), [main.ts](web/src/main.ts))
 - [x] Slot selection: 1–6 and the mouse wheel on desktop, six buttons on touch, carried per input so the server resolves the use button against the selected slot ([game-view-and-hud.md](docs/game/ui/game-view-and-hud.md#slot-selection))
 
-`gadgets.json` ships empty, so a Gunslinger's bar is its weapon plus five empty slots until Phase 2.4
-authors the rows; an empty slot performs nothing rather than erroring. A Mage's slot one falls back to
+`gadgets.json` carries the riot shield from Phase 2.4; the remaining slots stay empty until Phase 2.6
+unblocks smoke and flashbangs, and an empty slot performs nothing rather than erroring. A Mage's slot one falls back to
 its staff's declared spell, so a set emptied by a content withdrawal can still fight. Loadouts cannot
 be edited outside the world at all — there is no HTTP mutation path — so logging out in the Deadlands
 is not a way to respec. Keystone slots wait on Phase 2.7. The equippable set is narrowed from "every
@@ -130,7 +130,7 @@ live row" to "what this character owns" by the Phase 2.2 unlock ledger.
 - [x] `loadout.Equippable`/`Validate`/`Resolve` intersect with the ledger, so unowned content is refused on the mutation path rather than merely hidden by the menu
 - [x] Test: a zero-material character can fill a coherent loadout immediately ([progression_test.go](server/internal/progression/progression_test.go)), plus starter-kit stability/randomness, level grants, ledger-gated validation, and the separate progression save path
 
-Only `player_kill` has a trigger: mob kills, harvesting, and outpost discovery are priced in the table and awarded by Phases 4.3, 4.1, and 3, and Phase 4.4 tunes the curve against the pacing targets. Keystone IDs share the ledger's shape but have no rows until Phase 2.7. The basic sets are one weapon per class and one spell, so today's draw is nearly deterministic; the pools widen with Phases 2.4 and 2.5 without touching the draw.
+Only `player_kill` has a trigger: mob kills, harvesting, and outpost discovery are priced in the table and awarded by Phases 4.3, 4.1, and 3, and Phase 4.4 tunes the curve against the pacing targets. Keystone IDs share the ledger's shape but have no rows until Phase 2.7. Phase 2.4 widened the Gunslinger's basic set to four categories and its gadget pool to the riot shield without touching the draw; the Mage's is still one staff and one spell until Phase 2.5.
 
 ### 2.3 Slotted-blueprint crafting
 - [x] Blueprint + slot + component definitions with material costs and **behavioural** (not power) effects ([components.json](data/tuning/components.json), [crafting.go](server/internal/crafting/crafting.go), [progression-and-crafting.md](docs/game/design/progression-and-crafting.md#slotted-blueprint-crafting))
@@ -143,23 +143,31 @@ Only `player_kill` has a trigger: mob kills, harvesting, and outpost discovery a
 
 Components declare an open `modifiers` map, but only over attributes the simulation reads, and the loader
 rejects `interval_ms` outright: fire cadence is the DPS axis, and crafting changes handling and ceiling.
-Recoil, spread, and scoped state join the vocabulary with Phase 2.4 rather than being claimed early.
+Recoil, spread, and scoped movement joined the vocabulary with Phase 2.4 and the gun components now use them.
 Nothing produces a material yet — harvesting is Phase 4.1 — so the only source is the bounded
 developer-mode grant behind the Phase 1.7 authorization wrapper, and an ordinary player sees accurate
 shortfalls until then. Death drops (Phase 4.2) will drop carried materials and keep crafted gear, which is
 already the split the inventory surface states.
 
 ### 2.4 Gunslinger kit
-- [ ] Recoil model; every shot currently leaves on the exact aim vector ([ability.go:101](server/internal/game/ability.go#L101))
-- [ ] Move-spread: firing while moving is currently identical to standing ([gunslinger.md](docs/game/design/gunslinger.md#gunplay))
-- [ ] Weight classes with recoil / spread / slowdown tradeoffs inside one damage band
-- [ ] The nine settled gun categories — pistol, revolver, SMG, shotgun, assault rifle, marksman, sniper, LMG, launcher ([gunslinger.md](docs/game/design/gunslinger.md#weapon-categories)); magazine size and reload are already weapon properties ([weapons.json](data/tuning/weapons.json)), so this is rows plus the loadout that selects between them
-- [ ] Crafted special ammunition (rockets) as a finite, craftable resource
-- [ ] Snipers: hitscan to a weapon cap, then travel-time projectile with falloff and hard max range ([gunslinger.md](docs/game/design/gunslinger.md#snipers))
-- [ ] Scope mode: peripheral blackout, controllable near-area view, server-side scoped state affecting movement and spread; camera exception in [game-view-and-hud.md](docs/game/ui/game-view-and-hud.md#camera)
-- [ ] Riot shield: frontal arc only, slows the user, locks fire, blocks bullets/projectiles, does not block ground AoE ([gunslinger.md](docs/game/design/gunslinger.md#defense)) — needs arc blocking in the resolver ([world.go:280-310](server/internal/game/world.go#L280-L310))
+- [x] Recoil model: a fixed left/right pattern unique to each gun, walked per shot and recovered after a quiet window, scaled by weight class ([gunplay.go](server/internal/game/gunplay.go), [weapons.json](data/tuning/weapons.json), [architecture.md](docs/architecture.md#gunplay))
+- [x] Move-spread interpolated from standing to moving by actual speed, drawn deterministically from the shooter and its shot count ([gunslinger.md](docs/game/design/gunslinger.md#gunplay), `World.spreadDegrees`)
+- [x] Weight classes with recoil / spread / slowdown tradeoffs inside one damage band ([combat.json](data/tuning/combat.json), `World.handlingScale`; prediction applies the same multiplier)
+- [x] The nine settled gun categories — pistol, revolver, SMG, shotgun, assault rifle, marksman, sniper, LMG, launcher ([gunslinger.md](docs/game/design/gunslinger.md#weapon-categories), [weapons.json](data/tuning/weapons.json))
+- [x] Crafted special ammunition (rockets) as a finite, craftable resource: an ability cost kind that spends a carried material, with recipes in [ammunition.json](data/tuning/ammunition.json) and `World.CraftAmmunition` behind the same safe-zone gate
+- [x] Snipers: hitscan to a weapon cap while scoped, then travel-time projectile with falloff and hard max range ([gunslinger.md](docs/game/design/gunslinger.md#snipers), `World.hitscan`)
+- [x] Scope mode: peripheral blackout, view pushed toward the aim, server-side scoped state affecting movement, spread, and what the snapshot sends; camera exception in [game-view-and-hud.md](docs/game/ui/game-view-and-hud.md#camera)
+- [x] Riot shield: frontal arc only, slows the user, locks fire, blocks bullets/projectiles, does not block a blast ([gunslinger.md](docs/game/design/gunslinger.md#defense), `World.blockedBy`)
 - [ ] Smoke (LOS break) and flashbang (aim disruption) deployables — depends on 2.6
-- [ ] Rare materials gate heavy weapons economically, never statistically
+- [x] Rare materials gate heavy weapons economically, never statistically: sniper, LMG, and launcher declare `requires_craft` and a material cost, so they have no stock configuration and must be built
+- [x] Test: pattern determinism and recovery, spread widening with speed, the pellet cone dividing one band hit, weight moving handling and never damage, the withheld-category gate, scope gating hitscan, falloff and hard range, shield arc and fire lock, finite ammunition, and blast reach ([gunplay_test.go](server/internal/game/gunplay_test.go))
+
+Every category shares the `standard` band and fires no faster than the 300 ms
+baseline, because with one band cadence *is* DPS. Rate-of-fire identity — the
+SMG's spray, the sniper's single heavy shot — waits on Phase 2.7's sustained,
+burst, and heavy-burst bands; what separates the nine today is handling.
+Smoke and flashbangs are deliberately unauthored rather than stubbed: both are
+line-of-sight and aim-disruption tools and Phase 2.6 owns the substrate.
 
 ### 2.5 Mage kit
 - [ ] Author per-spell cooldowns and costs — the second resource axis alongside mana ([mage.md](docs/game/design/mage.md#mana-and-cooldowns)); 1.3 enforces both from `abilities.json`, and every shipped row still declares a zero cooldown
@@ -178,7 +186,7 @@ already the split the inventory surface states.
 ### 2.7 Roles, keystones, and band enforcement
 - [ ] Cover the seven combat roles across both classes; only Damage exists ([combat.md](docs/game/design/combat.md#shared-combat-roles))
 - [ ] Keystones: behaviour-changing tradeoffs (empowered-but-costlier casts, overheat-instead-of-reload)
-- [ ] Add the sustained / burst / heavy-burst damage bands to [combat.json](data/tuning/combat.json); only `standard` exists, and one band cannot carry both a shotgun and a rifle ([combat.md](docs/game/design/combat.md#damage-bands))
+- [ ] Add the sustained / burst / heavy-burst damage bands to [combat.json](data/tuning/combat.json); only `standard` exists, and one band cannot carry both a shotgun and a rifle ([combat.md](docs/game/design/combat.md#damage-bands)) — Phase 2.4's nine categories all point at `standard` and are separated by handling alone until this lands
 - [ ] Damage/DPS resolver computing from item data instead of one constant
 - [ ] Automated band test: every weapon and spell lands inside the effective damage band ([pillars.md](docs/game/design/pillars.md#p2--vertical-progression-stays-compressed))
 
@@ -202,7 +210,7 @@ already the split the inventory surface states.
 ## Phase 4 — Loop axis
 
 ### 4.1 Materials & harvesting
-- [x] Carried-material inventory on the player, distinct from crafted items — carried materials are spendable and droppable, crafted items are permanent (Phase 2.3)
+- [x] Carried-material inventory on the player, distinct from crafted items — carried materials are spendable and droppable, crafted items are permanent (Phase 2.3); crafted special ammunition (Phase 2.4) lives in the same inventory and is therefore droppable too
 - [ ] Harvest nodes as world entities; grade-scaled channel time ([economy-death-and-pve.md](docs/game/design/economy-death-and-pve.md#resource-sources))
 - [ ] Interact/channel state machine, interruptible at any time
 - [ ] Contextual harvest prompt and interruption feedback ([game-view-and-hud.md](docs/game/ui/game-view-and-hud.md#contextual-prompts-and-feedback))

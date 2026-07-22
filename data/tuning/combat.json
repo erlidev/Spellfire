@@ -1,6 +1,6 @@
 {
   "roles": ["damage", "burst", "control", "mobility", "sustain", "zone", "range"],
-  "dodge_vectors": ["projectile_travel", "cast_time", "telegraph", "ground_indicator"],
+  "dodge_vectors": ["projectile_travel", "cast_time", "telegraph", "ground_indicator", "scoped_commit"],
   "player": {
     "speed": 260,
     "max_mana": 100,
@@ -10,6 +10,26 @@
     "distance": 105,
     "duration_ms": 133,
     "cooldown_ms": 2200
+  },
+  "weight_classes": {
+    "light": {
+      "name": "Light",
+      "movement_multiplier": 1,
+      "recoil_multiplier": 0.7,
+      "move_spread_multiplier": 0.6
+    },
+    "medium": {
+      "name": "Medium",
+      "movement_multiplier": 0.94,
+      "recoil_multiplier": 1,
+      "move_spread_multiplier": 1
+    },
+    "heavy": {
+      "name": "Heavy",
+      "movement_multiplier": 0.8,
+      "recoil_multiplier": 1.45,
+      "move_spread_multiplier": 1.6
+    }
   },
   "damage_bands": {
     "standard": {

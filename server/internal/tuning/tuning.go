@@ -21,7 +21,7 @@ import (
 // SchemaVersion is the table shape this build understands. Bump it only when a
 // table changes shape, and add the matching forward migration; a plain balance
 // edit bumps Manifest.Version instead and needs no code change.
-const SchemaVersion = 12
+const SchemaVersion = 13
 
 type Manifest struct {
 	// Version is the content revision. Bump it on any balance edit; a change
@@ -222,12 +222,25 @@ type DamageBand struct {
 	TTKToleranceSeconds float64 `json:"ttk_tolerance_seconds"`
 }
 
+// WeightClass is the Gunslinger's balance axis. It sets how a weapon handles —
+// how far it walks off aim, how much firing on the move costs, and how much it
+// slows its carrier — and never what it deals: damage stays on the shared band,
+// so a heavy category is a set of conditions rather than a power level.
+type WeightClass struct {
+	ID                   string  `json:"-"`
+	Name                 string  `json:"name"`
+	MovementMultiplier   float64 `json:"movement_multiplier"`
+	RecoilMultiplier     float64 `json:"recoil_multiplier"`
+	MoveSpreadMultiplier float64 `json:"move_spread_multiplier"`
+}
+
 type Combat struct {
-	Roles        []string              `json:"roles"`
-	DodgeVectors []string              `json:"dodge_vectors"`
-	Player       PlayerBody            `json:"player"`
-	Dash         Dash                  `json:"dash"`
-	DamageBands  map[string]DamageBand `json:"damage_bands"`
+	Roles         []string               `json:"roles"`
+	DodgeVectors  []string               `json:"dodge_vectors"`
+	Player        PlayerBody             `json:"player"`
+	Dash          Dash                   `json:"dash"`
+	WeightClasses map[string]WeightClass `json:"weight_classes"`
+	DamageBands   map[string]DamageBand  `json:"damage_bands"`
 }
 
 type Element struct {
@@ -246,6 +259,115 @@ type Projectile struct {
 	LifeSeconds float64 `json:"life_seconds"`
 	Radius      float64 `json:"radius"`
 	Silhouette  string  `json:"silhouette"`
+	// Pellets is how many bodies one use puts into the world, spread over
+	// PelletSpreadDegrees. The band's damage is divided between them, so a full
+	// cone connecting is worth exactly one band hit and a grazing one is worth
+	// less — the shotgun's identity is its condition, not extra damage.
+	Pellets             int     `json:"pellets"`
+	PelletSpreadDegrees float64 `json:"pellet_spread_degrees"`
+	// HitscanRange is how far a round lands instantly. It is the sniper's
+	// exception and is honoured only while the weapon is scoped, which is the
+	// committed vulnerability the "scoped_commit" dodge vector names.
+	HitscanRange float64 `json:"hitscan_range"`
+	// MaxRange is the hard stop, in world units travelled, and zero means the
+	// lifetime alone bounds the shot. FalloffStart is the distance past which
+	// damage decays linearly toward FalloffMin, expressed as a fraction of the
+	// band's damage rather than as a number of its own.
+	MaxRange     float64 `json:"max_range"`
+	FalloffStart float64 `json:"falloff_start"`
+	FalloffMin   float64 `json:"falloff_min"`
+}
+
+// PelletCount is how many bodies one use spawns; an unstated count is one.
+func (p Projectile) PelletCount() int {
+	if p.Pellets < 1 {
+		return 1
+	}
+	return p.Pellets
+}
+
+// DamageScale is the fraction of the band a hit is worth after distance
+// falloff. Everything before FalloffStart is a full hit and everything past
+// MaxRange has already expired, so this only interpolates the band between.
+func (p Projectile) DamageScale(travelled float64) float64 {
+	if p.FalloffStart <= 0 || travelled <= p.FalloffStart {
+		return 1
+	}
+	end := p.MaxRange
+	if end <= p.FalloffStart {
+		return p.FalloffMin
+	}
+	ratio := (travelled - p.FalloffStart) / (end - p.FalloffStart)
+	if ratio > 1 {
+		ratio = 1
+	}
+	return 1 - ratio*(1-p.FalloffMin)
+}
+
+// Blast is the area an impact resolves into. It is what makes a launcher a
+// control tool: the damage is still the band's, but it lands on everyone inside
+// the radius and carries the effects the ability declares.
+type Blast struct {
+	Radius  float64  `json:"radius"`
+	Effects []string `json:"effects"`
+}
+
+// Guard is a raised frontal barrier. It blocks bullets and projectiles inside
+// its arc, slows its user, and locks fire while it is up — never ground effects
+// placed behind or beneath it, which is what keeps it an answer to a burst
+// opener rather than an answer to everything.
+type Guard struct {
+	ArcDegrees         float64 `json:"arc_degrees"`
+	MovementMultiplier float64 `json:"movement_multiplier"`
+}
+
+// Blocks reports whether an impact arriving along direction is inside the arc
+// the guard is facing. Both vectors are expected normalized.
+func (g Guard) Blocks(facingX, facingY, towardX, towardY float64) bool {
+	dot := facingX*towardX + facingY*towardY
+	if dot < -1 {
+		dot = -1
+	} else if dot > 1 {
+		dot = 1
+	}
+	return math.Acos(dot) <= g.ArcDegrees*math.Pi/360
+}
+
+// Scope is the committed aiming mode. It blacks out peripheral vision on the
+// client, and here it trades movement for accuracy and extends how far the
+// scoped body can see, which is also how far a hitscan round may reach.
+type Scope struct {
+	MovementMultiplier float64 `json:"movement_multiplier"`
+	SpreadMultiplier   float64 `json:"spread_multiplier"`
+	ViewBonus          float64 `json:"view_bonus"`
+}
+
+// Recoil walks the muzzle off aim in a fixed left/right pattern unique to each
+// gun, so a burst is a shape a player learns rather than a random cone. Entries
+// are degrees off the aim vector, indexed by successive shots and wrapping;
+// RecoveryMS of quiet returns the weapon to the first entry.
+type Recoil struct {
+	Pattern    []float64 `json:"pattern"`
+	RecoveryMS int       `json:"recovery_ms"`
+}
+
+func (r Recoil) Recovery() time.Duration { return time.Duration(r.RecoveryMS) * time.Millisecond }
+
+// DegreesAt is the pattern entry for a shot index, wrapping so a magazine longer
+// than the pattern repeats it instead of running off the end.
+func (r Recoil) DegreesAt(shot int) float64 {
+	if len(r.Pattern) == 0 {
+		return 0
+	}
+	return r.Pattern[((shot%len(r.Pattern))+len(r.Pattern))%len(r.Pattern)]
+}
+
+// Spread is how wide the weapon throws a shot. Standing is the floor a settled
+// aim earns; Moving is what firing at full speed costs, and the simulation
+// interpolates between them by how fast the body is actually travelling.
+type Spread struct {
+	StandingDegrees float64 `json:"standing_degrees"`
+	MovingDegrees   float64 `json:"moving_degrees"`
 }
 
 // Cost kinds an ability may spend. A magazine weapon's ability spends ammo and
@@ -254,12 +376,18 @@ const (
 	CostNone = "none"
 	CostAmmo = "ammo"
 	CostMana = "mana"
+	// CostMaterial spends a carried material rather than a magazine: crafted
+	// special ammunition such as rockets, which is finite and has to be built
+	// and hauled rather than reloaded.
+	CostMaterial = "material"
 )
 
-// Cost is what one use of an ability charges the actor.
+// Cost is what one use of an ability charges the actor. Material names the
+// carried stack a CostMaterial use draws from, and is empty for every other kind.
 type Cost struct {
-	Kind   string  `json:"kind"`
-	Amount float64 `json:"amount"`
+	Kind     string  `json:"kind"`
+	Material string  `json:"material"`
+	Amount   float64 `json:"amount"`
 }
 
 // TelegraphShapes are the standardized ground figures a windup may show. The
@@ -304,6 +432,15 @@ type Ability struct {
 	DodgeVector string      `json:"dodge_vector"`
 	DamageBand  string      `json:"damage_band"`
 	Projectile  *Projectile `json:"projectile"`
+	// RequiresScope gates the use on the weapon being scoped. It is what makes a
+	// sniper's hitscan a commitment rather than a free instant hit.
+	RequiresScope bool `json:"requires_scope"`
+	// Blast is the area an impact resolves into, and Guard is the barrier a
+	// raised deployable holds. Both are alternative shapes of the same contract:
+	// an ability declares what it puts into the world, and the simulation has
+	// exactly one path for each.
+	Blast *Blast `json:"blast"`
+	Guard *Guard `json:"guard"`
 	// Effects are the status effects each hit applies, resolved against the
 	// effects table.
 	Effects []string `json:"effects"`
@@ -379,7 +516,24 @@ type Weapon struct {
 	ReloadMS     int    `json:"reload_ms"`
 	Ability      string `json:"ability"`
 	Spell        string `json:"spell"`
+	// Weight names the class in Combat.WeightClasses that scales this weapon's
+	// handling. Recoil and Spread are the weapon's own gunplay: the pattern the
+	// muzzle walks and how wide it throws standing and moving. Scope is the
+	// committed aiming mode, present only on the categories that have one.
+	Weight string         `json:"weight"`
+	Recoil Recoil         `json:"recoil"`
+	Spread Spread         `json:"spread"`
+	Scope  *Scope         `json:"scope"`
+	Cost   map[string]int `json:"cost"`
+	// RequiresCraft withholds the stock configuration: the row may only be
+	// carried as a crafted instance, so its material Cost has to be paid before
+	// it reaches a loadout. It is how rare materials gate the heavy categories
+	// economically rather than statistically.
+	RequiresCraft bool `json:"requires_craft"`
 }
+
+// Scoped reports whether the weapon has a committed aiming mode at all.
+func (w Weapon) Scoped() bool { return w.Scope != nil }
 
 func (w Weapon) ReloadDuration() time.Duration {
 	return time.Duration(w.ReloadMS) * time.Millisecond
@@ -406,6 +560,31 @@ type Gadget struct {
 	Starter     bool   `json:"starter"`
 	UnlockLevel int    `json:"unlock_level"`
 	Ability     string `json:"ability"`
+}
+
+// Ammunition is a craftable special round: a recipe that spends materials and
+// yields a carried material of its own, which the ability that fires it spends.
+// It is deliberately not an unlock — the recipe is the launcher's, and what
+// gates the launcher is the launcher's own unlock and material cost.
+type Ammunition struct {
+	ID       string         `json:"-"`
+	Name     string         `json:"name"`
+	Class    string         `json:"class"`
+	Material string         `json:"material"`
+	Count    int            `json:"count"`
+	Cost     map[string]int `json:"cost"`
+}
+
+// AmmunitionFor lists the special-ammunition recipes a class may build, in
+// stable order.
+func (t *Tables) AmmunitionFor(class string) []string {
+	ids := make([]string, 0, len(t.Ammunition))
+	for _, id := range sortedKeys(t.Ammunition) {
+		if t.Ammunition[id].Class == class {
+			ids = append(ids, id)
+		}
+	}
+	return ids
 }
 
 // XP sources the simulation knows how to award. A row of any other name would
@@ -510,6 +689,13 @@ const (
 	AttrProjectileLife   = "projectile_life"
 	AttrProjectileRadius = "projectile_radius"
 	AttrInterval         = "interval_ms"
+	// Gunplay handling, delivered by Phase 2.4: how far the muzzle walks, how
+	// wide the weapon throws standing and moving, and how freely a scoped body
+	// may move. All four are conditions on landing a shot, never its damage.
+	AttrRecoilDegrees     = "recoil_degrees"
+	AttrSpreadDegrees     = "spread_degrees"
+	AttrMoveSpreadDegrees = "move_spread_degrees"
+	AttrScopeMovement     = "scope_movement_multiplier"
 )
 
 // ComponentAttributes is the set a modifier may name. Damage is absent by
@@ -518,11 +704,16 @@ const (
 var ComponentAttributes = []string{
 	AttrMagazineSize, AttrReloadMS, AttrCooldownMS, AttrWindupMS, AttrCostAmount,
 	AttrProjectileSpeed, AttrProjectileLife, AttrProjectileRadius,
+	AttrRecoilDegrees, AttrSpreadDegrees, AttrMoveSpreadDegrees, AttrScopeMovement,
 }
 
 // MagazineAttributes only mean anything on a weapon that holds a magazine, so a
 // blueprint whose weapons cast spells may not modify them.
 var MagazineAttributes = []string{AttrMagazineSize, AttrReloadMS}
+
+// HandlingAttributes are gunplay: they mean nothing on a blueprint whose weapons
+// have no recoil pattern to walk or scope to look through.
+var HandlingAttributes = []string{AttrRecoilDegrees, AttrSpreadDegrees, AttrMoveSpreadDegrees, AttrScopeMovement}
 
 // ForbiddenAttributes are the ones crafting may never touch. Fire cadence is the
 // DPS axis: scaling it moves an item out of its damage band, which is precisely
@@ -621,7 +812,7 @@ type Biome struct {
 
 // RetiredKinds are the tables a retirement may name. A retired ID resolves
 // within its own kind; nothing is ever retired across tables.
-var RetiredKinds = []string{"weapon", "spell", "gadget", "ability", "effect", "component", "blueprint", "material", "element", "biome", "mob"}
+var RetiredKinds = []string{"weapon", "spell", "gadget", "ability", "effect", "component", "blueprint", "material", "element", "biome", "mob", "ammunition"}
 
 // maxRetirementHops bounds a replacement chain. Validation rejects cycles, so
 // this only guards a table that somehow reached the resolver unvalidated.
@@ -656,6 +847,7 @@ type Tables struct {
 	Weapons     map[string]Weapon
 	Spells      map[string]Spell
 	Gadgets     map[string]Gadget
+	Ammunition  map[string]Ammunition
 	Components  Components
 	Materials   Materials
 	Mobs        map[string]Mob
@@ -717,8 +909,19 @@ func (t *Tables) Live(kind, id string) bool {
 		return t.Biomes[id].Name != ""
 	case "mob":
 		return t.Mobs[id].Name != ""
+	case "ammunition":
+		return t.Ammunition[id].Name != ""
 	}
 	return false
+}
+
+// WeightOf is the handling class a weapon is balanced on. A weapon with no
+// declared weight — a staff — resolves to a neutral class that scales nothing.
+func (t *Tables) WeightOf(weapon Weapon) WeightClass {
+	if weight, ok := t.Combat.WeightClasses[weapon.Weight]; ok {
+		return weight
+	}
+	return WeightClass{MovementMultiplier: 1, RecoilMultiplier: 1, MoveSpreadMultiplier: 1}
 }
 
 // WeaponAbility resolves what a weapon does when used: its own ability, or the
@@ -887,6 +1090,7 @@ func Parse(fsys fs.FS) (*Tables, error) {
 		{"weapons.json", &tables.Weapons},
 		{"spells.json", &tables.Spells},
 		{"gadgets.json", &tables.Gadgets},
+		{"ammunition.json", &tables.Ammunition},
 		{"components.json", &tables.Components},
 		{"materials.json", &tables.Materials},
 		{"mobs.json", &tables.Mobs},
@@ -949,6 +1153,14 @@ func (t *Tables) stampIDs() {
 	for id, gadget := range t.Gadgets {
 		gadget.ID = id
 		t.Gadgets[id] = gadget
+	}
+	for id, ammunition := range t.Ammunition {
+		ammunition.ID = id
+		t.Ammunition[id] = ammunition
+	}
+	for id, weight := range t.Combat.WeightClasses {
+		weight.ID = id
+		t.Combat.WeightClasses[id] = weight
 	}
 	for id, blueprint := range t.Components.Blueprints {
 		blueprint.ID = id

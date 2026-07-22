@@ -1,10 +1,10 @@
 import { API, type AdminEntityState } from "./api";
-import { componentOf, cost as craftCost, craftable, describe, fitting, itemLabel, materialName, resolvedWeapon, shortfall, slotsOf } from "./game/crafting";
+import { buildableAmmunition, componentOf, cost as craftCost, craftable, describe, fitting, itemLabel, materialName, resolvedWeapon, shortfall, slotsOf } from "./game/crafting";
 import { bar, barSlots, contentName, defaultLoadout, equippable, ledgerOf, loadoutProblem, type Ledger, type SlotKind } from "./game/loadout";
 import { Predictor } from "./game/prediction";
 import { GameView } from "./game/view";
 import { GameSocket } from "./net/socket";
-import { damageBandFor, dangerBandAt, entityDefinitions, materials as materialsTable, progression as progressionTable, resourceMax, safeRadius, session, weapons, world, xpToNext, type AdminField, type EntityDefinition } from "./tuning";
+import { abilities, ammunition as ammunitionTable, damageBandFor, dangerBandAt, entityDefinitions, gadgets as gadgetsTable, handlingScale, materials as materialsTable, progression as progressionTable, resourceMax, safeRadius, session, specialAmmunition, weapons, weightOf, world, xpToNext, type AdminField, type EntityDefinition, type Guard } from "./tuning";
 import { Buttons, ServerKind, type Character, type CharacterClass, type CraftedItem, type Entity, type LoadoutSet, type ServerMessage } from "./types";
 
 function element<T extends HTMLElement>(id: string): T {
@@ -125,7 +125,7 @@ class SpellFire {
   }
 
   private bindControls(): void {
-    const keyMap: Record<string, number> = { KeyW: Buttons.Up, ArrowUp: Buttons.Up, KeyS: Buttons.Down, ArrowDown: Buttons.Down, KeyA: Buttons.Left, ArrowLeft: Buttons.Left, KeyD: Buttons.Right, ArrowRight: Buttons.Right, Space: Buttons.Dash, KeyR: Buttons.Reload, KeyE: Buttons.Interact };
+    const keyMap: Record<string, number> = { KeyW: Buttons.Up, ArrowUp: Buttons.Up, KeyS: Buttons.Down, ArrowDown: Buttons.Down, KeyA: Buttons.Left, ArrowLeft: Buttons.Left, KeyD: Buttons.Right, ArrowRight: Buttons.Right, Space: Buttons.Dash, KeyR: Buttons.Reload, KeyE: Buttons.Interact, ShiftLeft: Buttons.Scope, ShiftRight: Buttons.Scope };
     window.addEventListener("keydown", (event) => {
       // 1–6 select the equipped slot the use button acts through: a Mage's six
       // spells, a Gunslinger's weapon and five gadgets.
@@ -136,16 +136,22 @@ class SpellFire {
     window.addEventListener("keyup", (event) => { const button = keyMap[event.code]; if (button) this.pressed.delete(button); });
     window.addEventListener("pointermove", (event) => { if (!this.view) return; this.aim = this.view.pointerWorld(event.clientX, event.clientY); });
     element("canvas-host").addEventListener("pointerdown", (event) => {
+      // The secondary button scopes, mirroring Shift, because the committed
+      // aiming mode is held rather than toggled.
+      if ((event as PointerEvent).button === 2) { this.pressed.add(Buttons.Scope); return; }
       if ((event as PointerEvent).button !== 0) return;
       if (this.adminPositionPick || this.adminMode !== "off") { void this.useAdminPointer(event as PointerEvent); return; }
       this.pressed.add(Buttons.Fire);
     });
-    window.addEventListener("pointerup", (event) => { if ((event as PointerEvent).button === 0) this.pressed.delete(Buttons.Fire); });
+    window.addEventListener("pointerup", (event) => {
+      if ((event as PointerEvent).button === 0) this.pressed.delete(Buttons.Fire);
+      if ((event as PointerEvent).button === 2) this.pressed.delete(Buttons.Scope);
+    });
     element("canvas-host").addEventListener("contextmenu", (event) => event.preventDefault());
     // The wheel steps through the same slots, wrapping in both directions.
     element("canvas-host").addEventListener("wheel", (event) => { event.preventDefault(); this.selectSlot((this.selectedSlot + (event.deltaY > 0 ? 1 : barSlots - 1)) % barSlots); }, { passive: false });
     element("touch-slots").addEventListener("click", (event) => { const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-slot]"); if (button) this.selectSlot(Number(button.dataset.slot)); });
-    const touchMap: Record<string, number> = { up: Buttons.Up, down: Buttons.Down, left: Buttons.Left, right: Buttons.Right, fire: Buttons.Fire, dash: Buttons.Dash, interact: Buttons.Interact };
+    const touchMap: Record<string, number> = { up: Buttons.Up, down: Buttons.Down, left: Buttons.Left, right: Buttons.Right, fire: Buttons.Fire, dash: Buttons.Dash, interact: Buttons.Interact, scope: Buttons.Scope };
     for (const button of document.querySelectorAll<HTMLButtonElement>("#touch-controls button")) {
       const bit = touchMap[button.dataset.button ?? ""];
       if (!bit) continue;
@@ -249,7 +255,36 @@ class SpellFire {
   private simulateInput(): void {
     if (!this.predictor || element("game").hidden) return;
     let buttons = 0; for (const value of this.pressed) buttons |= value;
-    const input = this.predictor.step(buttons, this.aim.x, this.aim.y, this.selectedSlot, performance.now()); this.socket?.sendInput(input);
+    // A weapon with no scope ignores the button entirely, so holding it never
+    // predicts a slowdown the server is not applying.
+    const weapon = resolvedWeapon(this.loadout.weapon, this.items);
+    const scoped = Boolean(weapon?.scope) && (buttons & Buttons.Scope) !== 0;
+    const guard = this.selectedGuard();
+    const guarding = Boolean(guard) && (buttons & Buttons.Fire) !== 0;
+    if (!scoped) buttons &= ~Buttons.Scope;
+    const input = this.predictor.step(buttons, this.aim.x, this.aim.y, this.selectedSlot, performance.now(), handlingScale(weapon, guard, scoped, guarding));
+    this.socket?.sendInput(input);
+    this.setScopeView(scoped, weapon?.scope?.view_bonus ?? 0);
+  }
+
+  /** The barrier the selected slot holds, or undefined for any other slot. */
+  private selectedGuard(): Guard | undefined {
+    const slots = bar(this.activeCharacter?.class ?? "gunslinger", this.loadout, this.items);
+    const slot = slots[this.selectedSlot];
+    if (!slot || slot.kind !== "gadget" || !slot.id) return undefined;
+    const ability = gadgetsTable[slot.id]?.ability;
+    return ability ? abilities[ability]?.guard : undefined;
+  }
+
+  /**
+   * The camera exception a scope buys: peripheral vision is blacked out and the
+   * view is pushed toward where the weapon is pointed. The server has already
+   * widened what it sends by the same bonus, so the extra reach is real rather
+   * than a rendering trick.
+   */
+  private setScopeView(scoped: boolean, bonus: number): void {
+    document.body.classList.toggle("scoped", scoped);
+    this.view?.setScope(scoped ? bonus : 0, this.aim.x, this.aim.y);
   }
 
   private selectSlot(slot: number): void {
@@ -321,7 +356,9 @@ class SpellFire {
 
   private updateHUD(entity: Entity): void {
     const health = Math.max(0, entity.health / Math.max(1, entity.maxHealth)); element("health-bar").style.width = `${health * 100}%`; element("health-label").textContent = `${Math.ceil(entity.health)} / ${Math.ceil(entity.maxHealth)}`;
-    const { label, max } = resourceMax(resolvedWeapon(this.loadout.weapon, this.items)), resource = entity.mana; element("resource-label").innerHTML = `${label} <span>${Math.floor(resource)} / ${max}</span>`; element("resource-bar").style.width = `${Math.max(0, resource / max) * 100}%`;
+    const { label, max, capped } = resourceMax(resolvedWeapon(this.loadout.weapon, this.items)), resource = entity.mana;
+    element("resource-label").innerHTML = `${label} <span>${capped ? `${Math.floor(resource)} / ${max}` : `${Math.floor(resource)} carried`}</span>`;
+    element("resource-bar").style.width = `${Math.min(1, Math.max(0, resource / Math.max(1, max))) * 100}%`;
     const distance = Math.hypot(entity.x, entity.y), band = dangerBandAt(distance);
     element("danger-text").textContent = `${band.name} · ${band.summary}`; element("danger-shape").textContent = band.shape;
     if (band.name !== this.lastBand && this.lastBand) this.notice(`${band.name}: ${band.summary}`); this.lastBand = band.name;
@@ -397,7 +434,7 @@ class SpellFire {
     const pages: Record<string, string> = {
       character: `<h3>${escapeHTML(character?.name ?? "Character")}</h3><p>${titleCase(character?.class ?? "gunslinger")} · Level ${this.level}</p><p>${this.xpNext ? `${this.xp} / ${this.xpNext} XP to level ${this.level + 1}` : "Level cap reached"} · ${this.ledger.size} unlock${this.ledger.size === 1 ? "" : "s"} owned</p>${this.localEntity ? `<p>Health ${Math.ceil(this.localEntity.health)} / ${Math.ceil(this.localEntity.maxHealth)} · Resource ${Math.floor(this.localEntity.mana)}</p>` : ""}<p>Progression unlocks options, never raw combat power.</p>`,
       world: `<h3>Known world</h3><p>Current area: ${escapeHTML(this.lastBand || "Synchronizing…")}</p><p>${world.danger_bands.map((band) => escapeHTML(band.name)).join(" → ")}. The circular world is contiguous; trees are authoritative static cover.</p>`,
-      reference: `<h3>Field reference</h3><p>WASD/Arrows move · pointer aims · primary pointer fires · 1–6 or the wheel select an equipped slot · Space dashes · R reloads · E interacts. The hub is safe. Combat is server-authoritative and raw time-to-kill is about ${equipped ? damageBandFor(equipped).target_ttk_seconds : 3} seconds.</p>`,
+      reference: `<h3>Field reference</h3><p>WASD/Arrows move · pointer aims · primary pointer fires · Shift or the secondary pointer button scopes a weapon that has a scope · 1–6 or the wheel select an equipped slot · Space dashes · R reloads · E interacts. Every gun kicks in a fixed pattern and spreads while you move; a raised shield covers a frontal arc, slows you, and locks fire. The hub is safe. Combat is server-authoritative and raw time-to-kill is about ${equipped ? damageBandFor(equipped).target_ttk_seconds : 3} seconds.</p>`,
       settings: "<h3>Settings</h3><p>Accessibility and interface-scale controls remain available on Home. Opening this menu does not pause the shared world.</p>",
     };
     content.innerHTML = pages[tab] ?? pages.character!;
@@ -604,6 +641,9 @@ class SpellFire {
 
     const list = document.createElement("div"); list.className = "loadout-slots";
     list.append(this.slotRow(character, "weapon", 0, set.weapon, editable, "Weapon"));
+    const handling = document.createElement("p");
+    handling.textContent = weaponHandling(resolvedWeapon(set.weapon, this.items));
+    if (handling.textContent) list.append(handling);
     for (const slot of slots) {
       if (slot.kind === "weapon") continue;
       const index = character.class === "gunslinger" ? slot.index - 1 : slot.index;
@@ -705,7 +745,7 @@ class SpellFire {
     }
     content.append(effects);
 
-    const required = craftCost(this.craftChoices);
+    const required = craftCost(this.craftWeapon, this.craftChoices);
     const missing = shortfall(required, this.materials);
     content.append(this.materialCostList(required, missing));
 
@@ -729,6 +769,46 @@ class SpellFire {
     build.disabled = !this.inSafety || full || Object.keys(missing).length > 0;
     build.addEventListener("click", () => this.commitCraft(required));
     content.append(build);
+
+    this.renderAmmunitionSection(content, character.class);
+  }
+
+  /**
+   * Special ammunition: a finite crafted resource rather than a weapon, so it
+   * has no slots and no capacity — it lands in the carried inventory the weapon
+   * that fires it spends from, and a death drops it like any other material.
+   */
+  private renderAmmunitionSection(content: HTMLElement, characterClass: CharacterClass): void {
+    const recipes = buildableAmmunition(characterClass);
+    if (!recipes.length) return;
+    const heading = document.createElement("h4"); heading.textContent = "Special ammunition";
+    content.append(heading);
+    const explain = document.createElement("p");
+    explain.textContent = "Heavy weapons spend crafted rounds instead of a magazine. There is no reload: when these run out, build more.";
+    content.append(explain);
+    for (const id of recipes) {
+      const recipe = ammunitionTable[id]!;
+      const missing = shortfall(recipe.cost, this.materials);
+      const row = document.createElement("div"); row.className = "loadout-slot";
+      const summary = document.createElement("span");
+      const price = Object.keys(recipe.cost).sort().map((material) => `${recipe.cost[material]} ${materialName(material)}`).join(", ");
+      summary.textContent = `${recipe.name} ×${recipe.count} — ${price} · ${this.materials[recipe.material] ?? 0} carried`;
+      if (Object.keys(missing).length) summary.className = "error";
+      const button = document.createElement("button");
+      button.className = "secondary"; button.textContent = `Build ${recipe.count}`;
+      button.disabled = !this.inSafety || Object.keys(missing).length > 0;
+      button.addEventListener("click", () => this.commitAmmunition(id));
+      row.append(summary, button);
+      content.append(row);
+    }
+  }
+
+  /** Sends one ammunition build. It answers on the same reply an ordinary craft does. */
+  private commitAmmunition(recipe: string): void {
+    if (!this.socket?.craftAmmunition(recipe)) {
+      this.craftStatus = "Not connected. Nothing was spent."; this.renderMenu("crafting"); return;
+    }
+    this.craftStatus = "Building ammunition…"; this.renderMenu("crafting");
   }
 
   /** Owned and required materials side by side, with the shortfall named. */
@@ -847,6 +927,22 @@ class SpellFire {
 }
 
 function heading(text: string): HTMLElement { const node = document.createElement("h3"); node.textContent = text; return node; }
+
+/**
+ * How a weapon handles, in the terms the player actually feels: its weight
+ * class, whether it scopes, and what it spends. Weight never states damage,
+ * because weight never sets damage.
+ */
+function weaponHandling(weapon: ReturnType<typeof resolvedWeapon>): string {
+  if (!weapon || !weapon.ability) return "";
+  const weight = weightOf(weapon);
+  const parts = [`${weight.name} — moves at ${Math.round(weight.movement_multiplier * 100)}% speed`];
+  if (weapon.recoil?.pattern.length) parts.push(`${weapon.recoil.pattern.length}-shot recoil pattern`);
+  if (weapon.scope) parts.push("scopes with Shift or the right pointer button");
+  const spent = specialAmmunition(weapon);
+  if (spent) parts.push(`spends crafted ${materialName(spent).toLowerCase()}s instead of a magazine`);
+  return `${parts.join(" · ")}.`;
+}
 
 /** The action-bar slot a digit key selects, or undefined for any other key. */
 function slotKey(code: string): number | undefined {

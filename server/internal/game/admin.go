@@ -278,7 +278,16 @@ func (w *World) adminProjectile(position Vec, values map[string]string) error {
 		return fmt.Errorf("ability %q has no projectile", ability.ID)
 	}
 	direction := adminDirection(values["transform.heading_degrees"])
-	projectile := &Projectile{Element: values["render.element"], Damage: w.tuning.Tables.BandDamage(ability.DamageBand), Remaining: ability.Projectile.LifeSeconds, Effects: ability.Effects}
+	// The delivery spec rides along like it does on a fired round, so a spawned
+	// fixture falls off, expires, and blasts exactly as the real one would.
+	projectile := &Projectile{
+		Element: values["render.element"], Damage: w.pelletDamage(ability),
+		Remaining: ability.Projectile.LifeSeconds, Effects: ability.Effects,
+		Spec: *ability.Projectile, Blast: ability.Blast,
+	}
+	if ability.Blast != nil {
+		projectile.BlastEffects = ability.Blast.Effects
+	}
 	if projectile.Element == "none" {
 		projectile.Element = ""
 	}

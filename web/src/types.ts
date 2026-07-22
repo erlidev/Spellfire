@@ -35,6 +35,8 @@ export interface Entity {
   radius: number; length: number; width: number; angleDegrees: number; telegraphProgress: number;
   abilityID: string; lingering: boolean; effectIDs: string[];
   mass: number; deleting: boolean; deleteProgress: number;
+  /** The two committed stances, visible to everyone so both can be played around. */
+  scoped: boolean; guarding: boolean;
 }
 
 export interface Collider {
@@ -53,9 +55,9 @@ export interface ServerMessage {
   items: CraftedItem[]; materials: Record<string, number>;
 }
 
-export const Buttons = { Up: 1, Down: 2, Left: 4, Right: 8, Fire: 16, Dash: 32, Reload: 64, Interact: 128 } as const;
+export const Buttons = { Up: 1, Down: 2, Left: 4, Right: 8, Fire: 16, Dash: 32, Reload: 64, Interact: 128, Scope: 256 } as const;
 export const EntityType = { Player: 1, Projectile: 2, Mob: 3, Drop: 4, Node: 5, Telegraph: 6, Deployable: 7, Boss: 8, WorldItem: 9 } as const;
 export const Allegiance = { Self: 1, Squad: 2, Neutral: 3, Hostile: 4 } as const;
 export const TelegraphState = { Pending: 1, Active: 2, Resolved: 3 } as const;
-export const ClientKind = { Join: 1, Input: 2, Respawn: 3, Ping: 4, Loadout: 5, Craft: 6 } as const;
+export const ClientKind = { Join: 1, Input: 2, Respawn: 3, Ping: 4, Loadout: 5, Craft: 6, Ammunition: 7 } as const;
 export const ServerKind = { Welcome: 1, Snapshot: 2, Error: 3, Pong: 4, Loadout: 5, Progress: 6, Craft: 7 } as const;

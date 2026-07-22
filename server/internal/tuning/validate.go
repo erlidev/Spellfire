@@ -35,6 +35,7 @@ func (t *Tables) validate() error {
 	t.validateSpells(problems)
 	t.validateGadgets(problems)
 	t.validateWeapons(problems)
+	t.validateAmmunition(problems)
 	t.validateUnlockIDs(problems)
 	t.validateMobs(problems)
 	t.validateRetired(problems)
@@ -295,6 +296,19 @@ func (t *Tables) validateCombat(r *report) {
 	r.require(c.Dash.Distance > 0, "combat: dash.distance must be positive")
 	r.require(c.Dash.DurationMS > 0, "combat: dash.duration_ms must be positive")
 	r.require(c.Dash.CooldownMS > c.Dash.DurationMS, "combat: dash.cooldown_ms must exceed dash.duration_ms")
+	// Weight classes are the Gunslinger's balance axis, so they may only move
+	// handling. A class that scaled movement or handling upward past its
+	// unmodified baseline would be a straight upgrade rather than a tradeoff.
+	if r.require(len(c.WeightClasses) > 0, "combat: weight_classes must not be empty; weapon handling has nothing to scale against") {
+		for _, id := range sortedKeys(c.WeightClasses) {
+			weight := c.WeightClasses[id]
+			r.require(weight.Name != "", "combat: weight class %q has no name", id)
+			r.require(weight.MovementMultiplier > 0 && weight.MovementMultiplier <= 1,
+				"combat: weight class %q has movement_multiplier %g, want a fraction in (0,1]; weight slows a carrier, never speeds one up", id, weight.MovementMultiplier)
+			r.require(weight.RecoilMultiplier > 0, "combat: weight class %q must scale recoil by a positive multiplier", id)
+			r.require(weight.MoveSpreadMultiplier > 0, "combat: weight class %q must scale move spread by a positive multiplier", id)
+		}
+	}
 	if !r.require(len(c.DamageBands) > 0, "combat: damage_bands must not be empty") {
 		return
 	}
@@ -418,7 +432,7 @@ func (t *Tables) validateModifiers(r *report, id string, component Component) {
 	if !r.require(len(component.Modifiers) > 0, "components: %q declares no modifiers; a component that changes nothing is not a choice", id) {
 		return
 	}
-	magazines := t.blueprintHoldsMagazine(component.Blueprint)
+	magazines, handling := t.blueprintHoldsMagazine(component.Blueprint), t.blueprintHandles(component.Blueprint)
 	for _, attribute := range sortedKeys(component.Modifiers) {
 		modifier := component.Modifiers[attribute]
 		if contains(ForbiddenAttributes, attribute) {
@@ -435,6 +449,9 @@ func (t *Tables) validateModifiers(r *report, id string, component Component) {
 		if contains(MagazineAttributes, attribute) {
 			r.require(magazines, "components: %q modifies %q, but no %q weapon holds a magazine", id, attribute, component.Blueprint)
 		}
+		if contains(HandlingAttributes, attribute) {
+			r.require(handling, "components: %q modifies %q, but no %q weapon has gunplay handling to change", id, attribute, component.Blueprint)
+		}
 	}
 }
 
@@ -443,6 +460,21 @@ func (t *Tables) validateModifiers(r *report, id string, component Component) {
 func (t *Tables) blueprintHoldsMagazine(blueprint string) bool {
 	for _, weapon := range t.Weapons {
 		if weapon.Blueprint == blueprint && weapon.MagazineSize > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// blueprintHandles reports whether any live weapon of the blueprint has gunplay
+// handling — a recoil pattern, a spread, or a scope — which is what makes the
+// handling attributes mean anything.
+func (t *Tables) blueprintHandles(blueprint string) bool {
+	for _, weapon := range t.Weapons {
+		if weapon.Blueprint != blueprint {
+			continue
+		}
+		if len(weapon.Recoil.Pattern) > 0 || weapon.Spread.MovingDegrees > 0 || weapon.Scoped() {
 			return true
 		}
 	}
@@ -461,7 +493,7 @@ func (t *Tables) validateMaterials(r *report) {
 	for _, id := range sortedKeys(t.Materials.Kinds) {
 		kind := t.Materials.Kinds[id]
 		r.require(kind.Name != "", "materials: kind %q has no name", id)
-		r.require(kind.Source == "node" || kind.Source == "mob", "materials: kind %q has unknown source %q", id, kind.Source)
+		r.require(contains([]string{"node", "mob", "craft"}, kind.Source), "materials: kind %q has unknown source %q", id, kind.Source)
 	}
 	for _, id := range sortedKeys(t.Materials.Materials) {
 		material := t.Materials.Materials[id]
@@ -471,6 +503,10 @@ func (t *Tables) validateMaterials(r *report) {
 		if !r.require(ok, "materials: %q references unknown kind %q", id, material.Kind) {
 			continue
 		}
+		// A crafted material has no natural source, so a recipe has to make it or
+		// nothing in the world could ever produce one.
+		r.require(kind.Source != "craft" || t.producedByCraft(id),
+			"materials: %q is a crafted kind but no ammunition recipe produces it", id)
 		if kind.Universal {
 			r.require(material.Biome == "", "materials: %q is a universal kind but is gated to biome %q", id, material.Biome)
 			continue
@@ -490,7 +526,7 @@ func (t *Tables) validateBiomes(r *report) {
 // honouredDodgeVectors are the counterplay vectors the simulation actually
 // delivers. A damaging row may only claim one of these; the ability validation
 // below also requires the windup or shared geometry that makes each claim real.
-var honouredDodgeVectors = []string{"projectile_travel", "cast_time", "telegraph", "ground_indicator"}
+var honouredDodgeVectors = []string{"projectile_travel", "cast_time", "telegraph", "ground_indicator", "scoped_commit"}
 
 func (t *Tables) validateEffects(r *report) {
 	for _, id := range sortedKeys(t.Effects) {
@@ -544,6 +580,8 @@ func (t *Tables) validateAbilities(r *report) {
 		for _, effect := range ability.Effects {
 			r.require(t.Effects[effect].Name != "", "abilities: %q applies unknown effect %q", id, effect)
 		}
+		t.validateGuard(r, id, ability)
+		t.validateBlast(r, id, ability)
 		if ability.Telegraph != nil {
 			t.validateTelegraph(r, "abilities", id, *ability.Telegraph)
 		}
@@ -551,6 +589,7 @@ func (t *Tables) validateAbilities(r *report) {
 			"abilities: %q must declare a positive windup_ms and a telegraph together, or neither", id)
 		if !ability.Damaging() {
 			r.require(ability.DodgeVector == "", "abilities: %q deals no damage, so it must not claim a dodge vector", id)
+			r.require(!ability.RequiresScope, "abilities: %q requires a scope but delivers no damage; scoping is a commitment paid for accuracy", id)
 			continue
 		}
 		t.validateDamaging(r, "abilities", id, ability.DamageBand, ability.DodgeVector, ability.Projectile)
@@ -562,6 +601,44 @@ func (t *Tables) validateAbilities(r *report) {
 		if ability.DodgeVector == "telegraph" || ability.DodgeVector == "ground_indicator" {
 			r.require(ability.Telegraph != nil, "abilities: %q claims %s but declares no telegraph", id, ability.DodgeVector)
 		}
+		// Hitscan is the one delivery with no travel to dodge, so it is legal only
+		// as the sniper's exception: it must be gated on scoping, and it must say
+		// so by claiming the dodge vector that names that commitment.
+		hitscan := ability.Projectile != nil && ability.Projectile.HitscanRange > 0
+		if ability.DodgeVector == "scoped_commit" {
+			r.require(hitscan, "abilities: %q claims scoped_commit but lands nothing instantly; an ordinary travelling shot is dodged by its travel", id)
+		}
+		if hitscan {
+			r.require(ability.RequiresScope, "abilities: %q lands instantly without requiring a scope, so it has no counterplay at all", id)
+			r.require(ability.DodgeVector == "scoped_commit", "abilities: %q lands instantly but claims dodge vector %q; only scoped_commit describes that trade", id, ability.DodgeVector)
+		}
+	}
+}
+
+// validateGuard keeps a raised barrier a defensive tool. It blocks a frontal
+// arc and slows its user; an ability that both guards and deals damage would
+// make the shield free, which is the cost the design pairs it with.
+func (t *Tables) validateGuard(r *report, id string, ability Ability) {
+	if ability.Guard == nil {
+		return
+	}
+	r.require(ability.Guard.ArcDegrees > 0 && ability.Guard.ArcDegrees < 360,
+		"abilities: %q guards %g degrees, want an arc between 0 and 360 exclusive; a full circle blocks everything", id, ability.Guard.ArcDegrees)
+	r.require(ability.Guard.MovementMultiplier > 0 && ability.Guard.MovementMultiplier < 1,
+		"abilities: %q guards at movement_multiplier %g, want a fraction between 0 and 1 exclusive; raising a shield has to cost mobility", id, ability.Guard.MovementMultiplier)
+	r.require(!ability.Damaging(), "abilities: %q both guards and deals damage; a shield locks fire while it is up", id)
+}
+
+// validateBlast keeps an area impact attached to something that travels, so the
+// area still has the projectile's flight as its dodge vector.
+func (t *Tables) validateBlast(r *report, id string, ability Ability) {
+	if ability.Blast == nil {
+		return
+	}
+	r.require(ability.Blast.Radius > 0, "abilities: %q declares a blast with no radius", id)
+	r.require(ability.Projectile != nil, "abilities: %q blasts but delivers nothing that travels to the impact", id)
+	for _, effect := range ability.Blast.Effects {
+		r.require(t.Effects[effect].Name != "", "abilities: %q blast applies unknown effect %q", id, effect)
 	}
 }
 
@@ -601,9 +678,26 @@ func (t *Tables) validateCost(r *report, id string, cost Cost) {
 		r.require(cost.Amount >= 1 && cost.Amount == math.Trunc(cost.Amount), "abilities: %q charges %g ammunition; a magazine spends whole rounds", id, cost.Amount)
 	case CostMana:
 		r.require(cost.Amount > 0, "abilities: %q spends mana but charges %g", id, cost.Amount)
+	case CostMaterial:
+		r.require(cost.Amount >= 1 && cost.Amount == math.Trunc(cost.Amount), "abilities: %q charges %g of a carried material; a stack spends whole units", id, cost.Amount)
+		if r.require(cost.Material != "", "abilities: %q spends a material but names none", id) {
+			r.require(t.Live("material", cost.Material), "abilities: %q spends unknown material %q", id, cost.Material)
+			r.require(t.producedByCraft(cost.Material), "abilities: %q spends %q, which no ammunition recipe produces; special ammunition has to be craftable or the weapon is dead on arrival", id, cost.Material)
+		}
 	default:
-		r.addf("abilities: %q has unknown cost kind %q, want one of %q, %q, %q", id, cost.Kind, CostNone, CostAmmo, CostMana)
+		r.addf("abilities: %q has unknown cost kind %q, want one of %q, %q, %q, %q", id, cost.Kind, CostNone, CostAmmo, CostMana, CostMaterial)
 	}
+	r.require(cost.Kind == CostMaterial || cost.Material == "", "abilities: %q names a material but spends %q", id, cost.Kind)
+}
+
+// producedByCraft reports whether some ammunition recipe yields the material.
+func (t *Tables) producedByCraft(material string) bool {
+	for _, ammunition := range t.Ammunition {
+		if ammunition.Material == material {
+			return true
+		}
+	}
+	return false
 }
 
 func (t *Tables) validateSpells(r *report) {
@@ -639,9 +733,21 @@ func (t *Tables) validateWeapons(r *report) {
 		r.require(weapon.Category != "", "weapons: %q has no category", id)
 		r.require(t.Components.Blueprints[weapon.Blueprint].Name != "", "weapons: %q references unknown blueprint %q", id, weapon.Blueprint)
 		// The basic set is a pool, not one row: a new character draws one of it.
+		// A drawn weapon has to be usable as it is drawn, so it may never be one
+		// the economy withholds until it has been built.
 		if weapon.Starter {
 			starters[weapon.Class]++
+			r.require(!weapon.RequiresCraft, "weapons: %q is in the basic set but may only be carried as a crafted instance, so a new character would draw an unusable weapon", id)
 		}
+		for _, material := range sortedKeys(weapon.Cost) {
+			r.require(weapon.Cost[material] > 0, "weapons: %q costs a non-positive count of %q", id, material)
+			r.require(t.Live("material", material), "weapons: %q costs unknown material %q", id, material)
+		}
+		// Withholding the stock configuration is only a gate if building it costs
+		// something; without a cost it would just be an unlock that reads oddly.
+		r.require(!weapon.RequiresCraft || len(weapon.Cost) > 0,
+			"weapons: %q may only be carried as a crafted instance but costs no materials, so nothing gates it", id)
+		t.validateGunplay(r, id, weapon)
 		if !r.require((weapon.Ability == "") != (weapon.Spell == ""),
 			"weapons: %q must declare exactly one of ability or spell", id) {
 			continue
@@ -657,6 +763,17 @@ func (t *Tables) validateWeapons(r *report) {
 		if !r.require(ok, "weapons: %q references unknown ability %q", id, weapon.Ability) {
 			continue
 		}
+		// An ability that requires a scope needs a weapon that has one, or the
+		// commitment its counterplay rests on could never be paid.
+		r.require(!ability.RequiresScope || weapon.Scoped(),
+			"weapons: %q fires %q, which requires a scope, but declares none", id, weapon.Ability)
+		// Special ammunition is the exception to the magazine: a launcher spends a
+		// carried, crafted round and so has neither a magazine nor a reload.
+		if ability.Cost.Kind == CostMaterial {
+			r.require(weapon.MagazineSize == 0 && weapon.ReloadMS == 0,
+				"weapons: %q fires crafted ammunition, so it must not also declare a magazine or a reload", id)
+			continue
+		}
 		r.require(weapon.MagazineSize > 0, "weapons: %q must declare a positive magazine_size", id)
 		r.require(weapon.ReloadMS > 0, "weapons: %q must declare a positive reload_ms", id)
 		// The magazine is the weapon's, the round spent is the ability's: they
@@ -666,6 +783,68 @@ func (t *Tables) validateWeapons(r *report) {
 	}
 	r.require(starters["gunslinger"] > 0, "weapons: no starter weapon for gunslinger; a new character would be unarmed")
 	r.require(starters["mage"] > 0, "weapons: no starter weapon for mage; a new character would be unarmed")
+}
+
+// validateGunplay keeps a gun's handling coherent. Every gun declares the weight
+// class its recoil and spread are scaled by, a recoil pattern that actually
+// walks the muzzle, and a spread that costs more moving than standing — the
+// accuracy-against-mobility trade the whole class is built on. A staff declares
+// none of it and must not claim any.
+func (t *Tables) validateGunplay(r *report, id string, weapon Weapon) {
+	gun := weapon.Ability != ""
+	if !gun {
+		r.require(weapon.Weight == "" && len(weapon.Recoil.Pattern) == 0 && weapon.Spread == (Spread{}) && !weapon.Scoped(),
+			"weapons: %q casts a spell, so it has no recoil, spread, weight, or scope", id)
+		return
+	}
+	if r.require(weapon.Weight != "", "weapons: %q declares no weight class; weight is what balances a gun's handling", id) {
+		r.require(t.Combat.WeightClasses[weapon.Weight].Name != "", "weapons: %q references unknown weight class %q", id, weapon.Weight)
+	}
+	if r.require(len(weapon.Recoil.Pattern) > 0, "weapons: %q declares no recoil pattern; every gun kicks", id) {
+		r.require(weapon.Recoil.RecoveryMS > 0, "weapons: %q has a recoil pattern that never recovers, so it can only ever walk further off aim", id)
+		walks := false
+		for index, degrees := range weapon.Recoil.Pattern {
+			r.require(math.Abs(degrees) < 90, "weapons: %q recoil step %d throws the shot %g degrees off aim, which is not a gun", id, index, degrees)
+			walks = walks || degrees != 0
+		}
+		r.require(walks, "weapons: %q has a recoil pattern of nothing but zeroes, which is no recoil at all", id)
+	}
+	r.require(weapon.Spread.StandingDegrees >= 0 && weapon.Spread.MovingDegrees >= 0, "weapons: %q declares a negative spread", id)
+	r.require(weapon.Spread.MovingDegrees > weapon.Spread.StandingDegrees,
+		"weapons: %q spreads %g degrees standing and %g moving; firing on the move has to cost accuracy", id, weapon.Spread.StandingDegrees, weapon.Spread.MovingDegrees)
+	if weapon.Scoped() {
+		scope := weapon.Scope
+		r.require(scope.MovementMultiplier > 0 && scope.MovementMultiplier < 1,
+			"weapons: %q scopes at movement_multiplier %g, want a fraction between 0 and 1 exclusive; the scope is a committed vulnerability", id, scope.MovementMultiplier)
+		r.require(scope.SpreadMultiplier > 0 && scope.SpreadMultiplier < 1,
+			"weapons: %q scopes at spread_multiplier %g, want a fraction between 0 and 1 exclusive; scoping that does not steady the shot buys nothing", id, scope.SpreadMultiplier)
+		r.require(scope.ViewBonus > 0, "weapons: %q scopes without seeing any further, so the peripheral blackout costs the user everything and returns nothing", id)
+	}
+}
+
+// validateAmmunition keeps every crafted round buildable and spendable: it must
+// yield a real material, cost real materials, and belong to a class.
+func (t *Tables) validateAmmunition(r *report) {
+	for _, id := range sortedKeys(t.Ammunition) {
+		ammunition := t.Ammunition[id]
+		r.require(ammunition.Name != "", "ammunition: %q has no name", id)
+		r.require(ammunition.Class == "gunslinger" || ammunition.Class == "mage", "ammunition: %q has unknown class %q", id, ammunition.Class)
+		r.require(ammunition.Count > 0, "ammunition: %q yields a non-positive count", id)
+		if r.require(ammunition.Material != "", "ammunition: %q produces no material", id) {
+			r.require(t.Live("material", ammunition.Material), "ammunition: %q produces unknown material %q", id, ammunition.Material)
+			r.require(t.Materials.Kinds[t.Materials.Materials[ammunition.Material].Kind].Source == "craft",
+				"ammunition: %q produces %q, whose kind is not crafted; a round a node also yields is not finite", id, ammunition.Material)
+		}
+		// A free round would put an infinite resource behind a weapon whose whole
+		// balance is that its ammunition runs out.
+		if r.require(len(ammunition.Cost) > 0, "ammunition: %q costs nothing, so the round it makes is not finite", id) {
+			for _, material := range sortedKeys(ammunition.Cost) {
+				r.require(ammunition.Cost[material] > 0, "ammunition: %q costs a non-positive count of %q", id, material)
+				r.require(t.Live("material", material), "ammunition: %q costs unknown material %q", id, material)
+				r.require(material != ammunition.Material, "ammunition: %q costs the very material it produces", id)
+			}
+		}
+	}
 }
 
 func (t *Tables) validateMobs(r *report) {
@@ -729,6 +908,24 @@ func (t *Tables) validateDamaging(r *report, table, id, band, dodge string, proj
 	r.require(projectile.LifeSeconds > 0, "%s: %q has a projectile with no lifetime", table, id)
 	r.require(projectile.Radius > 0, "%s: %q has a projectile with no radius", table, id)
 	r.require(projectile.Silhouette != "", "%s: %q has a projectile with no silhouette for the renderer", table, id)
+	r.require(projectile.Pellets >= 0, "%s: %q cannot fire a negative number of pellets", table, id)
+	r.require((projectile.PelletCount() > 1) == (projectile.PelletSpreadDegrees > 0),
+		"%s: %q must declare pellets and pellet_spread_degrees together, or neither: one pellet has no cone and a cone needs pellets to fill it", table, id)
+	r.require(projectile.PelletSpreadDegrees < 360, "%s: %q spreads pellets over %g degrees, which is not a cone", table, id, projectile.PelletSpreadDegrees)
+	r.require(projectile.MaxRange >= 0 && projectile.FalloffStart >= 0 && projectile.HitscanRange >= 0,
+		"%s: %q declares a negative range", table, id)
+	if projectile.FalloffStart > 0 {
+		r.require(projectile.MaxRange > projectile.FalloffStart,
+			"%s: %q starts falloff at %g but has no max_range beyond it to decay over", table, id, projectile.FalloffStart)
+		r.require(projectile.FalloffMin > 0 && projectile.FalloffMin < 1,
+			"%s: %q has falloff_min %g, want a fraction between 0 and 1 exclusive; a shot that decays to nothing is a range limit, not falloff", table, id, projectile.FalloffMin)
+	}
+	r.require(projectile.FalloffStart > 0 || projectile.FalloffMin == 0,
+		"%s: %q declares a falloff_min with no falloff_start, so nothing ever decays", table, id)
+	if projectile.HitscanRange > 0 {
+		r.require(projectile.MaxRange > projectile.HitscanRange,
+			"%s: %q lands instantly to %g and has no travelling range past it; a hitscan cap with nothing beyond it is unlimited instant damage", table, id, projectile.HitscanRange)
+	}
 }
 
 // validateProjectileKinds keeps kinds unique across every table, because a

@@ -15,6 +15,10 @@ const (
 	ClientPing    uint64 = 4
 	ClientLoadout uint64 = 5
 	ClientCraft   uint64 = 6
+	// ClientAmmunition builds one batch of crafted special ammunition. It answers
+	// on ServerCraft like any other build, because what it changes is the same
+	// carried inventory.
+	ClientAmmunition uint64 = 7
 
 	ServerWelcome  uint64 = 1
 	ServerSnapshot uint64 = 2
@@ -109,6 +113,7 @@ type ClientEnvelope struct {
 	ClientTimeMS uint64
 	Loadout      Loadout
 	Craft        CraftRequest
+	Ammunition   string
 }
 
 type Entity struct {
@@ -141,6 +146,8 @@ type Entity struct {
 	Mass              float32
 	Deleting          bool
 	DeleteProgress    float32
+	Scoped            bool
+	Guarding          bool
 }
 
 type Collider struct {
@@ -255,6 +262,13 @@ func DecodeClient(data []byte) (ClientEnvelope, error) {
 				return out, err
 			}
 			out.Craft = request
+			data = data[m:]
+		case 8:
+			v, m := protowire.ConsumeString(data)
+			if m < 0 {
+				return out, errors.New("invalid ammunition request")
+			}
+			out.Ammunition = v
 			data = data[m:]
 		default:
 			m := protowire.ConsumeFieldValue(num, typ, data)
@@ -580,6 +594,12 @@ func encodeEntity(e Entity) []byte {
 		out = appendVarint(out, 32, 1)
 	}
 	out = appendFloat(out, 33, e.DeleteProgress)
+	if e.Scoped {
+		out = appendVarint(out, 34, 1)
+	}
+	if e.Guarding {
+		out = appendVarint(out, 35, 1)
+	}
 	return out
 }
 

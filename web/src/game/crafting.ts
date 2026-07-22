@@ -3,13 +3,18 @@
 // components, price a build, and explain a shortfall before the round trip —
 // but the server remains the authority: a craft is only real once its Craft
 // reply confirms it, and only the server may spend a material.
-import { components, materials, weapons, type Component, type Weapon } from "../tuning";
+import { ammunition, components, materials, weapons, type Component, type Weapon } from "../tuning";
 import type { CharacterClass, CraftedItem, LoadoutSet } from "../types";
 import type { Ledger } from "./loadout";
 
 /** The weapon categories a character may build: the rows its ledger owns. */
 export function craftable(characterClass: CharacterClass, ledger: Ledger): string[] {
   return Object.keys(weapons).filter((id) => weapons[id]!.class === characterClass && ledger.has(id)).sort();
+}
+
+/** The special-ammunition recipes a class may build. These are not ledger-gated. */
+export function buildableAmmunition(characterClass: CharacterClass): string[] {
+  return Object.keys(ammunition).filter((id) => ammunition[id]!.class === characterClass).sort();
 }
 
 /** The component slots a weapon exposes, in blueprint order. */
@@ -32,9 +37,16 @@ export function componentOf(id: string): Component | undefined { return componen
 /** Display name of a material, falling back to its ID for unknown content. */
 export function materialName(id: string): string { return materials.materials[id]?.name ?? id; }
 
-/** What a set of component choices consumes, as material ID → count. */
-export function cost(chosen: Record<string, string>): Record<string, number> {
+/**
+ * What one build consumes, as material ID → count: the weapon row's own cost
+ * plus every component filling a slot. Most categories are free; the heavy ones
+ * carry a cost of their own, which is how rare materials gate them.
+ */
+export function cost(weaponID: string, chosen: Record<string, string>): Record<string, number> {
   const total: Record<string, number> = {};
+  for (const [material, count] of Object.entries(weapons[weaponID]?.cost ?? {})) {
+    total[material] = (total[material] ?? 0) + count;
+  }
   for (const id of Object.values(chosen)) {
     for (const [material, count] of Object.entries(components.components[id]?.cost ?? {})) {
       total[material] = (total[material] ?? 0) + count;

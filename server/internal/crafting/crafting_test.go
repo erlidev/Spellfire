@@ -1,6 +1,7 @@
 package crafting_test
 
 import (
+	"reflect"
 	"testing"
 
 	"spellfire/server/internal/crafting"
@@ -43,7 +44,7 @@ func TestCostSumsEveryFilledSlot(t *testing.T) {
 	tables := shipped(t)
 	muzzle := component(t, tables, "gun", "muzzle")
 	barrel := component(t, tables, "gun", "barrel")
-	cost := crafting.Cost(tables, map[string]string{"muzzle": muzzle.ID, "barrel": barrel.ID})
+	cost := crafting.Cost(tables, "starter-rifle", map[string]string{"muzzle": muzzle.ID, "barrel": barrel.ID})
 	for material, count := range muzzle.Cost {
 		if cost[material] < count {
 			t.Fatalf("cost of %s = %d, want at least the muzzle's %d", material, cost[material], count)
@@ -57,8 +58,13 @@ func TestCostSumsEveryFilledSlot(t *testing.T) {
 			t.Fatalf("cost of %s = %d, want %d", material, cost[material], want)
 		}
 	}
-	if len(crafting.Cost(tables, map[string]string{})) != 0 {
-		t.Fatal("a stock build costs materials")
+	if len(crafting.Cost(tables, "starter-rifle", map[string]string{})) != 0 {
+		t.Fatal("a stock build of a free category costs materials")
+	}
+	// A heavy category's own material cost is what gates it economically, so it
+	// is charged even when every slot is left stock.
+	if len(crafting.Cost(tables, "long-sniper", map[string]string{})) == 0 {
+		t.Fatal("a heavy category costs nothing to build")
 	}
 }
 
@@ -172,7 +178,7 @@ func TestApplyLeavesAStockBuildUntouched(t *testing.T) {
 	gun := starter(t, tables, "gunslinger")
 	ability := tables.Abilities[gun.Ability]
 	weapon, applied := crafting.Apply(tables, gun, ability, nil)
-	if weapon != gun || applied.Projectile != ability.Projectile || applied.Cost != ability.Cost {
+	if !reflect.DeepEqual(weapon, gun) || applied.Projectile != ability.Projectile || applied.Cost != ability.Cost {
 		t.Fatal("a stock build changed the rows it was built from")
 	}
 }

@@ -6,6 +6,7 @@ import (
 
 	"spellfire/server/internal/model"
 	"spellfire/server/internal/protocol"
+	"spellfire/server/internal/tuning"
 )
 
 func (w *World) SnapshotFor(playerID string, now time.Time, kind uint64) protocol.ServerEnvelope {
@@ -19,6 +20,13 @@ func (w *World) SnapshotFor(playerID string, now time.Time, kind uint64) protoco
 	if viewer.ViewDistance > 0 {
 		viewDistance = viewer.ViewDistance
 	}
+	// A scope is the one camera exception: it trades peripheral vision on the
+	// client for reach, and the server has to send what that reach can see.
+	if viewer.Scoped {
+		if scope := w.scope(viewer); scope != nil {
+			viewDistance += scope.ViewBonus
+		}
+	}
 	radiusSq := viewDistance * viewDistance
 	for _, id := range sortedPlayerIDs(w.players) {
 		p := w.players[id]
@@ -28,6 +36,11 @@ func (w *World) SnapshotFor(playerID string, now time.Time, kind uint64) protoco
 		resource := p.Mana
 		if p.Class == model.Gunslinger {
 			resource = float64(p.Ammo)
+			// A weapon that spends crafted ammunition has no magazine to meter,
+			// so the resource it reports is what it is actually carrying.
+			if ability, ok := w.ability(p); ok && ability.Cost.Kind == tuning.CostMaterial {
+				resource = float64(p.Materials[ability.Cost.Material])
+			}
 		}
 		message.Entities = append(message.Entities, protocol.Entity{
 			Type: protocol.EntityPlayer, ID: p.ID, Name: p.Name, ClassName: string(p.Class),
@@ -38,6 +51,7 @@ func (w *World) SnapshotFor(playerID string, now time.Time, kind uint64) protoco
 			Lingering: p.Lingering(), EffectIDs: activeEffectIDs(p.Effects),
 			Mass: float32(p.Mass), Radius: float32(p.circleRadius()),
 			Deleting: p.Deleting, DeleteProgress: float32(p.deleteProgress(now)),
+			Scoped: p.Scoped, Guarding: p.Guarding,
 		})
 	}
 	for _, id := range sortedProjectileIDs(w.projectiles) {

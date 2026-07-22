@@ -25,8 +25,11 @@ Rules, from [`invariants.md`](../../docs/game/design/invariants.md) and
 - **Crafting changes handling and ceiling, never the damage band.** A component
   declares an open `modifiers` map of multipliers, but only over attributes the
   simulation actually reads: `magazine_size`, `reload_ms`, `cooldown_ms`,
-  `windup_ms`, `cost_amount`, `projectile_speed`, `projectile_life`, and
-  `projectile_radius`. Damage is unreachable because it is not a numeric item
+  `windup_ms`, `cost_amount`, `projectile_speed`, `projectile_life`,
+  `projectile_radius`, `recoil_degrees`, `spread_degrees`,
+  `move_spread_degrees`, and `scope_movement_multiplier`. The last four are
+  gunplay and are refused on a blueprint whose weapons have no handling to
+  change. Damage is unreachable because it is not a numeric item
   field, and `interval_ms` is rejected outright — fire cadence *is* the DPS axis.
   Multipliers are bounded to `[0.5, 2]`, an exact `1` is rejected as a
   non-change, and every component must declare a material `cost` and a
@@ -66,13 +69,14 @@ Rules, from [`invariants.md`](../../docs/game/design/invariants.md) and
 | `session.json` | Logout linger window and saved-position expiry |
 | `entities.json` | Common entity defaults plus spawnability and generic admin-field/input metadata |
 | `world.json` | World radius, spawn radius, danger bands, procedural tree parameters, fixed fixtures |
-| `combat.json` | Role and dodge-vector vocabularies, player movement/resources, universal dash, damage bands |
+| `combat.json` | Role and dodge-vector vocabularies, player movement/resources, universal dash, weight classes, damage bands |
 | `loadout.json` | Slot counts per kind and the Mage affinity multiplier |
 | `progression.json` | XP curve, the XP each source awards, the starter-kit draw size, and the crafted-item capacity |
 | `elements.json` | The five Mage elements and their roles |
 | `abilities.json` | What every action costs, how often it may be used, how it is dodged, what it delivers, and what it applies |
 | `effects.json` | Status effects: burn, slow, root, stun, knockback, shield |
-| `weapons.json` | Craftable weapons: class, blueprint, magazine, unlock level, and the ability they fire or the spell they cast |
+| `weapons.json` | Craftable weapons: class, blueprint, magazine, unlock level, weight class, recoil pattern, spread, optional scope, optional material cost, and the ability they fire or the spell they cast |
+| `ammunition.json` | Crafted special-ammunition recipes: what they cost, what material they produce, and how many rounds a batch yields |
 | `spells.json` | Spells: element, tier, unlock level, and the ability they cast |
 | `gadgets.json` | Gadgets: the Gunslinger's slot content, its unlock level, and the ability each performs |
 | `components.json` | Blueprint slot layouts, and the components that fill them: material cost, behaviour modifiers, and the plain-language effect the crafting UI shows |
@@ -100,32 +104,38 @@ Rows are populated only where a design document has settled them.
   retargeted to ECS component stores later. New UI fields need no client code;
   new runtime attributes need one registry adapter.
 
-- `effects` is empty. The simulation runs all six kinds — burn ticks from a
-  band, slows scale movement and take the strongest rather than compounding,
-  roots stop movement, stuns stop everything, knockbacks override input and
-  cancel a dash, shields absorb before health — but no design document has
-  settled a magnitude. Phase 2.4's gadgets and Phase 2.5's element secondaries
-  author the rows; the tests exercise the layer against rows they add
-  themselves.
+- `effects` carries one shipped row: the knockback a rocket blast applies. The
+  simulation runs all six kinds — burn ticks from a band, slows scale movement
+  and take the strongest rather than compounding, roots stop movement, stuns
+  stop everything, knockbacks override input and cancel a dash, shields absorb
+  before health — but no design document has settled a magnitude for the other
+  five. Phase 2.5's element secondaries author those rows; until then the tests
+  exercise the layer against rows they add themselves.
 - The starter Fire bolt exercises windups and the shared line telegraph. A cast
   pays up front, locks its origin and direction, then delivers only after the
   pending phase; death cancels it into the common resolution flash. The loader
   requires `windup_ms` and `telegraph` together and validates the exact geometry
   each of circle, cone, line, and ring consumes.
-- `gadgets` is empty. The slot model, its validation, and the Gunslinger's five
-  gadget bindings all run against it; Phase 2.4 authors smoke, flashbangs, and
-  the rest as rows. Until then a Gunslinger's bar is its weapon plus five empty
-  slots, and an empty slot performs nothing rather than erroring, and its
-  starter draw is one weapon and nothing else.
+- `gadgets` carries the riot shield. Smoke and flashbangs are deliberately
+  absent: both are line-of-sight and aim-disruption tools, and line of sight is
+  Phase 2.6 — authoring them now would ship rows the simulation cannot honour.
+  The remaining gadget slots stay empty, and an empty slot performs nothing
+  rather than erroring.
 - `progression.sources` prices all four settled XP sources, but only
   `player_kill` has a trigger today. Mob kills (Phase 4.3), harvesting (Phase
   4.1), and outpost discovery (Phase 3) award their row when those systems land;
   the vocabulary is fixed in code, so the table cannot introduce a fifth source
   nothing reads. The curve itself is a placeholder shape — Phase 4.4 tunes it
   against the pacing targets.
-- The basic sets are one weapon per class and one spell, so today's draw is not
-  yet much of a draw. `unlock_level: 2` on those rows keeps the level-1 kit a
-  genuine subset once Phase 2.4 and 2.5 widen the pools.
+- The Gunslinger's basic set is four categories — pistol, SMG, shotgun, rifle —
+  so an opening draw is now a real draw. The Mage's is still one staff and one
+  spell until Phase 2.5 authors the spell grid.
+- Every gun shares the `standard` band and the same 300 ms cadence unless it is
+  *slower*. With one band, cadence **is** DPS, so rate-of-fire identity — the
+  SMG's spray, the sniper's single heavy shot — waits on the sustained,
+  burst, and heavy-burst bands in Phase 2.7. What separates the nine categories
+  today is handling: magazine, reload, range and falloff, recoil pattern,
+  spread, weight, scope, pellets, and blast.
 - `materials.materials` carries the structural stock every biome yields and one
   element-aligned shard per biome, because component costs have to name
   something real. Nothing *produces* a material yet — harvest nodes and mob
@@ -133,10 +143,10 @@ Rows are populated only where a design document has settled them.
   grant in `materials.admin_grant`.
 - `components.components` covers both blueprints: five gun slots and three staff
   slots, two options each. Their modifiers reach only the attributes the
-  simulation reads today. Recoil, spread, and scoped state are Phase 2.4 and
-  cast-shape changes beyond projectile geometry are Phase 2.5; those attributes
-  join the vocabulary when the simulation delivers them, and until then a
-  component may not claim one.
+  simulation reads today. Recoil, spread, and scoped movement joined the
+  vocabulary with Phase 2.4 and the gun components now use them; cast-shape
+  changes beyond projectile geometry are Phase 2.5 and a component may not claim
+  one until then.
 - `mobs.sentry` carries the settled contract — family, silhouette, damage band,
   dodge vector, shared telegraph shape, turret count — and no aggro radius,
   leash, movement, cadence, telegraph timing, or projectile values.
@@ -192,5 +202,13 @@ applied effect must exist, an effect must be of a kind the world can run and may
 only carry the fields its kind uses, and a damaging ability must declare a band
 and an honoured dodge vector. Telegraph rows must pair with a positive windup,
 carry positive active/resolved phase times, and use only their shape's geometry;
-mob telegraph shapes come from the same vocabulary. Failures list every problem at once — run
+mob telegraph shapes come from the same vocabulary. Gunplay adds its own: every
+gun needs a weight class, a recoil pattern that both walks and recovers, and a
+moving spread wider than its standing one; a weight class may only slow its
+carrier; a scope must cost movement, steady the shot, and see further; an
+instantly landing round must require a scope, claim `scoped_commit`, and have
+travelling range past its cap; a guard must cover less than a full circle, cost
+mobility, and deal no damage; a withheld category must cost materials and may
+not be in a basic set; and crafted ammunition must be produced by a recipe,
+cost something, and never cost the material it produces. Failures list every problem at once — run
 `go test ./server/...`.

@@ -98,12 +98,13 @@ func TestSetLoadoutRejectsAnIllegalSetWithoutChangingAnything(t *testing.T) {
 	world, now := testWorld()
 	p := world.AddPlayer(model.Character{ID: "g1", Name: "Gun", Class: model.Gunslinger}, now)
 	p.Position = Vec{}
+	equipped := p.Loadout.Weapon
 	set := p.Loadout.Clone()
 	set.Weapon = "starter-staff" // the other class's weapon
 	if _, err := world.SetLoadout("g1", set, now); err == nil {
 		t.Fatal("a Gunslinger equipped a staff")
 	}
-	if p.Loadout.Weapon != "starter-rifle" {
+	if p.Loadout.Weapon != equipped {
 		t.Fatalf("a refused commit changed the weapon to %q", p.Loadout.Weapon)
 	}
 }

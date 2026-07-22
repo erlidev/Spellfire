@@ -31,7 +31,13 @@ export class Predictor {
 
   initialize(entity: Entity): void { this.x = entity.x; this.y = entity.y; this.aimX = entity.aimX || 1; this.aimY = entity.aimY; this.radius = entity.radius || defaultRadius; this.mass = entity.mass; this.pending = []; }
 
-  step(buttons: number, aimX: number, aimY: number, selectedSlot: number, now: number): InputFrame {
+  /**
+   * Advances one predicted tick. `handling` is what the equipped kit does to
+   * movement — weight class, scope, raised shield — and is passed in rather than
+   * derived here, because prediction has no view of the loadout. The server
+   * applies exactly the same multiplier, so a scoped step does not rubber-band.
+   */
+  step(buttons: number, aimX: number, aimY: number, selectedSlot: number, now: number, handling = 1): InputFrame {
     const aimLength = Math.hypot(aimX, aimY);
     if (aimLength > 0.001) { this.aimX = aimX / aimLength; this.aimY = aimY / aimLength; }
     let dx = Number(Boolean(buttons & Buttons.Right)) - Number(Boolean(buttons & Buttons.Left));
@@ -50,7 +56,7 @@ export class Predictor {
       motion = { x: this.dashDirX * dashSpeed / tickRate, y: this.dashDirY * dashSpeed / tickRate };
       this.dashTicksLeft--;
     } else {
-      motion = { x: dx * speed / tickRate, y: dy * speed / tickRate };
+      motion = { x: dx * speed * handling / tickRate, y: dy * speed * handling / tickRate };
     }
     this.applyMotion(motion);
     this.previousButtons = buttons;

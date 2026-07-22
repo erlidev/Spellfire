@@ -1,1 +1,9 @@
-{}
+{
+  "blast-knockback": {
+    "name": "Blast wave",
+    "kind": "knockback",
+    "stacking": "refresh",
+    "duration_ms": 220,
+    "speed": 620
+  }
+}

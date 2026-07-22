@@ -26,7 +26,7 @@
       "name": "Projectile",
       "spawnable": true,
       "fields": [
-        { "attribute": "projectile.ability", "label": "Ability", "input": "select", "scope": "spawn", "default": "rifle-shot", "options": [{ "value": "rifle-shot", "label": "Rifle shot" }, { "value": "fire-bolt-cast", "label": "Fire bolt" }] },
+        { "attribute": "projectile.ability", "label": "Ability", "input": "select", "scope": "spawn", "default": "rifle-shot", "options": [{ "value": "rifle-shot", "label": "Rifle shot" }, { "value": "pistol-shot", "label": "Pistol shot" }, { "value": "revolver-shot", "label": "Revolver shot" }, { "value": "smg-burst", "label": "SMG burst" }, { "value": "shotgun-blast", "label": "Shotgun blast" }, { "value": "marksman-shot", "label": "Marksman shot" }, { "value": "sniper-shot", "label": "Sniper shot" }, { "value": "lmg-burst", "label": "LMG burst" }, { "value": "launcher-rocket", "label": "Rocket" }, { "value": "fire-bolt-cast", "label": "Fire bolt" }] },
         { "attribute": "render.element", "label": "Element", "input": "select", "scope": "both", "default": "none", "options": [{ "value": "none", "label": "None" }, { "value": "fire", "label": "Fire" }, { "value": "frost", "label": "Frost" }, { "value": "storm", "label": "Storm" }, { "value": "arcane", "label": "Arcane" }, { "value": "earth", "label": "Earth" }] },
         { "attribute": "transform.heading_degrees", "label": "Heading", "input": "rotation", "scope": "both", "default": "0", "min": -180, "max": 180, "step": 1 },
         { "attribute": "transform.position", "label": "Position", "input": "position", "scope": "edit", "default": "[0,0]", "min": -3000, "max": 3000, "step": 1 },

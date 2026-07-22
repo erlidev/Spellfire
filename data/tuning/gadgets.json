@@ -1,1 +1,9 @@
-{}
+{
+  "riot-shield": {
+    "name": "Riot shield",
+    "class": "gunslinger",
+    "starter": true,
+    "unlock_level": 3,
+    "ability": "riot-shield-raise"
+  }
+}

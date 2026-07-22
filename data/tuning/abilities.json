@@ -1,4 +1,69 @@
 {
+  "pistol-shot": {
+    "name": "Pistol shot",
+    "cost": { "kind": "ammo", "amount": 1 },
+    "interval_ms": 300,
+    "cooldown_ms": 0,
+    "dodge_vector": "projectile_travel",
+    "damage_band": "standard",
+    "projectile": {
+      "kind": "pistol-round",
+      "speed": 780,
+      "life_seconds": 0.9,
+      "radius": 5,
+      "silhouette": "round"
+    }
+  },
+  "revolver-shot": {
+    "name": "Revolver shot",
+    "cost": { "kind": "ammo", "amount": 1 },
+    "interval_ms": 450,
+    "cooldown_ms": 0,
+    "dodge_vector": "projectile_travel",
+    "damage_band": "standard",
+    "projectile": {
+      "kind": "revolver-round",
+      "speed": 860,
+      "life_seconds": 1.3,
+      "radius": 6,
+      "silhouette": "round"
+    }
+  },
+  "smg-burst": {
+    "name": "SMG burst",
+    "cost": { "kind": "ammo", "amount": 1 },
+    "interval_ms": 300,
+    "cooldown_ms": 0,
+    "dodge_vector": "projectile_travel",
+    "damage_band": "standard",
+    "projectile": {
+      "kind": "smg-round",
+      "speed": 700,
+      "life_seconds": 0.55,
+      "radius": 4,
+      "silhouette": "round",
+      "max_range": 385,
+      "falloff_start": 190,
+      "falloff_min": 0.45
+    }
+  },
+  "shotgun-blast": {
+    "name": "Shotgun blast",
+    "cost": { "kind": "ammo", "amount": 1 },
+    "interval_ms": 300,
+    "cooldown_ms": 0,
+    "dodge_vector": "projectile_travel",
+    "damage_band": "standard",
+    "projectile": {
+      "kind": "pellet",
+      "speed": 640,
+      "life_seconds": 0.34,
+      "radius": 4,
+      "silhouette": "round",
+      "pellets": 8,
+      "pellet_spread_degrees": 15
+    }
+  },
   "rifle-shot": {
     "name": "Rifle shot",
     "cost": { "kind": "ammo", "amount": 1 },
@@ -13,6 +78,79 @@
       "radius": 5,
       "silhouette": "round"
     }
+  },
+  "marksman-shot": {
+    "name": "Marksman shot",
+    "cost": { "kind": "ammo", "amount": 1 },
+    "interval_ms": 450,
+    "cooldown_ms": 0,
+    "dodge_vector": "projectile_travel",
+    "damage_band": "standard",
+    "projectile": {
+      "kind": "marksman-round",
+      "speed": 1000,
+      "life_seconds": 1.4,
+      "radius": 5,
+      "silhouette": "round"
+    }
+  },
+  "sniper-shot": {
+    "name": "Sniper shot",
+    "cost": { "kind": "ammo", "amount": 1 },
+    "interval_ms": 900,
+    "cooldown_ms": 0,
+    "requires_scope": true,
+    "dodge_vector": "scoped_commit",
+    "damage_band": "standard",
+    "projectile": {
+      "kind": "sniper-round",
+      "speed": 1400,
+      "life_seconds": 1.1,
+      "radius": 5,
+      "silhouette": "round",
+      "hitscan_range": 700,
+      "max_range": 2100,
+      "falloff_start": 700,
+      "falloff_min": 0.5
+    }
+  },
+  "lmg-burst": {
+    "name": "LMG burst",
+    "cost": { "kind": "ammo", "amount": 1 },
+    "interval_ms": 300,
+    "cooldown_ms": 0,
+    "dodge_vector": "projectile_travel",
+    "damage_band": "standard",
+    "projectile": {
+      "kind": "lmg-round",
+      "speed": 740,
+      "life_seconds": 1.3,
+      "radius": 5,
+      "silhouette": "round"
+    }
+  },
+  "launcher-rocket": {
+    "name": "Rocket",
+    "cost": { "kind": "material", "material": "rocket", "amount": 1 },
+    "interval_ms": 900,
+    "cooldown_ms": 0,
+    "dodge_vector": "projectile_travel",
+    "damage_band": "standard",
+    "blast": { "radius": 120, "effects": ["blast-knockback"] },
+    "projectile": {
+      "kind": "rocket",
+      "speed": 420,
+      "life_seconds": 2.2,
+      "radius": 9,
+      "silhouette": "bolt"
+    }
+  },
+  "riot-shield-raise": {
+    "name": "Riot shield",
+    "cost": { "kind": "none", "amount": 0 },
+    "interval_ms": 200,
+    "cooldown_ms": 0,
+    "guard": { "arc_degrees": 140, "movement_multiplier": 0.5 }
   },
   "fire-bolt-cast": {
     "name": "Fire bolt",

@@ -1,20 +1,24 @@
 import { Application, Container, Graphics, Text } from "pixi.js";
 // Install eval-free polyfills so WebGL works under a CSP without 'unsafe-eval'. Side-effect import; must run before the renderer is created.
 import "pixi.js/unsafe-eval";
-import { projectileByKind, safeRadius, simulation, world } from "../tuning";
+import { abilities, projectileByKind, safeRadius, simulation, world } from "../tuning";
 import type { Entity, ServerMessage } from "../types";
 import { Allegiance, EntityType } from "../types";
 import type { Predictor } from "./prediction";
 import { telegraphStyle } from "./telegraph";
 
 interface Sample { at: number; entity: Entity }
-interface ActorView { root: Container; body: Graphics; weapon: Graphics; health: Graphics; label: Text; type: number }
+interface ActorView { root: Container; body: Graphics; weapon: Graphics; health: Graphics; stance: Graphics; label: Text; type: number }
 
 const colors = {
   ground: 0x16233a, grid: 0x2c405e, safe: 0x7ee1bb, rim: 0x8d5260, self: 0xffffff, hostile: 0xff6f69,
   gunner: 0x9cabbf, mage: 0xff754d, bullet: 0xffd166, tree: 0x46795a, trunk: 0x795b43, outline: 0x0b1220,
-  squad: 0x7ee1bb, neutral: 0xaeb9c8,
+  squad: 0x7ee1bb, neutral: 0xaeb9c8, shield: 0x9ecbff, scope: 0xffe9a8,
 };
+
+// The widest arc any live guard covers, so the drawn shield never claims to
+// block more than the simulation does.
+const guardArcDegrees = Math.max(0, ...Object.values(abilities).map((ability) => ability.guard?.arc_degrees ?? 0));
 
 const elementColors: Record<string, number> = { fire: 0xff754d, frost: 0x75dbf0, storm: 0xffd166, arcane: 0xd879e8, earth: 0xb99568 };
 
@@ -30,6 +34,9 @@ export class GameView {
   private predictor?: Predictor;
   private latestEntities = new Map<string, Entity>();
   private initialized = false;
+  // The scope's camera exception: the view is pushed toward where the weapon is
+  // pointed, by a fraction of the reach the server widened the snapshot by.
+  private scopeOffset = { x: 0, y: 0 };
 
   async init(host: HTMLElement): Promise<void> {
     await this.app.init({ resizeTo: window, antialias: true, backgroundColor: colors.ground, resolution: Math.min(2, devicePixelRatio), autoDensity: true });
@@ -41,6 +48,20 @@ export class GameView {
   }
 
   bindPredictor(predictor: Predictor): void { this.predictor = predictor; }
+
+  /**
+   * Offsets the camera toward the aim while scoped. A bonus of zero puts it
+   * back on the body, which is what unscoping does.
+   */
+  setScope(bonus: number, aimX: number, aimY: number): void {
+    if (bonus <= 0) { this.scopeOffset = { x: 0, y: 0 }; return; }
+    const length = Math.hypot(aimX, aimY);
+    if (length < 0.001) return;
+    // Half the widened reach: the player still sees its own body, which is what
+    // keeps the blackout a readable trade rather than a disorienting one.
+    const reach = bonus / 2;
+    this.scopeOffset = { x: (aimX / length) * reach, y: (aimY / length) * reach };
+  }
 
   apply(message: ServerMessage): void {
     this.localID = message.playerID || this.localID;
@@ -60,7 +81,9 @@ export class GameView {
   pointerWorld(clientX: number, clientY: number): { x: number; y: number } {
     const predictor = this.predictor;
     if (!predictor) return { x: 1, y: 0 };
-    return { x: clientX - this.app.screen.width / 2, y: clientY - this.app.screen.height / 2 };
+    // Aim stays relative to the body, so pushing the camera while scoped does
+    // not silently rotate where the weapon is pointed.
+    return { x: clientX - this.app.screen.width / 2 + this.scopeOffset.x, y: clientY - this.app.screen.height / 2 + this.scopeOffset.y };
   }
 
   // Placement tools need an absolute world coordinate, unlike aiming, which
@@ -93,8 +116,9 @@ export class GameView {
     const predictor = this.predictor;
     if (!predictor) return;
     const width = this.app.screen.width, height = this.app.screen.height;
-    this.world.position.set(width / 2 - predictor.x, height / 2 - predictor.y);
-    this.drawGround(predictor.x, predictor.y, width, height);
+    const cameraX = predictor.x + this.scopeOffset.x, cameraY = predictor.y + this.scopeOffset.y;
+    this.world.position.set(width / 2 - cameraX, height / 2 - cameraY);
+    this.drawGround(cameraX, cameraY, width, height);
     const local = this.latestEntities.get(this.localID);
     if (local) this.drawEntity({ ...local, x: predictor.x, y: predictor.y, aimX: predictor.aimX, aimY: predictor.aimY }, true);
     const renderAt = performance.now() - simulation.interpolation_delay_ms;
@@ -129,6 +153,7 @@ export class GameView {
       view.health.clear().roundRect(-27, -39, 54, 7, 3).fill(colors.outline).roundRect(-25, -37, 50 * Math.max(0, entity.health / Math.max(1, entity.maxHealth)), 3, 2).fill(entity.health > 30 ? 0x65d89d : 0xff7f73);
       view.label.text = entity.lingering ? `${entity.name} · offline` : entity.name;
       if (entity.invulnerable) view.health.circle(0, 0, 27).stroke({ color: colors.safe, width: 3, alpha: .9 });
+      this.drawStance(view.stance, entity);
     } else if (entity.type === EntityType.WorldItem && entity.maxHealth > 0) {
       const ratio = Math.max(0, entity.health / entity.maxHealth);
       view.health.clear();
@@ -141,7 +166,7 @@ export class GameView {
   }
 
   private createActor(entity: Entity, self: boolean): ActorView {
-    const root = new Container(), body = new Graphics(), weapon = new Graphics(), health = new Graphics();
+    const root = new Container(), body = new Graphics(), weapon = new Graphics(), health = new Graphics(), stance = new Graphics();
     const outline = allegianceColor(entity.allegiance, self);
     if (entity.type === EntityType.Telegraph) {
       this.drawTelegraph(body, entity);
@@ -180,8 +205,28 @@ export class GameView {
       weapon.roundRect(8, -5, 36, 10, 2).fill(0x5c6674).stroke({ color: colors.outline, width: 3 }).rect(18, 5, 10, 8).fill(0x353e4c);
     }
     const label = new Text({ text: entity.name, style: { fontFamily: "system-ui", fontSize: 12, fill: 0xffffff, stroke: { color: colors.outline, width: 3 } } }); label.anchor.set(.5); label.position.set(0, -50);
-    root.addChild(body, weapon, health, label);
-    return { root, body, weapon, health, label, type: entity.type };
+    root.addChild(body, stance, weapon, health, label);
+    return { root, body, weapon, health, stance, label, type: entity.type };
+  }
+
+  /**
+   * The two committed stances, drawn so an opponent can play around them: the
+   * arc a raised shield actually covers, and the fact that a scoped body is
+   * looking one way and moving slowly. Both use shape rather than colour alone.
+   */
+  private drawStance(stance: Graphics, entity: Entity): void {
+    stance.clear();
+    stance.rotation = Math.atan2(entity.aimY, entity.aimX);
+    if (entity.guarding) {
+      const half = guardArcDegrees * Math.PI / 360;
+      stance.moveTo(0, 0).arc(0, 0, 34, -half, half).closePath()
+        .fill({ color: colors.shield, alpha: .28 })
+        .stroke({ color: colors.shield, width: 4, alpha: .95 });
+    }
+    if (entity.scoped) {
+      stance.moveTo(22, 0).lineTo(74, 0).stroke({ color: colors.scope, width: 2, alpha: .8 });
+      stance.circle(74, 0, 6).stroke({ color: colors.scope, width: 2, alpha: .8 });
+    }
   }
 
   private drawTelegraph(body: Graphics, entity: Entity): void {

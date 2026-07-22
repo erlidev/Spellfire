@@ -51,19 +51,19 @@ func TestAbilityCooldownGatesUseBeyondTheSharedCadence(t *testing.T) {
 		document["rifle-shot"].(map[string]any)["cooldown_ms"] = 2000.0
 	})
 	w, now := worldFrom(t, files)
-	p := addTestPlayer(w, "p", model.Gunslinger, Vec{1200, 0}, now)
+	p := carrying(t, w, addTestPlayer(w, "p", model.Gunslinger, Vec{1200, 0}, now), "starter-rifle")
 
 	fire(w, p, 1, now)
 	if len(w.projectiles) != 1 {
 		t.Fatalf("first use produced %d projectiles", len(w.projectiles))
 	}
 	// Past the shared cadence, still inside the ability's own lockout.
-	past := now.Add(starterAbility(w, model.Gunslinger).Interval() + 50*time.Millisecond)
+	past := now.Add(equippedAbility(w, p).Interval() + 50*time.Millisecond)
 	fire(w, p, 2, past)
 	if len(w.projectiles) != 1 {
 		t.Fatal("the ability fired again inside its cooldown")
 	}
-	if p.Ammo != starterWeapon(w, model.Gunslinger).MagazineSize-1 {
+	if p.Ammo != equippedWeapon(w, p).MagazineSize-1 {
 		t.Fatalf("a use blocked by cooldown still charged its cost: ammo = %d", p.Ammo)
 	}
 	fire(w, p, 3, now.Add(2100*time.Millisecond))
@@ -78,11 +78,11 @@ func TestAbilityChargesTheCostItDeclares(t *testing.T) {
 	w, now := testWorld()
 	gunslinger := addTestPlayer(w, "g", model.Gunslinger, Vec{1200, 0}, now)
 	mage := addTestPlayer(w, "m", model.Mage, Vec{1200, 400}, now)
-	cost := starterAbility(w, model.Mage).Cost
+	cost := equippedAbility(w, mage).Cost
 
 	fire(w, gunslinger, 1, now)
 	fire(w, mage, 1, now)
-	if gunslinger.Ammo != starterWeapon(w, model.Gunslinger).MagazineSize-1 {
+	if gunslinger.Ammo != equippedWeapon(w, gunslinger).MagazineSize-1 {
 		t.Fatalf("ammo = %d", gunslinger.Ammo)
 	}
 	if mage.Mana > w.tuning.MaxMana-cost.Amount {
@@ -93,7 +93,7 @@ func TestAbilityChargesTheCostItDeclares(t *testing.T) {
 	// explain the result. One step regenerates one tick's worth and no more.
 	before := w.nextTelegraph
 	mage.Mana = 0
-	fire(w, mage, 2, now.Add(starterAbility(w, model.Mage).Interval()+10*time.Millisecond))
+	fire(w, mage, 2, now.Add(equippedAbility(w, mage).Interval()+10*time.Millisecond))
 	if w.nextTelegraph != before {
 		t.Fatal("the mage cast a spell it could not pay for")
 	}
@@ -118,7 +118,7 @@ func TestSpentMagazineCommitsToReloadInsteadOfFiring(t *testing.T) {
 	}
 	// Release the button, or the refilled magazine is spent again in the same
 	// step that completes the reload.
-	weapon := starterWeapon(w, model.Gunslinger)
+	weapon := equippedWeapon(w, p)
 	w.ApplyInput(p.ID, protocol.Input{Sequence: 2, AimX: 1})
 	w.Step(now.Add(weapon.ReloadDuration() + time.Millisecond))
 	if p.Ammo != weapon.MagazineSize {

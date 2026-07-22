@@ -112,6 +112,11 @@ export function encodeCraftEnvelope(request: CraftRequest): Uint8Array {
   const writer = new Writer(); writer.uint(1, 6); writer.message(7, encodeCraft(request)); return writer.finish();
 }
 
+/** One batch of crafted special ammunition. It answers on the Craft reply. */
+export function encodeAmmunitionEnvelope(recipe: string): Uint8Array {
+  const writer = new Writer(); writer.uint(1, 7); writer.string(8, recipe); return writer.finish();
+}
+
 function decodeComponentSlot(bytes: Uint8Array): [string, string] {
   let slot = "", component = "";
   const reader = new Reader(bytes);
@@ -165,7 +170,7 @@ export function encodeSimple(kind: 3 | 4, clientTimeMS = 0): Uint8Array {
 }
 
 function decodeEntity(bytes: Uint8Array): Entity {
-  const value: Entity = { type: 0, id: "", name: "", className: "", x: 0, y: 0, vx: 0, vy: 0, aimX: 0, aimY: 0, health: 0, maxHealth: 0, mana: 0, acknowledgedInput: 0, alive: false, ownerID: "", element: "", squadID: "", allegiance: 0, telegraphState: 0, invulnerable: false, telegraphShape: "", radius: 0, length: 0, width: 0, angleDegrees: 0, telegraphProgress: 0, abilityID: "", lingering: false, effectIDs: [], mass: 0, deleting: false, deleteProgress: 0 };
+  const value: Entity = { type: 0, id: "", name: "", className: "", x: 0, y: 0, vx: 0, vy: 0, aimX: 0, aimY: 0, health: 0, maxHealth: 0, mana: 0, acknowledgedInput: 0, alive: false, ownerID: "", element: "", squadID: "", allegiance: 0, telegraphState: 0, invulnerable: false, telegraphShape: "", radius: 0, length: 0, width: 0, angleDegrees: 0, telegraphProgress: 0, abilityID: "", lingering: false, effectIDs: [], mass: 0, deleting: false, deleteProgress: 0, scoped: false, guarding: false };
   const reader = new Reader(bytes);
   while (!reader.done) {
     const tag = reader.varint(), field = tag >>> 3, wire = tag & 7;
@@ -187,6 +192,7 @@ function decodeEntity(bytes: Uint8Array): Entity {
       case 29: value.lingering = reader.varint() !== 0; break; case 30: value.effectIDs.push(reader.string()); break;
       case 31: value.mass = reader.fixed32(); break;
       case 32: value.deleting = reader.varint() !== 0; break; case 33: value.deleteProgress = reader.fixed32(); break;
+      case 34: value.scoped = reader.varint() !== 0; break; case 35: value.guarding = reader.varint() !== 0; break;
       default: reader.skip(wire);
     }
   }

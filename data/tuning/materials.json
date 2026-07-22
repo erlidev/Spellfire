@@ -17,6 +17,12 @@
       "universal": false,
       "source": "mob",
       "summary": "Biome-gated, element-typed stock for element-specific recipes."
+    },
+    "ammunition": {
+      "name": "Special ammunition",
+      "universal": true,
+      "source": "craft",
+      "summary": "Finite crafted rounds a heavy weapon spends instead of its magazine. No node or mob yields them."
     }
   },
   "materials": {
@@ -27,6 +33,7 @@
     "rime-shard": { "name": "Rime shard", "grade": "uncommon", "kind": "aligned", "biome": "rimeshelf" },
     "storm-shard": { "name": "Storm shard", "grade": "uncommon", "kind": "aligned", "biome": "stormflats" },
     "arcane-shard": { "name": "Arcane shard", "grade": "uncommon", "kind": "aligned", "biome": "arcane-hollow" },
-    "stone-shard": { "name": "Stone shard", "grade": "uncommon", "kind": "aligned", "biome": "stonereach" }
+    "stone-shard": { "name": "Stone shard", "grade": "uncommon", "kind": "aligned", "biome": "stonereach" },
+    "rocket": { "name": "Rocket", "grade": "uncommon", "kind": "ammunition" }
   }
 }

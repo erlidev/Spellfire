@@ -69,7 +69,10 @@ func (i Inventory) Equipped(tables *tuning.Tables, id string) (tuning.Weapon, mo
 		return weapon, item, true
 	}
 	weapon, live := tables.Weapons[id]
-	if !live || !i.Ledger.Has(id) {
+	// A row the economy withholds has no stock configuration to carry: the only
+	// way to hold one is the crafted instance above, which is what makes its
+	// material cost a real gate rather than a suggestion.
+	if !live || weapon.RequiresCraft || !i.Ledger.Has(id) {
 		return tuning.Weapon{}, model.CraftedItem{}, false
 	}
 	return weapon, model.CraftedItem{}, true
@@ -124,17 +127,37 @@ func Validate(tables *tuning.Tables, class model.Class, inventory Inventory, wea
 	return nil
 }
 
-// Cost is the material ID → count a set of component choices consumes. The
-// weapon row itself is free: the unlock ledger is what gates which categories a
-// character may build, and materials price the parts.
-func Cost(tables *tuning.Tables, components map[string]string) map[string]int {
+// Cost is the material ID → count one build consumes: the weapon row's own cost
+// plus every component filling a slot. Most rows are free — the unlock ledger is
+// what gates which categories a character may build, and materials price the
+// parts — but the heavy categories carry a cost of their own, which is how rare
+// materials gate them economically rather than statistically.
+func Cost(tables *tuning.Tables, weaponID string, components map[string]string) map[string]int {
 	cost := map[string]int{}
+	for material, count := range tables.Weapons[weaponID].Cost {
+		cost[material] += count
+	}
 	for _, slot := range sortedKeys(components) {
 		for material, count := range tables.Components.Components[components[slot]].Cost {
 			cost[material] += count
 		}
 	}
 	return cost
+}
+
+// ValidateAmmunition reports why a requested batch of special ammunition may not
+// be built. Unlike a weapon it is not gated by the unlock ledger: the recipe
+// belongs to the class, and what gates the launcher is the launcher's own unlock
+// and material cost.
+func ValidateAmmunition(tables *tuning.Tables, class model.Class, id string) (tuning.Ammunition, error) {
+	recipe, ok := tables.Ammunition[id]
+	if !ok {
+		return tuning.Ammunition{}, fmt.Errorf("%q is not ammunition you can build", id)
+	}
+	if recipe.Class != string(class) {
+		return tuning.Ammunition{}, fmt.Errorf("%s is %s ammunition", recipe.Name, recipe.Class)
+	}
+	return recipe, nil
 }
 
 // Shortfall is what is still missing to pay a cost from a carried inventory, and
@@ -196,6 +219,7 @@ func Apply(tables *tuning.Tables, weapon tuning.Weapon, ability tuning.Ability, 
 		weapon.MagazineSize = scaleCount(weapon.MagazineSize, modifiers[tuning.AttrMagazineSize])
 		weapon.ReloadMS = scaleCount(weapon.ReloadMS, modifiers[tuning.AttrReloadMS])
 	}
+	weapon = applyHandling(weapon, modifiers)
 	// A windup that scaled to zero would erase the telegraph its dodge vector
 	// depends on, so it keeps at least one millisecond of warning.
 	if ability.WindupMS > 0 {
@@ -216,6 +240,32 @@ func Apply(tables *tuning.Tables, weapon tuning.Weapon, ability tuning.Ability, 
 		ability.Projectile = &projectile
 	}
 	return weapon, ability
+}
+
+// applyHandling scales a gun's gunplay: how far the muzzle walks, how wide it
+// throws standing and moving, and how freely a scoped body may move. The recoil
+// pattern and the scope are copied before they are scaled, for the same reason
+// the projectile is: both are read straight off the shared table row, and
+// scaling one in place would retune the row for every other character carrying
+// the same category.
+func applyHandling(weapon tuning.Weapon, modifiers map[string]float64) tuning.Weapon {
+	if modifier := modifiers[tuning.AttrRecoilDegrees]; modifier != 0 && len(weapon.Recoil.Pattern) > 0 {
+		pattern := make([]float64, len(weapon.Recoil.Pattern))
+		for index, degrees := range weapon.Recoil.Pattern {
+			pattern[index] = degrees * modifier
+		}
+		weapon.Recoil.Pattern = pattern
+	}
+	weapon.Spread.StandingDegrees = scale(weapon.Spread.StandingDegrees, modifiers[tuning.AttrSpreadDegrees])
+	weapon.Spread.MovingDegrees = scale(weapon.Spread.MovingDegrees, modifiers[tuning.AttrMoveSpreadDegrees])
+	if modifier := modifiers[tuning.AttrScopeMovement]; modifier != 0 && weapon.Scoped() {
+		scope := *weapon.Scope
+		// A scope that let its user move as freely as an unscoped one would erase
+		// the committed vulnerability the whole mode is balanced on.
+		scope.MovementMultiplier = math.Min(0.95, scope.MovementMultiplier*modifier)
+		weapon.Scope = &scope
+	}
+	return weapon
 }
 
 // scaleCost charges what the components made one use cost. A magazine spends

@@ -19,7 +19,9 @@ export interface Slot { index: number; kind: SlotKind; id: string; name: string;
 export function equippedWeapon(id: string, items: readonly CraftedItem[]): { row: string; item?: CraftedItem } | undefined {
   const item = items.find((owned) => owned.id === id);
   if (item) return weapons[item.weapon] ? { row: item.weapon, item } : undefined;
-  return weapons[id] ? { row: id } : undefined;
+  // A row the economy withholds has no stock configuration: it can only be
+  // carried as an instance that was actually built.
+  return weapons[id] && !weapons[id]!.requires_craft ? { row: id } : undefined;
 }
 
 /** Selectable action-bar slots, bound to 1–6. One width for both classes. */
@@ -88,7 +90,7 @@ export function equippable(characterClass: CharacterClass, ledger: Ledger, kind:
   if (kind === "weapon") {
     // Stock rows first, then the crafted instances of them, so the plain
     // configuration stays the deterministic default.
-    const stock = Object.keys(weapons).filter((id) => weapons[id]!.class === characterClass && owns(id)).sort();
+    const stock = Object.keys(weapons).filter((id) => weapons[id]!.class === characterClass && !weapons[id]!.requires_craft && owns(id)).sort();
     return [...stock, ...equippableItems(characterClass, ledger, items).map((item) => item.id)];
   }
   if (kind === "gadget") return Object.keys(gadgets).filter((id) => gadgets[id]!.class === characterClass && owns(id)).sort();
@@ -122,7 +124,11 @@ export function affinityShortfall(equipped: string[], index: number): number {
 export function loadoutProblem(characterClass: CharacterClass, ledger: Ledger, set: LoadoutSet, items: readonly CraftedItem[] = []): string | undefined {
   const held = equippedWeapon(set.weapon, items);
   const weapon = held ? weapons[held.row] : undefined;
-  if (!weapon || !held) return "Choose a weapon.";
+  if (!weapon || !held) {
+    const withheld = weapons[set.weapon];
+    if (withheld?.requires_craft) return `${withheld.name} has to be built before it can be carried.`;
+    return "Choose a weapon.";
+  }
   if (weapon.class !== characterClass) return `${weapon.name} is a ${weapon.class} weapon.`;
   if (!ledger.has(held.row)) return `You have not unlocked ${weapon.name}.`;
   const equipped = characterClass === "gunslinger" ? set.gadgets : set.spells;

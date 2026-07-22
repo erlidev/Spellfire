@@ -3,6 +3,7 @@
 // simulation, the prediction constants, and the renderer together. Nothing in
 // web/src may re-declare a balance number that exists in a table.
 import abilitiesData from "../../data/tuning/abilities.json";
+import ammunitionData from "../../data/tuning/ammunition.json";
 import biomesData from "../../data/tuning/biomes.json";
 import combatData from "../../data/tuning/combat.json";
 import effectsData from "../../data/tuning/effects.json";
@@ -36,14 +37,21 @@ export interface WorldTable { radius: number; spawn_radius: number; danger_bands
 export interface PlayerBody { speed: number; max_mana: number; mana_regen: number }
 export interface Dash { distance: number; duration_ms: number; cooldown_ms: number }
 export interface DamageBand { name: string; damage_per_hit: number; target_ttk_seconds: number; ttk_tolerance_seconds: number }
-export interface CombatTable { roles: string[]; dodge_vectors: string[]; player: PlayerBody; dash: Dash; damage_bands: Record<string, DamageBand> }
+export interface WeightClass { name: string; movement_multiplier: number; recoil_multiplier: number; move_spread_multiplier: number }
+export interface CombatTable { roles: string[]; dodge_vectors: string[]; player: PlayerBody; dash: Dash; weight_classes: Record<string, WeightClass>; damage_bands: Record<string, DamageBand> }
 export interface Element { name: string; primary_role: string; secondary: string; character: string }
-export interface Projectile { kind: string; speed: number; life_seconds: number; radius: number; silhouette: string }
-export interface Cost { kind: "none" | "ammo" | "mana"; amount: number }
+export interface Projectile { kind: string; speed: number; life_seconds: number; radius: number; silhouette: string; pellets?: number; pellet_spread_degrees?: number; hitscan_range?: number; max_range?: number; falloff_start?: number; falloff_min?: number }
+export interface Cost { kind: "none" | "ammo" | "mana" | "material"; material?: string; amount: number }
 export interface Telegraph { shape: "circle" | "cone" | "line" | "ring"; radius?: number; length?: number; width?: number; angle_degrees?: number; active_ms: number; resolved_ms: number }
-export interface Ability { name: string; cost: Cost; interval_ms: number; cooldown_ms: number; windup_ms?: number; telegraph?: Telegraph; dodge_vector?: string; damage_band?: string; projectile?: Projectile; effects?: string[] }
+export interface Blast { radius: number; effects?: string[] }
+export interface Guard { arc_degrees: number; movement_multiplier: number }
+export interface Ability { name: string; cost: Cost; interval_ms: number; cooldown_ms: number; windup_ms?: number; telegraph?: Telegraph; dodge_vector?: string; damage_band?: string; projectile?: Projectile; effects?: string[]; requires_scope?: boolean; blast?: Blast; guard?: Guard }
 export interface Effect { name: string; kind: string; stacking: string; duration_ms: number; tick_ms?: number; damage_band?: string; damage_fraction?: number; speed_multiplier?: number; speed?: number; absorb_hits?: number }
-export interface Weapon { name: string; class: CharacterClass; blueprint: string; category: string; starter?: boolean; unlock_level: number; magazine_size?: number; reload_ms?: number; ability?: string; spell?: string }
+export interface Recoil { pattern: number[]; recovery_ms: number }
+export interface Spread { standing_degrees: number; moving_degrees: number }
+export interface Scope { movement_multiplier: number; spread_multiplier: number; view_bonus: number }
+export interface Weapon { name: string; class: CharacterClass; blueprint: string; category: string; starter?: boolean; unlock_level: number; magazine_size?: number; reload_ms?: number; ability?: string; spell?: string; weight?: string; recoil?: Recoil; spread?: Spread; scope?: Scope; cost?: Record<string, number>; requires_craft?: boolean }
+export interface Ammunition { name: string; class: CharacterClass; material: string; count: number; cost: Record<string, number> }
 export interface Spell { name: string; element: string; tier: number; starter?: boolean; unlock_level: number; ability: string }
 export interface Gadget { name: string; class: CharacterClass; starter?: boolean; unlock_level: number; ability: string }
 export interface ProgressionTable { max_level: number; base_xp: number; growth: number; sources: Record<string, number>; crafted_item_capacity: number; starter_kit: { unlocks: number } }
@@ -69,6 +77,7 @@ export const effects = effectsData as Record<string, Effect>;
 export const weapons = weaponsData as Record<string, Weapon>;
 export const spells = spellsData as Record<string, Spell>;
 export const gadgets = gadgetsData as Record<string, Gadget>;
+export const ammunition = ammunitionData as Record<string, Ammunition>;
 export const loadoutTable = loadoutData as LoadoutTable;
 export const progression = progressionData as ProgressionTable;
 export const components = componentsData as ComponentsTable;
@@ -133,10 +142,49 @@ function damageBand(band: string): DamageBand {
   return row;
 }
 
-/** The resource the HUD meters: the equipped magazine, or mana when it has none. */
-export function resourceMax(weapon: Weapon | undefined): { label: string; max: number } {
-  if (weapon?.magazine_size) return { label: "Ammo", max: weapon.magazine_size };
-  return { label: "Mana", max: combat.player.max_mana };
+/**
+ * The resource the HUD meters: the equipped magazine, the crafted ammunition a
+ * weapon spends instead of one, or mana when it has neither.
+ */
+export function resourceMax(weapon: Weapon | undefined): { label: string; max: number; capped: boolean } {
+  if (weapon?.magazine_size) return { label: "Ammo", max: weapon.magazine_size, capped: true };
+  const spent = weapon ? specialAmmunition(weapon) : undefined;
+  // Crafted ammunition has no magazine to fill: the meter shows what is carried,
+  // scaled against one batch so an empty launcher reads as empty.
+  if (spent) return { label: materialLabel(spent), max: batchSize(spent), capped: false };
+  return { label: "Mana", max: combat.player.max_mana, capped: true };
+}
+
+/** How many rounds one build of a material yields, and one when nothing does. */
+function batchSize(material: string): number {
+  for (const recipe of Object.values(ammunition)) if (recipe.material === material) return recipe.count;
+  return 1;
+}
+
+/** The carried material a weapon spends per shot, for a weapon that has no magazine. */
+export function specialAmmunition(weapon: Weapon): string | undefined {
+  const ability = weapon.ability ? abilities[weapon.ability] : undefined;
+  return ability?.cost.kind === "material" ? ability.cost.material : undefined;
+}
+
+function materialLabel(id: string): string { return materials.materials[id]?.name ?? id; }
+
+/** The handling class a weapon is balanced on; a staff scales nothing. */
+export function weightOf(weapon: Weapon | undefined): WeightClass {
+  const weight = weapon?.weight ? combat.weight_classes[weapon.weight] : undefined;
+  return weight ?? { name: "", movement_multiplier: 1, recoil_multiplier: 1, move_spread_multiplier: 1 };
+}
+
+/**
+ * What the equipped kit does to movement: weight class, scope, and a raised
+ * shield. Prediction applies exactly this, and so does the server — a mismatch
+ * would rubber-band every scoped step.
+ */
+export function handlingScale(weapon: Weapon | undefined, guard: Guard | undefined, scoped: boolean, guarding: boolean): number {
+  let scale = weightOf(weapon).movement_multiplier;
+  if (scoped && weapon?.scope) scale *= weapon.scope.movement_multiplier;
+  if (guarding && guard) scale *= guard.movement_multiplier;
+  return scale;
 }
 
 // Snapshots carry only a projectile's kind, so the renderer resolves its shape

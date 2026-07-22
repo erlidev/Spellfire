@@ -42,8 +42,12 @@ describe("shared tuning tables", () => {
   });
 
   it("meters the resource the equipped weapon actually spends", () => {
-    expect(resourceMax(starterWeapon("gunslinger"))).toEqual({ label: "Ammo", max: weapons["starter-rifle"]!.magazine_size });
-    expect(resourceMax(starterWeapon("mage"))).toEqual({ label: "Mana", max: combat.player.max_mana });
+    const gun = starterWeapon("gunslinger");
+    expect(resourceMax(gun)).toEqual({ label: "Ammo", max: gun.magazine_size, capped: true });
+    expect(resourceMax(starterWeapon("mage"))).toEqual({ label: "Mana", max: combat.player.max_mana, capped: true });
+    // A weapon that spends crafted ammunition meters what it carries instead of
+    // a magazine, so the HUD never shows a reload that will never come.
+    expect(resourceMax(weapons["field-launcher"])).toMatchObject({ label: "Rocket", capped: false });
   });
 
   it("resolves a projectile silhouette from the kind a snapshot carries", () => {

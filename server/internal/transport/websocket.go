@@ -112,6 +112,8 @@ func (h *WebSocket) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			h.engine.Craft(client.PlayerID, game.CraftRequest{
 				Weapon: message.Craft.Weapon, Components: message.Craft.Components,
 			})
+		case protocol.ClientAmmunition:
+			h.engine.CraftAmmunition(client.PlayerID, message.Ammunition)
 		}
 	}
 }

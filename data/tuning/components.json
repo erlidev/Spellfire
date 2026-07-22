@@ -14,65 +14,65 @@
       "name": "Muzzle brake",
       "blueprint": "gun",
       "slot": "muzzle",
-      "effect": "Rounds leave the barrel faster. The heavier muzzle makes reloads slower.",
+      "effect": "Rounds leave the barrel faster and the muzzle settles between shots. The heavier muzzle makes reloads slower.",
       "cost": { "salvaged-plate": 4 },
-      "modifiers": { "projectile_speed": 1.15, "reload_ms": 1.1 }
+      "modifiers": { "projectile_speed": 1.15, "reload_ms": 1.1, "recoil_degrees": 0.7 }
     },
     "suppressor": {
       "name": "Suppressor",
       "blueprint": "gun",
       "slot": "muzzle",
-      "effect": "Subsonic rounds travel more slowly but stay in flight far longer.",
+      "effect": "Subsonic rounds travel more slowly but stay in flight far longer, and the weapon wanders less while you move.",
       "cost": { "salvaged-plate": 3, "tempered-plate": 1 },
-      "modifiers": { "projectile_speed": 0.85, "projectile_life": 1.4 }
+      "modifiers": { "projectile_speed": 0.85, "projectile_life": 1.4, "move_spread_degrees": 0.8 }
     },
     "long-barrel": {
       "name": "Long barrel",
       "blueprint": "gun",
       "slot": "barrel",
-      "effect": "A longer bore drives rounds out much faster, but tightens them into a thinner shot that is easier to miss with.",
+      "effect": "A longer bore drives rounds out much faster and groups the standing shot, but tightens them into a thinner shot that is easier to miss with.",
       "cost": { "salvaged-plate": 5, "tempered-plate": 2 },
-      "modifiers": { "projectile_speed": 1.3, "projectile_radius": 0.8 }
+      "modifiers": { "projectile_speed": 1.3, "projectile_radius": 0.8, "spread_degrees": 0.7 }
     },
     "short-barrel": {
       "name": "Short barrel",
       "blueprint": "gun",
       "slot": "barrel",
-      "effect": "A stubby bore handles quickly and reloads fast, giving up muzzle velocity for it.",
+      "effect": "A stubby bore handles quickly, reloads fast, and stays steadier on the move, giving up muzzle velocity for it.",
       "cost": { "salvaged-plate": 3 },
-      "modifiers": { "projectile_speed": 0.85, "reload_ms": 0.8 }
+      "modifiers": { "projectile_speed": 0.85, "reload_ms": 0.8, "move_spread_degrees": 0.75 }
     },
     "ranged-optic": {
       "name": "Ranged optic",
       "blueprint": "gun",
       "slot": "scope",
-      "effect": "Shots stay in flight much longer, so they reach targets further out.",
+      "effect": "Shots stay in flight much longer, so they reach targets further out, and the sight is light enough to keep moving while scoped.",
       "cost": { "salvaged-plate": 3, "tempered-plate": 3 },
-      "modifiers": { "projectile_life": 1.4 }
+      "modifiers": { "projectile_life": 1.4, "scope_movement_multiplier": 1.25 }
     },
     "close-optic": {
       "name": "Close optic",
       "blueprint": "gun",
       "slot": "scope",
-      "effect": "A wide bead makes shots easier to land up close, at the cost of how far they carry.",
+      "effect": "A wide bead makes shots easier to land up close and steadier on the move, at the cost of how far they carry.",
       "cost": { "salvaged-plate": 2 },
-      "modifiers": { "projectile_radius": 1.25, "projectile_life": 0.8 }
+      "modifiers": { "projectile_radius": 1.25, "projectile_life": 0.8, "move_spread_degrees": 0.8 }
     },
     "match-trigger": {
       "name": "Match trigger",
       "blueprint": "gun",
       "slot": "trigger",
-      "effect": "A consistent break makes every shot land a little wider. The mechanism is slower to clear on a reload.",
+      "effect": "A consistent break makes every shot land a little wider and groups the standing shot tightly. The mechanism is slower to clear on a reload.",
       "cost": { "tempered-plate": 3 },
-      "modifiers": { "projectile_radius": 1.15, "reload_ms": 1.15 }
+      "modifiers": { "projectile_radius": 1.15, "reload_ms": 1.15, "spread_degrees": 0.7 }
     },
     "light-trigger": {
       "name": "Light trigger",
       "blueprint": "gun",
       "slot": "trigger",
-      "effect": "A light pull gets the weapon back into action faster, and sends rounds out slightly slower.",
+      "effect": "A light pull gets the weapon back into action faster and sends rounds out slightly slower, and the weapon kicks harder each shot.",
       "cost": { "salvaged-plate": 2, "tempered-plate": 1 },
-      "modifiers": { "reload_ms": 0.8, "projectile_speed": 0.9 }
+      "modifiers": { "reload_ms": 0.8, "projectile_speed": 0.9, "recoil_degrees": 1.2 }
     },
     "extended-magazine": {
       "name": "Extended magazine",

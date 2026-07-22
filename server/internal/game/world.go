@@ -25,6 +25,10 @@ const (
 	ButtonDash     uint32 = 32
 	ButtonReload   uint32 = 64
 	ButtonInteract uint32 = 128
+	// ButtonScope holds the committed aiming mode of a weapon that has one. It
+	// is held rather than toggled, so the vulnerability it buys accuracy with is
+	// always a deliberate, ongoing choice.
+	ButtonScope uint32 = 256
 )
 
 // Tuning is the simulation's runtime view of the versioned tables. No balance
@@ -107,8 +111,20 @@ type Player struct {
 	PreviousButtons                 uint32
 	NextFire, DashReady, ReloadEnds time.Time
 	Ammo                            int
-	DashDirection                   Vec
-	DashTicksLeft                   int
+	// Shot is the position in the equipped weapon's recoil pattern, and LastShot
+	// when the muzzle last moved: RecoveryMS of quiet returns the pattern to its
+	// first entry, so burst discipline is what controls a gun. Fired is the
+	// body's total shot count and seeds the move-spread draw, which keeps spread
+	// reproducible for a test while staying unpredictable to a player.
+	Shot     int
+	Fired    uint64
+	LastShot time.Time
+	// Scoped and Guarding are the two committed stances. Both are derived from
+	// the held input every tick rather than toggled, and both reach the wire so
+	// an opponent can see the commitment they are being charged for.
+	Scoped, Guarding bool
+	DashDirection    Vec
+	DashTicksLeft    int
 	// Cooldowns is each ability's own lockout, keyed by ability ID, alongside
 	// the global cadence gate NextFire holds.
 	Cooldowns map[string]time.Time
@@ -155,6 +171,22 @@ type Projectile struct {
 	// Effects are the statuses a hit applies, carried from the ability that
 	// launched it so the resolver needs no lookup back to the shooter's kit.
 	Effects []string
+	// Spec is the delivery shape the ability launched this with, already scaled
+	// by whatever components the weapon carries. It is carried rather than looked
+	// up so a crafted weapon's falloff and range are the ones its own round flew
+	// with, and Travelled is how far it has flown against them.
+	Spec      tuning.Projectile
+	Travelled float64
+	// Blast is the area an impact resolves into, and BlastEffects what that area
+	// applies. Both are nil on an ordinary round.
+	Blast        *tuning.Blast
+	BlastEffects []string
+}
+
+// hitDamage is what this round is worth where it currently is: the band's
+// damage after distance falloff.
+func (p *Projectile) hitDamage() float64 {
+	return p.Damage * p.Spec.DamageScale(p.Travelled)
 }
 
 type historySample struct {
@@ -566,7 +598,7 @@ func (w *World) Craft(id string, request CraftRequest, itemID string) (model.Cra
 	if err := crafting.Validate(w.tuning.Tables, p.Class, w.inventory(p), request.Weapon, components); err != nil {
 		return model.CraftedItem{}, err
 	}
-	cost := crafting.Cost(w.tuning.Tables, components)
+	cost := crafting.Cost(w.tuning.Tables, request.Weapon, components)
 	if short := crafting.Shortfall(cost, p.Materials); len(short) > 0 {
 		return model.CraftedItem{}, w.shortfallError(short)
 	}
@@ -574,6 +606,35 @@ func (w *World) Craft(id string, request CraftRequest, itemID string) (model.Cra
 	item := model.CraftedItem{ID: itemID, CharacterID: p.ID, Weapon: request.Weapon, Components: components}
 	p.Items = append(p.Items, item)
 	return item.Clone(), nil
+}
+
+// CraftAmmunition builds one batch of special ammunition and charges its
+// materials. It runs the same gates a weapon craft does — safe zone, a live
+// recipe for the class, and materials actually carried — and lands in the same
+// carried inventory the ability that fires it spends from. Unlike a weapon it
+// leaves no item and no capacity pressure: what it makes is a finite stack that
+// the launcher burns back down.
+func (w *World) CraftAmmunition(id, recipeID string) (map[string]int, error) {
+	p := w.players[id]
+	if p == nil {
+		return nil, ErrCraftingUnavailable
+	}
+	if !p.Alive || p.Lingering() || p.AdminSpawned {
+		return nil, ErrCraftingUnavailable
+	}
+	if !w.InSafety(p) {
+		return nil, ErrCraftingLocked
+	}
+	recipe, err := crafting.ValidateAmmunition(w.tuning.Tables, p.Class, recipeID)
+	if err != nil {
+		return nil, err
+	}
+	if short := crafting.Shortfall(recipe.Cost, p.Materials); len(short) > 0 {
+		return nil, w.shortfallError(short)
+	}
+	crafting.Spend(p.Materials, recipe.Cost)
+	p.Materials[recipe.Material] += recipe.Count
+	return p.CarriedMaterials(), nil
 }
 
 // shortfallError names what is missing and how much of it, because "you need
@@ -745,6 +806,7 @@ func (w *World) stepPlayer(p *Player, now time.Time, dt float64) {
 	// damage, and neither moves nor fires until the logout window closes.
 	if !p.Alive || p.Lingering() {
 		p.Velocity, p.DashTicksLeft = Vec{}, 0
+		p.Scoped, p.Guarding = false, false
 		p.Acknowledged = p.Input.Sequence
 		return
 	}
@@ -775,6 +837,11 @@ func (w *World) stepPlayer(p *Player, now time.Time, dt float64) {
 	// A stun suppresses everything the body does; a root only takes its
 	// movement, leaving it able to aim, reload, and act.
 	stunned, rooted := w.stunned(p), w.rooted(p)
+	// The two committed stances are derived from held input every tick, so
+	// nothing can be left raised by a dropped frame. A stun drops both.
+	guard, _ := w.guard(p)
+	p.Guarding = guard != nil && !stunned && p.Input.Buttons&ButtonFire != 0
+	p.Scoped = !stunned && !p.Guarding && p.Input.Buttons&ButtonScope != 0 && w.scope(p) != nil
 	if p.Input.Buttons&ButtonDash != 0 && p.PreviousButtons&ButtonDash == 0 && !now.Before(p.DashReady) && !stunned && !rooted && p.Mass >= 0 {
 		p.DashDirection = move
 		if p.DashDirection.LengthSq() == 0 {
@@ -796,7 +863,7 @@ func (w *World) stepPlayer(p *Player, now time.Time, dt float64) {
 		p.Velocity = p.DashDirection.Mul(w.tuning.dashSpeed())
 		p.DashTicksLeft--
 	default:
-		p.Velocity = move.Mul(w.tuning.PlayerSpeed * p.SpeedMultiplier * w.movementScale(p))
+		p.Velocity = move.Mul(w.tuning.PlayerSpeed * p.SpeedMultiplier * w.movementScale(p) * w.handlingScale(p))
 	}
 	p.Position = w.moveCircle(p.Position, p.Velocity.Mul(dt), p.circleRadius())
 	if p.Class == model.Mage {
@@ -812,7 +879,9 @@ func (w *World) stepPlayer(p *Player, now time.Time, dt float64) {
 			p.ReloadEnds = now.Add(weapon.ReloadDuration())
 		}
 	}
-	if p.Input.Buttons&ButtonFire != 0 && !stunned {
+	// A raised shield locks fire: the use button is what holds it up, so it
+	// cannot also be what shoots through it.
+	if p.Input.Buttons&ButtonFire != 0 && !stunned && !p.Guarding {
 		w.useAbility(p, now)
 	}
 	p.PreviousButtons = p.Input.Buttons
@@ -847,12 +916,13 @@ func (w *World) advanceProjectile(projectile *Projectile, dt float64, at time.Ti
 			continue
 		}
 		if item.intersectsSegment(from, to, projectile.circleRadius()) {
-			item.TakeDamage(projectile.Damage)
+			item.TakeDamage(projectile.hitDamage())
+			w.resolveBlast(projectile, from, at)
 			return true
 		}
 	}
-	owner := w.players[projectile.OwnerID]
-	for id, target := range w.players {
+	for _, id := range sortedPlayerIDs(w.players) {
+		target := w.players[id]
 		if id == projectile.OwnerID || !target.Alive {
 			continue
 		}
@@ -863,17 +933,39 @@ func (w *World) advanceProjectile(projectile *Projectile, dt float64, at time.Ti
 		if !segmentCircle(from, to, position, projectile.circleRadius()+target.circleRadius()) {
 			continue
 		}
+		// A raised shield stops what flies into its arc without stopping what
+		// goes off around it, so the round is consumed and any blast it carries
+		// still resolves where it was stopped.
+		if w.blockedBy(target, from) {
+			w.resolveBlast(projectile, from, at)
+			return true
+		}
 		// PvP protection covers the hit whole: no damage, and no status either.
 		// A slow or a knockback landed from inside safety would be exactly the
 		// offensive use of a safe zone the invariant forbids.
-		if owner != nil && owner.Position.LengthSq() > w.tuning.PvPRadius*w.tuning.PvPRadius && position.LengthSq() > w.tuning.PvPRadius*w.tuning.PvPRadius {
-			w.damage(target, projectile.Damage, projectile.OwnerID, at)
+		if w.hostileReach(w.players[projectile.OwnerID], position) {
+			w.damage(target, projectile.hitDamage(), projectile.OwnerID, at)
 			w.applyEffects(target, projectile.Effects, projectile.OwnerID, to.Sub(from), at)
 		}
+		w.resolveBlast(projectile, from, at)
 		return true
 	}
 	projectile.Position = to
+	projectile.Travelled += math.Sqrt(to.Sub(from).LengthSq())
+	// A hard maximum range stops a round the way the rim does: it is the
+	// weapon's reach, not its lifetime, and beyond it nothing lands at all.
+	if projectile.Spec.MaxRange > 0 && projectile.Travelled >= projectile.Spec.MaxRange {
+		return true
+	}
 	return to.LengthSq() > w.tuning.WorldRadius*w.tuning.WorldRadius
+}
+
+// resolveBlast detonates an impact that carries an area, and does nothing for
+// an ordinary round.
+func (w *World) resolveBlast(projectile *Projectile, at Vec, when time.Time) {
+	if projectile.Blast != nil {
+		w.detonate(projectile, at, when)
+	}
 }
 
 // damage is the one path health is lost through: shields absorb first, the

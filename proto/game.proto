@@ -5,7 +5,7 @@ package spellfire.v1;
 // WebSocket payloads are binary protobuf. The first field is the message kind,
 // allowing both implementations to decode only the relevant payload fields.
 message ClientEnvelope {
-  enum Kind { UNKNOWN = 0; JOIN = 1; INPUT = 2; RESPAWN = 3; PING = 4; LOADOUT = 5; CRAFT = 6; }
+  enum Kind { UNKNOWN = 0; JOIN = 1; INPUT = 2; RESPAWN = 3; PING = 4; LOADOUT = 5; CRAFT = 6; AMMUNITION = 7; }
   Kind kind = 1;
   string session_token = 2;
   string character_id = 3;
@@ -13,6 +13,7 @@ message ClientEnvelope {
   uint64 client_time_ms = 5;
   Loadout loadout = 6; // LOADOUT only: the requested equipped set
   CraftRequest craft = 7; // CRAFT only: the requested build
+  string ammunition = 8; // AMMUNITION only: the special-ammunition recipe to build
 }
 
 // One requested build: the weapon category and the component filling each slot.
@@ -42,7 +43,7 @@ message MaterialStack {
 
 message Input {
   uint32 sequence = 1;
-  uint32 buttons = 2; // UP=1, DOWN=2, LEFT=4, RIGHT=8, FIRE=16, DASH=32, RELOAD=64, INTERACT=128
+  uint32 buttons = 2; // UP=1, DOWN=2, LEFT=4, RIGHT=8, FIRE=16, DASH=32, RELOAD=64, INTERACT=128, SCOPE=256
   float aim_x = 3;
   float aim_y = 4;
   uint64 client_time_ms = 5;
@@ -142,6 +143,11 @@ message Entity {
   float mass = 31; // -1 means immovable
   bool deleting = 32; // entity has left gameplay and is fading from the world
   float delete_progress = 33; // normalized graceful-removal fade progress
+  // The two committed stances. Both are visible to everyone: the vulnerability
+  // a scope buys accuracy with, and the arc a raised shield covers, are what
+  // an opponent plays around.
+  bool scoped = 34;
+  bool guarding = 35;
 }
 
 message CollisionObject {

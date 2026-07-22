@@ -354,6 +354,60 @@ func TestValidationRejectsBrokenTables(t *testing.T) {
 				}
 			},
 		},
+		{
+			name: "a gun with no recoil pattern", file: "weapons.json", want: "every gun kicks",
+			mutate: func(document map[string]any) {
+				document["starter-rifle"].(map[string]any)["recoil"] = map[string]any{"pattern": []any{}, "recovery_ms": 400.0}
+			},
+		},
+		{
+			name: "a recoil pattern that never recovers", file: "weapons.json", want: "never recovers",
+			mutate: func(document map[string]any) {
+				document["starter-rifle"].(map[string]any)["recoil"].(map[string]any)["recovery_ms"] = 0.0
+			},
+		},
+		{
+			name: "firing on the move costing no accuracy", file: "weapons.json", want: "has to cost accuracy",
+			mutate: func(document map[string]any) {
+				document["starter-rifle"].(map[string]any)["spread"].(map[string]any)["moving_degrees"] = 0.1
+			},
+		},
+		{
+			name: "a weight class that speeds its carrier up", file: "combat.json", want: "never speeds one up",
+			mutate: func(document map[string]any) {
+				document["weight_classes"].(map[string]any)["heavy"].(map[string]any)["movement_multiplier"] = 1.4
+			},
+		},
+		{
+			name: "hitscan without a scope to commit to", file: "abilities.json", want: "no counterplay at all",
+			mutate: func(document map[string]any) {
+				document["sniper-shot"].(map[string]any)["requires_scope"] = false
+			},
+		},
+		{
+			name: "a shield that also deals damage", file: "abilities.json", want: "locks fire while it is up",
+			mutate: func(document map[string]any) {
+				document["riot-shield-raise"].(map[string]any)["damage_band"] = "standard"
+			},
+		},
+		{
+			name: "a withheld category that costs nothing", file: "weapons.json", want: "nothing gates it",
+			mutate: func(document map[string]any) { delete(document["long-sniper"].(map[string]any), "cost") },
+		},
+		{
+			name: "a basic-set weapon that has to be built first", file: "weapons.json", want: "unusable weapon",
+			mutate: func(document map[string]any) { document["starter-rifle"].(map[string]any)["requires_craft"] = true },
+		},
+		{
+			name: "special ammunition nothing can build", file: "ammunition.json", want: "no ammunition recipe produces it",
+			mutate: func(document map[string]any) { delete(document, "rocket") },
+		},
+		{
+			name: "a round that pays for itself", file: "ammunition.json", want: "costs the very material it produces",
+			mutate: func(document map[string]any) {
+				document["rocket"].(map[string]any)["cost"] = map[string]any{"rocket": 1.0}
+			},
+		},
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {

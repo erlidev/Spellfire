@@ -11,7 +11,7 @@ import (
 func TestWindupLocksTelegraphGeometryAndDelaysDelivery(t *testing.T) {
 	w, now := testWorld()
 	mage := addTestPlayer(w, "mage", model.Mage, Vec{1200, 0}, now)
-	ability := starterAbility(w, model.Mage)
+	ability := equippedAbility(w, mage)
 	startMana := mage.Mana
 
 	fire(w, mage, 1, now)
@@ -69,7 +69,7 @@ func TestDeathCancelsPendingTelegraphWithResolutionFlash(t *testing.T) {
 	if telegraph.state(deathAt) != protocol.TelegraphResolved || !telegraph.Delivered {
 		t.Fatalf("cancelled telegraph = %#v", telegraph)
 	}
-	w.Step(now.Add(starterAbility(w, model.Mage).Windup()))
+	w.Step(now.Add(equippedAbility(w, mage).Windup()))
 	if ownedProjectiles(w, mage.ID) != 0 {
 		t.Fatal("a dead caster's pending action delivered")
 	}
@@ -82,7 +82,7 @@ func TestSnapshotCarriesTelegraphAndExpandedPlayerState(t *testing.T) {
 	mage.SquadID = "squad-a"
 	mage.LingerUntil = now.Add(time.Second)
 	mage.Effects = []ActiveEffect{{EffectID: "slow-test", ExpiresAt: now.Add(time.Second)}}
-	w.startTelegraph(mage.ID, "fire", mage.Position, Vec{1, 0}, starterAbility(w, model.Mage), now)
+	w.startTelegraph(mage.ID, "fire", mage.Position, Vec{1, 0}, equippedAbility(w, mage), now)
 
 	snapshot := w.SnapshotFor(viewer.ID, now.Add(100*time.Millisecond), protocol.ServerSnapshot)
 	var player, warning *protocol.Entity
