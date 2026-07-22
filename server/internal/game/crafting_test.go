@@ -3,34 +3,44 @@ package game
 import (
 	"testing"
 
+	"spellfire/server/internal/crafting"
 	"spellfire/server/internal/model"
 	"spellfire/server/internal/tuning"
 )
 
-// aGunComponent is a live component filling a slot of the gun blueprint, chosen
-// from the tables so a balance rename does not break these tests.
-func aGunComponent(t *testing.T, w *World, slot string) tuning.Component {
+func weaponBuild(t *testing.T, w *World, weaponID string) map[string]string {
 	t.Helper()
-	for _, id := range w.tuning.Tables.ComponentsFor("gun", slot) {
-		return w.tuning.Tables.Components.Components[id]
+	recipe := w.tuning.Tables.Components.Recipes[weaponID]
+	chosen := map[string]string{}
+	for _, slot := range w.tuning.Tables.Components.Blueprints[recipe.Blueprint].Slots {
+		if len(recipe.Slots[slot]) == 0 {
+			t.Fatalf("recipe %s has no %s option", weaponID, slot)
+		}
+		chosen[slot] = recipe.Slots[slot][0]
 	}
-	t.Fatalf("no component fills gun/%s", slot)
-	return tuning.Component{}
+	return chosen
+}
+
+func fundBuild(w *World, p *Player, weaponID string, chosen map[string]string) map[string]int {
+	cost := crafting.Cost(w.tuning.Tables, weaponID, chosen)
+	for material, count := range cost {
+		p.Materials[material] += count
+	}
+	return cost
 }
 
 func TestCraftSpendsMaterialsAndKeepsTheItem(t *testing.T) {
 	world, now := testWorld()
 	p := world.AddPlayer(model.Character{ID: "g1", Name: "Gun", Class: model.Gunslinger}, now)
 	p.Position = Vec{}
-	magazine := aGunComponent(t, world, "magazine")
-	for material, count := range magazine.Cost {
-		p.Materials[material] = count
-	}
-	item, err := world.Craft("g1", CraftRequest{Weapon: p.Loadout.Weapon, Components: map[string]string{"magazine": magazine.ID}}, "itm-test")
+	chosen := weaponBuild(t, world, p.Loadout.Weapon)
+	feed := world.tuning.Tables.Components.Components[chosen["feed"]]
+	fundBuild(world, p, p.Loadout.Weapon, chosen)
+	item, err := world.Craft("g1", CraftRequest{Weapon: p.Loadout.Weapon, Components: chosen}, "itm-test")
 	if err != nil {
 		t.Fatalf("an affordable craft inside the hub was refused: %v", err)
 	}
-	if item.Weapon != p.Loadout.Weapon || item.Components["magazine"] != magazine.ID {
+	if item.Weapon != p.Loadout.Weapon || item.Components["feed"] != feed.ID {
 		t.Fatalf("crafted item = %+v", item)
 	}
 	if len(p.Materials) != 0 {
@@ -51,7 +61,7 @@ func TestCraftSpendsMaterialsAndKeepsTheItem(t *testing.T) {
 	if !ok {
 		t.Fatal("an equipped crafted weapon resolved to nothing")
 	}
-	if modifier := magazine.Modifiers[tuning.AttrMagazineSize]; modifier != 0 && crafted.MagazineSize == stock.MagazineSize {
+	if modifier := feed.Modifiers[tuning.AttrMagazineSize]; modifier != 0 && crafted.MagazineSize == stock.MagazineSize {
 		t.Fatalf("a magazine component scaled by %g left %d rounds", modifier, crafted.MagazineSize)
 	}
 	// Committing the loadout reloads the weapon, so the magazine the body holds
@@ -66,18 +76,16 @@ func TestCraftSpendsMaterialsAndKeepsTheItem(t *testing.T) {
 func TestCraftIsRefusedOutsideSafety(t *testing.T) {
 	world, now := testWorld()
 	p := world.AddPlayer(model.Character{ID: "g1", Name: "Gun", Class: model.Gunslinger}, now)
-	magazine := aGunComponent(t, world, "magazine")
-	for material, count := range magazine.Cost {
-		p.Materials[material] = count
-	}
+	chosen := weaponBuild(t, world, p.Loadout.Weapon)
+	cost := fundBuild(world, p, p.Loadout.Weapon, chosen)
 	p.Position = Vec{X: world.tuning.SafeRadius + 10}
-	if _, err := world.Craft("g1", CraftRequest{Weapon: p.Loadout.Weapon, Components: map[string]string{"magazine": magazine.ID}}, "itm-test"); err != ErrCraftingLocked {
+	if _, err := world.Craft("g1", CraftRequest{Weapon: p.Loadout.Weapon, Components: chosen}, "itm-test"); err != ErrCraftingLocked {
 		t.Fatalf("crafting outside safety returned %v, want the safe-zone refusal", err)
 	}
 	if len(p.Items) != 0 {
 		t.Fatal("a refused craft left an item behind")
 	}
-	for material, count := range magazine.Cost {
+	for material, count := range cost {
 		if p.Materials[material] != count {
 			t.Fatalf("a refused craft spent %s", material)
 		}
@@ -90,14 +98,17 @@ func TestCraftRefusesAndSpendsNothingWhenMaterialsAreShort(t *testing.T) {
 	world, now := testWorld()
 	p := world.AddPlayer(model.Character{ID: "g1", Name: "Gun", Class: model.Gunslinger}, now)
 	p.Position = Vec{}
-	magazine := aGunComponent(t, world, "magazine")
-	for material, count := range magazine.Cost {
-		if count > 1 {
-			p.Materials[material] = count - 1
+	chosen := weaponBuild(t, world, p.Loadout.Weapon)
+	cost := fundBuild(world, p, p.Loadout.Weapon, chosen)
+	for material := range cost {
+		p.Materials[material]--
+		if p.Materials[material] == 0 {
+			delete(p.Materials, material)
 		}
+		break
 	}
 	carried := p.CarriedMaterials()
-	_, err := world.Craft("g1", CraftRequest{Weapon: p.Loadout.Weapon, Components: map[string]string{"magazine": magazine.ID}}, "itm-test")
+	_, err := world.Craft("g1", CraftRequest{Weapon: p.Loadout.Weapon, Components: chosen}, "itm-test")
 	if err == nil {
 		t.Fatal("a craft the character could not pay for succeeded")
 	}
@@ -111,18 +122,17 @@ func TestCraftRefusesAndSpendsNothingWhenMaterialsAreShort(t *testing.T) {
 	}
 }
 
-// A stock build is legal and free: the unlock ledger is what gates a category,
-// and components are what cost materials.
-func TestCraftAcceptsAStockBuild(t *testing.T) {
+// Weapon type comes from a complete arrangement; an empty generic blueprint is
+// not a free stock craft.
+func TestCraftRefusesAnIncompleteBlueprint(t *testing.T) {
 	world, now := testWorld()
 	p := world.AddPlayer(model.Character{ID: "m1", Name: "Mage", Class: model.Mage}, now)
 	p.Position = Vec{}
-	item, err := world.Craft("m1", CraftRequest{Weapon: p.Loadout.Weapon}, "itm-stock")
-	if err != nil {
-		t.Fatalf("a stock build was refused: %v", err)
+	if _, err := world.Craft("m1", CraftRequest{Weapon: p.Loadout.Weapon}, "itm-stock"); err == nil {
+		t.Fatal("an empty blueprint produced a staff")
 	}
-	if len(item.Components) != 0 {
-		t.Fatalf("a stock build stored components: %+v", item.Components)
+	if len(p.Items) != 0 {
+		t.Fatal("an incomplete craft left an item")
 	}
 }
 
@@ -132,20 +142,26 @@ func TestStaffComponentsChangeTheCastTheyDeliver(t *testing.T) {
 	world, now := testWorld()
 	p := world.AddPlayer(model.Character{ID: "m1", Name: "Mage", Class: model.Mage}, now)
 	p.Position = Vec{}
-	var core tuning.Component
-	for _, id := range world.tuning.Tables.ComponentsFor("staff", "core") {
+	var crystal tuning.Component
+	for _, id := range world.tuning.Tables.ComponentsFor("staff", "crystal") {
 		if row := world.tuning.Tables.Components.Components[id]; row.Modifiers[tuning.AttrCostAmount] != 0 {
-			core = row
+			crystal = row
 			break
 		}
 	}
-	if core.ID == "" {
-		t.Skip("no staff core changes what a cast costs")
+	if crystal.ID == "" {
+		t.Skip("no mana crystal changes what a cast costs")
 	}
-	for material, count := range core.Cost {
-		p.Materials[material] = count
+	chosen := weaponBuild(t, world, p.Loadout.Weapon)
+	chosen["crystal"] = crystal.ID
+	for _, id := range world.tuning.Tables.Components.Recipes[p.Loadout.Weapon].Slots["stave"] {
+		if stave := world.tuning.Tables.Components.Components[id]; stave.Tier >= crystal.Tier {
+			chosen["stave"] = id
+			break
+		}
 	}
-	item, err := world.Craft("m1", CraftRequest{Weapon: p.Loadout.Weapon, Components: map[string]string{"core": core.ID}}, "itm-staff")
+	fundBuild(world, p, p.Loadout.Weapon, chosen)
+	item, err := world.Craft("m1", CraftRequest{Weapon: p.Loadout.Weapon, Components: chosen}, "itm-staff")
 	if err != nil {
 		t.Fatalf("crafting a staff was refused: %v", err)
 	}
@@ -163,7 +179,7 @@ func TestStaffComponentsChangeTheCastTheyDeliver(t *testing.T) {
 		t.Fatal("an equipped crafted staff resolves to no ability")
 	}
 	if crafted.Cost.Amount == stock.Cost.Amount {
-		t.Fatalf("a core scaling mana cost by %g left it at %g", core.Modifiers[tuning.AttrCostAmount], crafted.Cost.Amount)
+		t.Fatalf("a crystal scaling mana cost by %g left it at %g", crystal.Modifiers[tuning.AttrCostAmount], crafted.Cost.Amount)
 	}
 	if crafted.DamageBand != stock.DamageBand {
 		t.Fatal("crafting moved the damage band, which is the one thing it may never do")
@@ -176,7 +192,9 @@ func TestCraftedItemsRejoinWithTheCharacter(t *testing.T) {
 	world, now := testWorld()
 	p := world.AddPlayer(model.Character{ID: "g1", Name: "Gun", Class: model.Gunslinger}, now)
 	p.Position = Vec{}
-	item, err := world.Craft("g1", CraftRequest{Weapon: p.Loadout.Weapon}, "itm-kept")
+	chosen := weaponBuild(t, world, p.Loadout.Weapon)
+	fundBuild(world, p, p.Loadout.Weapon, chosen)
+	item, err := world.Craft("g1", CraftRequest{Weapon: p.Loadout.Weapon, Components: chosen}, "itm-kept")
 	if err != nil {
 		t.Fatalf("craft: %v", err)
 	}
@@ -202,6 +220,27 @@ func TestCraftedItemsRejoinWithTheCharacter(t *testing.T) {
 	}
 }
 
+func TestPreRevampPartsResolveOntoLiveSlotsOnJoin(t *testing.T) {
+	world, now := testWorld()
+	legacy := model.CraftedItem{
+		ID: "itm-legacy", CharacterID: "g1", Weapon: "starter-rifle",
+		Components: map[string]string{"muzzle": "muzzle-brake", "magazine": "extended-magazine"},
+	}
+	p := world.AddPlayer(model.Character{ID: "g1", Name: "Gun", Class: model.Gunslinger, Items: []model.CraftedItem{legacy}}, now)
+	if len(p.Items) != 1 {
+		t.Fatalf("legacy item was lost: %+v", p.Items)
+	}
+	for slot, id := range p.Items[0].Components {
+		part := world.tuning.Tables.Components.Components[id]
+		if part.ID == "" || part.Slot != slot {
+			t.Fatalf("legacy component %q remained in stale slot %q", id, slot)
+		}
+	}
+	if p.Items[0].Components["barrel"] == "" || p.Items[0].Components["feed"] == "" {
+		t.Fatalf("legacy slots resolved to %+v", p.Items[0].Components)
+	}
+}
+
 // The material grant is developer-mode only, and the world still validates every
 // ID and bound rather than trusting the caller.
 func TestGrantMaterialsValidatesAgainstTheCatalog(t *testing.T) {
@@ -223,20 +262,21 @@ func TestGrantMaterialsValidatesAgainstTheCatalog(t *testing.T) {
 	}
 }
 
-// A stock build costs nothing, so without a ceiling a client could mint rows
-// forever. The capacity is also the outcome the crafting UI owes a full
-// inventory.
+// Crafted gear is permanent, so the capacity is the outcome the crafting UI
+// owes a full inventory.
 func TestCraftRefusesPastTheInventoryCapacity(t *testing.T) {
 	world, now := testWorld()
 	p := world.AddPlayer(model.Character{ID: "g1", Name: "Gun", Class: model.Gunslinger}, now)
 	p.Position = Vec{}
 	capacity := world.tuning.Tables.Progression.CraftedItemCapacity
+	chosen := weaponBuild(t, world, p.Loadout.Weapon)
 	for index := 0; index < capacity; index++ {
-		if _, err := world.Craft("g1", CraftRequest{Weapon: p.Loadout.Weapon}, "itm-"+string(rune('a'+index))); err != nil {
+		fundBuild(world, p, p.Loadout.Weapon, chosen)
+		if _, err := world.Craft("g1", CraftRequest{Weapon: p.Loadout.Weapon, Components: chosen}, "itm-"+string(rune('a'+index))); err != nil {
 			t.Fatalf("craft %d of %d was refused: %v", index+1, capacity, err)
 		}
 	}
-	if _, err := world.Craft("g1", CraftRequest{Weapon: p.Loadout.Weapon}, "itm-over"); err == nil {
+	if _, err := world.Craft("g1", CraftRequest{Weapon: p.Loadout.Weapon, Components: chosen}, "itm-over"); err == nil {
 		t.Fatalf("a %dth crafted weapon was accepted past the capacity of %d", capacity+1, capacity)
 	}
 }

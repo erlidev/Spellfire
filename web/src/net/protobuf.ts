@@ -99,8 +99,8 @@ function encodeComponentSlot(slot: string, component: string): Uint8Array {
 function encodeCraft(request: CraftRequest): Uint8Array {
   const writer = new Writer();
   writer.string(1, request.weapon);
-  // Only filled slots travel: an omitted slot is the stock part, which is a
-  // legal choice rather than a component reference to nothing.
+  // Only filled slots travel. The server rejects a request that leaves a
+  // required recipe blank rather than storing an empty component reference.
   for (const slot of Object.keys(request.components).sort()) {
     const component = request.components[slot];
     if (component) writer.message(2, encodeComponentSlot(slot, component));

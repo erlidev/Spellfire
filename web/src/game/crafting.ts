@@ -1,9 +1,9 @@
-// The client's view of slotted-blueprint crafting. It mirrors
-// server/internal/crafting so the menu can lay out slots, offer only fitting
-// components, price a build, and explain a shortfall before the round trip —
+// The client's view of recipe-blueprint crafting. It mirrors
+// server/internal/crafting so the menu can resolve parts, lay out required
+// blanks, price a build, and explain a shortfall before the round trip —
 // but the server remains the authority: a craft is only real once its Craft
 // reply confirms it, and only the server may spend a material.
-import { ammunition, components, materials, weapons, type Component, type Weapon } from "../tuning";
+import { ammunition, components, materials, weapons, type Component, type CraftRecipe, type Weapon } from "../tuning";
 import type { CharacterClass, CraftedItem, LoadoutSet } from "../types";
 import { locked, type Ledger, type LockedContent } from "./loadout";
 
@@ -29,20 +29,43 @@ export function buildableAmmunition(characterClass: CharacterClass): string[] {
 
 /** The component slots a weapon exposes, in blueprint order. */
 export function slotsOf(weaponID: string): string[] {
-  const weapon = weapons[weaponID];
-  return weapon ? components.blueprints[weapon.blueprint]?.slots ?? [] : [];
+  const recipe = components.recipes[weaponID];
+  return recipe ? components.blueprints[recipe.blueprint]?.slots ?? [] : [];
 }
 
-/** The components that fit one slot of a weapon, in stable order. */
-export function fitting(weaponID: string, slot: string): string[] {
-  const blueprint = weapons[weaponID]?.blueprint;
-  if (!blueprint) return [];
-  return Object.keys(components.components)
-    .filter((id) => components.components[id]!.blueprint === blueprint && components.components[id]!.slot === slot)
-    .sort();
+export function recipeOf(weaponID: string): CraftRecipe | undefined { return components.recipes[weaponID]; }
+
+/** The component recipes accepted by one blank, including staff tier rules. */
+export function fitting(weaponID: string, slot: string, chosen: Record<string, string> = {}): string[] {
+  const accepted = [...(components.recipes[weaponID]?.slots[slot] ?? [])];
+  if (components.recipes[weaponID]?.blueprint !== "staff") return accepted.sort();
+  const crystal = components.components[chosen.crystal ?? ""];
+  const stave = components.components[chosen.stave ?? ""];
+  return accepted.filter((id) => {
+    const part = components.components[id];
+    if (!part) return false;
+    if (slot === "stave" && crystal) return part.tier >= crystal.tier;
+    if (slot === "crystal" && stave) return stave.tier >= part.tier;
+    return true;
+  }).sort();
 }
 
 export function componentOf(id: string): Component | undefined { return components.components[id]; }
+
+/** The one recipe a complete arrangement resolves to; incomplete/unknown is undefined. */
+export function resultOf(chosen: Record<string, string>): string | undefined {
+  const matches = Object.keys(components.recipes).filter((weaponID) => {
+    const recipe = components.recipes[weaponID]!;
+    const slots = components.blueprints[recipe.blueprint]?.slots ?? [];
+    if (Object.keys(chosen).length !== slots.length || !slots.every((slot) => recipe.slots[slot]?.includes(chosen[slot] ?? ""))) return false;
+    if (recipe.blueprint === "staff") {
+      const crystal = components.components[chosen.crystal ?? ""], stave = components.components[chosen.stave ?? ""];
+      if (!crystal || !stave || stave.tier < crystal.tier) return false;
+    }
+    return true;
+  });
+  return matches.length === 1 ? matches[0] : undefined;
+}
 
 /** Display name of a material, falling back to its ID for unknown content. */
 export function materialName(id: string): string { return materials.materials[id]?.name ?? id; }
@@ -76,9 +99,8 @@ export function shortfall(required: Record<string, number>, carried: Record<stri
 }
 
 /**
- * Plain-language behaviour of a build, one line per filled slot in blueprint
- * order. This is what the crafting surface shows instead of a table of
- * multipliers — a rare part must never read as a higher power tier.
+ * Plain-language behavior of a build, one line per filled slot in blueprint
+ * order. This is what the crafting surface shows instead of raw multipliers.
  */
 export function describe(weaponID: string, chosen: Record<string, string>): string[] {
   const lines: string[] = [];

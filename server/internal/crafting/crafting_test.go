@@ -40,29 +40,42 @@ func component(t *testing.T, tables *tuning.Tables, blueprint, slot string) tuni
 	return tuning.Component{}
 }
 
+func build(t *testing.T, tables *tuning.Tables, weaponID string) map[string]string {
+	t.Helper()
+	recipe := tables.Components.Recipes[weaponID]
+	chosen := map[string]string{}
+	for _, slot := range tables.Components.Blueprints[recipe.Blueprint].Slots {
+		if len(recipe.Slots[slot]) == 0 {
+			t.Fatalf("recipe %s has no %s option", weaponID, slot)
+		}
+		chosen[slot] = recipe.Slots[slot][0]
+	}
+	return chosen
+}
+
 func TestCostSumsEveryFilledSlot(t *testing.T) {
 	tables := shipped(t)
-	muzzle := component(t, tables, "gun", "muzzle")
-	barrel := component(t, tables, "gun", "barrel")
-	cost := crafting.Cost(tables, "starter-rifle", map[string]string{"muzzle": muzzle.ID, "barrel": barrel.ID})
-	for material, count := range muzzle.Cost {
+	chosen := build(t, tables, "starter-rifle")
+	receiver := tables.Components.Components[chosen["receiver"]]
+	barrel := tables.Components.Components[chosen["barrel"]]
+	cost := crafting.Cost(tables, "starter-rifle", chosen)
+	for material, count := range receiver.Cost {
 		if cost[material] < count {
-			t.Fatalf("cost of %s = %d, want at least the muzzle's %d", material, cost[material], count)
+			t.Fatalf("cost of %s = %d, want at least the receiver's %d", material, cost[material], count)
 		}
 	}
 	// Two components naming one material must add rather than overwrite, or a
 	// build would be cheaper than the parts it is made of.
 	for material, count := range barrel.Cost {
-		want := count + muzzle.Cost[material]
-		if cost[material] != want {
-			t.Fatalf("cost of %s = %d, want %d", material, cost[material], want)
+		minimum := count + receiver.Cost[material]
+		if cost[material] < minimum {
+			t.Fatalf("cost of %s = %d, want at least %d", material, cost[material], minimum)
 		}
 	}
-	if len(crafting.Cost(tables, "starter-rifle", map[string]string{})) != 0 {
-		t.Fatal("a stock build of a free category costs materials")
+	if len(crafting.Cost(tables, "starter-rifle", chosen)) == 0 {
+		t.Fatal("a complete recipe costs no materials")
 	}
-	// A heavy category's own material cost is what gates it economically, so it
-	// is charged even when every slot is left stock.
+	// A heavy category's own chassis cost is independent of its required parts.
 	if len(crafting.Cost(tables, "long-sniper", map[string]string{})) == 0 {
 		t.Fatal("a heavy category costs nothing to build")
 	}
@@ -96,32 +109,82 @@ func TestSpendEmptiesStacksItExhausts(t *testing.T) {
 func TestValidateRefusesIncoherentRecipes(t *testing.T) {
 	tables := shipped(t)
 	gun, staff := starter(t, tables, "gunslinger"), starter(t, tables, "mage")
-	muzzle := component(t, tables, "gun", "muzzle")
-	core := component(t, tables, "staff", "core")
+	gunBuild, staffBuild := build(t, tables, gun.ID), build(t, tables, staff.ID)
+	receiver := component(t, tables, "gun", "receiver")
+	crystal := component(t, tables, "staff", "crystal")
 	inventory := everything(tables)
-	if err := crafting.Validate(tables, "gunslinger", inventory, gun.ID, map[string]string{"muzzle": muzzle.ID}); err != nil {
+	if err := crafting.Validate(tables, "gunslinger", inventory, gun.ID, gunBuild); err != nil {
 		t.Fatalf("a coherent gun was refused: %v", err)
 	}
-	if err := crafting.Validate(tables, "gunslinger", inventory, gun.ID, map[string]string{}); err != nil {
-		t.Fatalf("a stock build was refused: %v", err)
+	if result, err := crafting.Result(tables, gunBuild); err != nil || result != gun.ID {
+		t.Fatalf("gun parts resolved to %q: %v", result, err)
 	}
-	if err := crafting.Validate(tables, "gunslinger", inventory, gun.ID, map[string]string{"core": core.ID}); err == nil {
+	broken := build(t, tables, gun.ID)
+	delete(broken, "barrel")
+	if err := crafting.Validate(tables, "gunslinger", inventory, gun.ID, broken); err == nil {
+		t.Fatal("a gun with an empty blank was accepted")
+	}
+	gunBuild["crystal"] = crystal.ID
+	if err := crafting.Validate(tables, "gunslinger", inventory, gun.ID, gunBuild); err == nil {
 		t.Fatal("a gun accepted a slot its blueprint does not expose")
 	}
-	if err := crafting.Validate(tables, "mage", inventory, staff.ID, map[string]string{"core": muzzle.ID}); err == nil {
+	staffBuild["crystal"] = receiver.ID
+	if err := crafting.Validate(tables, "mage", inventory, staff.ID, staffBuild); err == nil {
 		t.Fatal("a staff accepted a gun component")
 	}
-	if err := crafting.Validate(tables, "gunslinger", inventory, gun.ID, map[string]string{"barrel": muzzle.ID}); err == nil {
-		t.Fatal("a muzzle was accepted into the barrel slot")
-	}
-	if err := crafting.Validate(tables, "mage", inventory, gun.ID, nil); err == nil {
+	if err := crafting.Validate(tables, "mage", inventory, gun.ID, build(t, tables, gun.ID)); err == nil {
 		t.Fatal("a Mage was allowed to build a gun")
 	}
 	// The ledger is what gates which categories may be built, so an unowned row
 	// must be refused even when the recipe itself is coherent.
 	empty := crafting.Inventory{Ledger: progression.New(nil)}
-	if err := crafting.Validate(tables, "gunslinger", empty, gun.ID, nil); err == nil {
+	if err := crafting.Validate(tables, "gunslinger", empty, gun.ID, build(t, tables, gun.ID)); err == nil {
 		t.Fatal("a character built a weapon category it has not unlocked")
+	}
+}
+
+func TestCompletePartsDetermineTheWeaponCategory(t *testing.T) {
+	tables := shipped(t)
+	for _, weaponID := range []string{"field-pistol", "service-revolver", "compact-smg", "breaching-shotgun", "starter-rifle", "marksman-rifle", "long-sniper", "support-lmg", "field-launcher", "starter-staff"} {
+		chosen := build(t, tables, weaponID)
+		result, err := crafting.Result(tables, chosen)
+		if err != nil || result != weaponID {
+			t.Fatalf("%s recipe resolved to %q: %v", weaponID, result, err)
+		}
+	}
+}
+
+func TestStaffRequiresAStaveAtLeastAsStrongAsItsCrystal(t *testing.T) {
+	tables := shipped(t)
+	chosen := build(t, tables, "starter-staff")
+	chosen["crystal"] = "stormglass-crystal"
+	chosen["stave"] = "ash-stave"
+	if err := crafting.Validate(tables, model.Mage, everything(tables), "starter-staff", chosen); err == nil {
+		t.Fatal("a tier 1 stave accepted a tier 3 crystal")
+	}
+	chosen["stave"] = "ironwood-stave"
+	if err := crafting.Validate(tables, model.Mage, everything(tables), "starter-staff", chosen); err != nil {
+		t.Fatalf("a tier 3 stave refused a tier 3 crystal: %v", err)
+	}
+}
+
+func TestManaCrystalEffectsApplyToEverySpellCast(t *testing.T) {
+	tables := shipped(t)
+	staff := tables.Weapons["starter-staff"]
+	ability := tables.Abilities[tables.Spells[staff.Spell].Ability]
+	ability.CooldownMS = 1000 // exercises the general cooldown contract even before the full spell grid lands
+
+	_, damaging := crafting.Apply(tables, staff, ability, map[string]string{"crystal": "ember-prism-crystal"})
+	if damaging.DamageScale() <= 1 {
+		t.Fatalf("damage crystal scale = %g, want an increase", damaging.DamageScale())
+	}
+	_, healing := crafting.Apply(tables, staff, ability, map[string]string{"crystal": "mercy-pearl-crystal"})
+	if healing.HealingScale() <= 1 {
+		t.Fatalf("healing crystal scale = %g, want an increase", healing.HealingScale())
+	}
+	_, quickened := crafting.Apply(tables, staff, ability, map[string]string{"crystal": "quartz-clock-crystal"})
+	if quickened.CooldownMS >= ability.CooldownMS {
+		t.Fatalf("quickened cooldown = %d, want less than %d", quickened.CooldownMS, ability.CooldownMS)
 	}
 }
 
@@ -132,13 +195,13 @@ func TestApplyScalesTheAttributesComponentsName(t *testing.T) {
 	tables := shipped(t)
 	gun := starter(t, tables, "gunslinger")
 	ability := tables.Abilities[gun.Ability]
-	for _, id := range tables.ComponentsFor("gun", "magazine") {
+	for _, id := range tables.ComponentsFor("gun", "feed") {
 		row := tables.Components.Components[id]
 		modifier, ok := row.Modifiers[tuning.AttrMagazineSize]
 		if !ok {
 			continue
 		}
-		weapon, _ := crafting.Apply(tables, gun, ability, map[string]string{"magazine": id})
+		weapon, _ := crafting.Apply(tables, gun, ability, map[string]string{"feed": id})
 		if modifier > 1 && weapon.MagazineSize <= gun.MagazineSize {
 			t.Fatalf("%s scales the magazine by %g but left %d rounds", id, modifier, weapon.MagazineSize)
 		}

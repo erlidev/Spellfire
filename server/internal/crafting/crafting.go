@@ -1,14 +1,8 @@
-// Package crafting owns the slotted-blueprint system: what a craft costs, what
-// makes one legal, and what a finished item changes about the weapon it is an
-// instance of. It holds no world state — the safe-zone gate needs a position and
-// so lives in game.World — and it stores nothing: an item is a blueprint and
-// component references, and every value it implies is derived from the tables at
-// use time.
-//
-// The guardrail the whole system rests on is that components move handling and
-// ceiling, never the damage band. Damage is unreachable here by construction: it
-// lives on the shared band row rather than on any numeric item field, and the
-// loader additionally rejects a modifier on fire cadence.
+// Package crafting owns recipe-blueprint crafting: which finished weapon a set
+// of parts resolves to, what it costs, what makes it legal, and what the item
+// changes. It holds no world state — the safe-zone gate needs a position and so
+// lives in game.World — and it stores nothing derived: an item is weapon and
+// component references, with every implied value read from today's tables.
 package crafting
 
 import (
@@ -17,6 +11,7 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"strings"
 
 	"spellfire/server/internal/model"
 	"spellfire/server/internal/progression"
@@ -78,11 +73,40 @@ func (i Inventory) Equipped(tables *tuning.Tables, id string) (tuning.Weapon, mo
 	return weapon, model.CraftedItem{}, true
 }
 
-// Slots lists the component slots a weapon exposes, in blueprint order. The
-// order is the blueprint's, not a sort, because it is the order the crafting UI
-// walks the weapon in.
+// Slots lists the blank boxes a weapon recipe exposes, in blueprint order.
 func Slots(tables *tuning.Tables, weapon tuning.Weapon) []string {
 	return append([]string(nil), tables.Components.Blueprints[weapon.Blueprint].Slots...)
+}
+
+// Result resolves a complete arrangement of parts to the one weapon recipe it
+// matches. This is the rule behind "the way you build it determines the gun":
+// the category sent by a UI is only a preview hint and is never authority.
+func Result(tables *tuning.Tables, components map[string]string) (string, error) {
+	matches := make([]string, 0, 1)
+	for _, weaponID := range sortedKeys(tables.Components.Recipes) {
+		recipe := tables.Components.Recipes[weaponID]
+		blueprint := tables.Components.Blueprints[recipe.Blueprint]
+		if len(components) != len(blueprint.Slots) {
+			continue
+		}
+		matched := true
+		for _, slot := range blueprint.Slots {
+			if !contains(recipe.Slots[slot], components[slot]) {
+				matched = false
+				break
+			}
+		}
+		if matched {
+			matches = append(matches, weaponID)
+		}
+	}
+	if len(matches) == 0 {
+		return "", fmt.Errorf("those parts do not complete a known weapon recipe")
+	}
+	if len(matches) > 1 {
+		return "", fmt.Errorf("those parts ambiguously match %s", strings.Join(matches, ", "))
+	}
+	return matches[0], nil
 }
 
 // Validate reports why a requested craft may not be made, in language a player
@@ -99,17 +123,32 @@ func Validate(tables *tuning.Tables, class model.Class, inventory Inventory, wea
 	if !inventory.Ledger.Has(weaponID) {
 		return fmt.Errorf("you have not unlocked %s", weapon.Name)
 	}
-	blueprint, ok := tables.Components.Blueprints[weapon.Blueprint]
+	recipe, ok := tables.Components.Recipes[weaponID]
+	if !ok {
+		return fmt.Errorf("%s has no crafting recipe", weapon.Name)
+	}
+	blueprint, ok := tables.Components.Blueprints[recipe.Blueprint]
 	if !ok {
 		return fmt.Errorf("%s has no blueprint to build from", weapon.Name)
 	}
-	// An unfilled slot is a legal choice — it is the stock part — so only what
-	// was actually named has to hold up.
-	for _, slot := range sortedKeys(components) {
+	// Every blank is required. The complete arrangement, not a category field
+	// supplied by the client, is what makes the result this weapon recipe.
+	for _, slot := range blueprint.Slots {
 		id := components[slot]
 		if id == "" {
-			continue
+			return fmt.Errorf("%s still needs a %s", weapon.Name, slot)
 		}
+		if !contains(recipe.Slots[slot], id) {
+			component := tables.Components.Components[id]
+			name := id
+			if component.Name != "" {
+				name = component.Name
+			}
+			return fmt.Errorf("%s does not belong in the %s recipe's %s slot", name, weapon.Name, slot)
+		}
+	}
+	for _, slot := range sortedKeys(components) {
+		id := components[slot]
 		if !contains(blueprint.Slots, slot) {
 			return fmt.Errorf("%s has no %s slot", blueprint.Name, slot)
 		}
@@ -122,6 +161,16 @@ func Validate(tables *tuning.Tables, class model.Class, inventory Inventory, wea
 		}
 		if component.Slot != slot {
 			return fmt.Errorf("%s fills the %s slot, not %s", component.Name, component.Slot, slot)
+		}
+	}
+	if recipe.Blueprint == "staff" {
+		crystal := tables.Components.Components[components["crystal"]]
+		stave := tables.Components.Components[components["stave"]]
+		if crystal.Kind != "mana_crystal" || stave.Kind != "stave" {
+			return fmt.Errorf("a staff requires one mana crystal and one stave")
+		}
+		if stave.Tier < crystal.Tier {
+			return fmt.Errorf("%s is tier %d and cannot hold the tier %d %s", stave.Name, stave.Tier, crystal.Tier, crystal.Name)
 		}
 	}
 	return nil
@@ -228,6 +277,8 @@ func Apply(tables *tuning.Tables, weapon tuning.Weapon, ability tuning.Ability, 
 	if ability.CooldownMS > 0 {
 		ability.CooldownMS = scaleCount(ability.CooldownMS, modifiers[tuning.AttrCooldownMS])
 	}
+	ability.DamageMultiplier = scaleFromOne(ability.DamageScale(), modifiers[tuning.AttrSpellDamage])
+	ability.HealingMultiplier = scaleFromOne(ability.HealingScale(), modifiers[tuning.AttrSpellHealing])
 	ability.Cost = scaleCost(ability.Cost, modifiers[tuning.AttrCostAmount], weapon.MagazineSize)
 	if ability.Projectile != nil {
 		// The projectile is a pointer into the shared table, so it is copied
@@ -240,6 +291,13 @@ func Apply(tables *tuning.Tables, weapon tuning.Weapon, ability tuning.Ability, 
 		ability.Projectile = &projectile
 	}
 	return weapon, ability
+}
+
+func scaleFromOne(value, modifier float64) float64 {
+	if modifier == 0 {
+		return value
+	}
+	return value * modifier
 }
 
 // applyHandling scales a gun's gunplay: how far the muzzle walks, how wide it
@@ -310,8 +368,7 @@ func scaleCount(value int, modifier float64) int {
 
 // Describe states in plain language what a set of component choices does, one
 // line per filled slot and in blueprint order. It is what the crafting UI shows
-// instead of a table of multipliers, and what keeps a rare part from reading as
-// a higher power tier.
+// instead of a raw table of multipliers.
 func Describe(tables *tuning.Tables, weapon tuning.Weapon, components map[string]string) []string {
 	lines := make([]string, 0, len(components))
 	for _, slot := range Slots(tables, weapon) {

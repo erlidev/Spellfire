@@ -46,16 +46,27 @@ Material acquisition is the only gate between a new Gunslinger and every weapon,
 
 The first hour must feel like fast, legible progress; the tenth like arrival, not completion. After rim viability, additional time buys breadth and execution rather than power, which is what keeps the [narrow combat band](#progression-layers) honest. If a player reaches rim viability well under the target, drops are too generous and the mid bands become skippable; well over it, the middle turns into a grind instead of a route.
 
-## Slotted-blueprint crafting
+## Recipe-blueprint crafting
 
-Guns and staffs share one system. A category blueprint exposes component slots; each option has material costs and behavioral effects.
+Guns and staffs use the same authoritative recipe system but present different workbenches.
 
 | | Gun | Staff |
 |---|---|---|
-| Blueprint | Gun category | Staff category |
-| Example slots | Muzzle, barrel, scope, trigger, magazine | Core, focus, conduit |
-| Effects | Recoil, spread, capacity, range, handling | Cast speed, mana cost, projectile/area, element bias |
-| Guardrail | Change handling and ceiling, not DPS band | Change behavior and ceiling, not damage band |
+| Blueprint | One generic weapon outline | One two-part staff assembly |
+| Required slots | Receiver, barrel, action, feed, sight | Mana crystal, stave |
+| Result | The complete part arrangement determines the gun category | The crystal supplies effects; the stave supplies containment tier |
+| Main constraint | Every slot must match one realistic authored gun recipe | Stave tier must be at least the crystal tier |
+
+The nine gun recipes are explicit rather than inferred from vague tags: pistol, revolver, SMG, shotgun, service rifle, marksman rifle, sniper, LMG, and launcher each name the receiver, barrel, operating action, feed system, and sight types that can produce it. Some recipes accept a grounded alternative such as iron sights or a reflex sight, but two recipes may never accept the same complete arrangement. There is no free “stock craft”; every blank must be filled. Stock starter weapons still exist as starter-kit equipment, while crafting always represents building a new physical item.
+
+A staff is made from exactly two crafted subassemblies:
+
+- A **mana crystal** has its own material recipe and one all-spell effect. Current recipes cover cooldown/cast timing, mana efficiency, projectile or area shape, all-spell damage, and all-spell healing. Healing bonuses do not add healing to a spell that has none.
+- A **stave** has no combat modifier. Its wood determines its containment tier: ash is tier 1, runed oak tier 2, and resonant ironwood tier 3. Higher recipes add tempered or resonant metal and magical infusions to the wood cost.
+
+The UI presents crystal and stave crafting as two deliberate choices, then commits both material recipes atomically with the finished staff. Loose subassemblies are not inventory items: a refusal spends nothing, while success persists only the completed staff's crystal and stave references. This preserves the reference-only item contract and avoids an intermediate inventory that cannot be equipped or traded yet.
+
+Gun parts primarily change handling and reach. Mana crystals are the narrow exception to the old behavior-only rule: bounded `spell_damage` and `spell_healing` multipliers may move spell output, but they remain general to every spell cast through the staff and never alter a spell-specific row or shared damage-band data.
 
 Crafting and spending occur only in safe zones; raw materials must be hauled there. Loadout respec is free or cheap, and every major balance patch grants a global respec/refund. Rebalancing must not invalidate a character.
 

@@ -52,5 +52,4 @@ The Gunslinger has no skill tree or handling attributes. A flat permanent ledger
 
 Rare materials gate heavy weapons economically. Heavy weapons remain situational loadout choices and must share the starter weapon's effective damage band; rarity buys commitment and skill ceiling. Without a skill-tree gate, progression pace depends almost entirely on material drop rates, making [economy pacing](progression-and-crafting.md#progression-pacing) a critical tuning problem.
 
-Gun assembly uses the shared [`progression-and-crafting.md`](progression-and-crafting.md#slotted-blueprint-crafting) system.
-
+Gun assembly uses the shared [`progression-and-crafting.md`](progression-and-crafting.md#recipe-blueprint-crafting) system. The finished category is resolved from a complete receiver, barrel, action, feed, and sight arrangement rather than selected independently of its parts.

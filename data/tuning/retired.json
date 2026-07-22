@@ -1,1 +1,18 @@
-{}
+{
+  "muzzle-brake": { "kind": "component", "replacement": "service-rifle-barrel", "note": "The generic gun blueprint was replaced by weapon-defining recipes." },
+  "suppressor": { "kind": "component", "replacement": "short-rifled-barrel", "note": "The generic gun blueprint was replaced by weapon-defining recipes." },
+  "long-barrel": { "kind": "component", "replacement": "precision-barrel", "note": "The generic gun blueprint was replaced by weapon-defining recipes." },
+  "short-barrel": { "kind": "component", "replacement": "short-rifled-barrel", "note": "The generic gun blueprint was replaced by weapon-defining recipes." },
+  "ranged-optic": { "kind": "component", "replacement": "magnified-optic", "note": "The generic gun blueprint was replaced by weapon-defining recipes." },
+  "close-optic": { "kind": "component", "replacement": "red-dot-sight", "note": "The generic gun blueprint was replaced by weapon-defining recipes." },
+  "match-trigger": { "kind": "component", "replacement": "semi-auto-action", "note": "The generic gun blueprint was replaced by weapon-defining recipes." },
+  "light-trigger": { "kind": "component", "replacement": "blowback-action", "note": "The generic gun blueprint was replaced by weapon-defining recipes." },
+  "extended-magazine": { "kind": "component", "replacement": "rifle-magazine", "note": "The generic gun blueprint was replaced by weapon-defining recipes." },
+  "quick-magazine": { "kind": "component", "replacement": "pistol-magazine", "note": "The generic gun blueprint was replaced by weapon-defining recipes." },
+  "focusing-core": { "kind": "component", "replacement": "channeling-crystal", "note": "Staff internals were consolidated into one crafted mana crystal." },
+  "surging-core": { "kind": "component", "replacement": "stormglass-crystal", "note": "Staff internals were consolidated into one crafted mana crystal." },
+  "wide-focus": { "kind": "component", "replacement": "geomancer-crystal", "note": "Staff internals were consolidated into one crafted mana crystal." },
+  "narrow-focus": { "kind": "component", "replacement": "quartz-clock-crystal", "note": "Staff internals were consolidated into one crafted mana crystal." },
+  "reaching-conduit": { "kind": "component", "replacement": "geomancer-crystal", "note": "Staff internals were consolidated into one crafted mana crystal." },
+  "channeling-conduit": { "kind": "component", "replacement": "channeling-crystal", "note": "Staff internals were consolidated into one crafted mana crystal." }
+}

@@ -4,16 +4,20 @@ These surfaces appear when their underlying [game systems](../design/README.md) 
 
 ## Safe-zone loadout and crafting
 
-Loadout and crafting share terminology and component presentation because guns and staffs use one [slotted-blueprint system](../design/progression-and-crafting.md#slotted-blueprint-crafting).
+Loadout and crafting share item terminology, while guns and staffs get purpose-built views over the same [recipe-blueprint system](../design/progression-and-crafting.md#recipe-blueprint-crafting).
 
 Crafting shows:
 
-- selected blueprint and slots;
-- compatible components for the active slot;
+- a generic blueprint silhouette with required blank boxes;
+- drag-and-drop compatible parts, with click/tap selection as the accessible touch and keyboard equivalent;
 - owned and required materials, including shortfalls;
-- behavior changes in plain language without calling rare parts a higher power tier;
+- the resulting weapon preview only when every blank completes one recipe;
+- a side list of craftable recipes with concise explanations, plus locked recipes labelled by unlock level;
+- behavior changes in plain language;
 - a spend confirmation summary;
 - success, capacity, stale-state, and server-rejection outcomes.
+
+For guns, the recipe list selects the intended pattern but does not decide the result: receiver, barrel, action, feed, and sight must themselves resolve to that gun. For staffs, the same workbench becomes a two-stage assembly list: choose a crafted mana-crystal recipe, then a wood-based stave recipe. Incompatible staves disappear from the compatible choices, and changing a crystal clears a now-under-tier stave rather than allowing a doomed commit.
 
 Both surfaces also list content the character has *not* unlocked, disabled and labelled with the level that grants it. A kit that hides everything still locked reads as finished rather than as a starting point, and a player has no reason to believe an empty gadget slot will ever fill.
 
@@ -41,4 +45,3 @@ The five-second timer counts down visibly. Selection is allowed during it, and c
 Squad UI supports four players and shows the selected free-for-all/shared rule before leaving safety. The rule changes only in a safe zone. Drop feedback distinguishes squad-exclusive, free-for-all, and despawning states without color alone.
 
 Boss UI explains pooled squad contribution, shows authoritative progress where available, and distinguishes rare-ranking from participation eligibility. It cannot frame support play as personal underperformance when ranking is pooled by squad.
-

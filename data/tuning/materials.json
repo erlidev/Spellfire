@@ -18,6 +18,12 @@
       "source": "mob",
       "summary": "Biome-gated, element-typed stock for element-specific recipes."
     },
+    "wood": {
+      "name": "Stave wood",
+      "universal": true,
+      "source": "node",
+      "summary": "Heartwood determines a stave's containment tier; higher-tier staves also require metal bands and magical infusions."
+    },
     "ammunition": {
       "name": "Special ammunition",
       "universal": true,
@@ -34,6 +40,9 @@
     "storm-shard": { "name": "Storm shard", "grade": "uncommon", "kind": "aligned", "biome": "stormflats" },
     "arcane-shard": { "name": "Arcane shard", "grade": "uncommon", "kind": "aligned", "biome": "arcane-hollow" },
     "stone-shard": { "name": "Stone shard", "grade": "uncommon", "kind": "aligned", "biome": "stonereach" },
+    "ash-heartwood": { "name": "Ash heartwood", "grade": "common", "kind": "wood" },
+    "oak-heartwood": { "name": "Runed oak heartwood", "grade": "uncommon", "kind": "wood" },
+    "ironwood-heartwood": { "name": "Resonant ironwood", "grade": "rare", "kind": "wood" },
     "rocket": { "name": "Rocket", "grade": "uncommon", "kind": "ammunition" }
   }
 }

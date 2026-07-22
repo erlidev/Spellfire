@@ -16,8 +16,8 @@ message ClientEnvelope {
   string ammunition = 8; // AMMUNITION only: the special-ammunition recipe to build
 }
 
-// One requested build: the weapon category and the component filling each slot.
-// A slot the request omits is left stock, which is a legal choice.
+// One requested build: a previewed result and the component filling every
+// required blueprint slot. The server derives the actual result from the parts.
 message CraftRequest {
   string weapon = 1;
   repeated ComponentSlot components = 2;

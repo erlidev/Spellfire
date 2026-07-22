@@ -320,13 +320,13 @@ func hasField(data []byte, want protowire.Number) bool {
 	return false
 }
 
-// A craft request is positional in nothing — slots are named — but an omitted
-// slot must stay omitted rather than arriving as a component reference to
-// nothing, because a stock slot is a legal choice.
+// A craft request is positional in nothing — slots are named — and an omitted
+// slot stays omitted rather than becoming an empty reference. Recipe validation
+// is responsible for rejecting required blanks.
 func TestCraftRequestRoundTrips(t *testing.T) {
 	envelope := appendMessage(appendVarint(nil, 1, ClientCraft), 7,
 		appendMessage(appendString(nil, 1, "starter-rifle"), 2,
-			appendString(appendString(nil, 1, "magazine"), 2, "extended-magazine")))
+			appendString(appendString(nil, 1, "receiver"), 2, "rifle-receiver")))
 	decoded, err := DecodeClient(envelope)
 	if err != nil {
 		t.Fatalf("decode craft: %v", err)
@@ -334,18 +334,18 @@ func TestCraftRequestRoundTrips(t *testing.T) {
 	if decoded.Kind != ClientCraft || decoded.Craft.Weapon != "starter-rifle" {
 		t.Fatalf("decoded = %+v", decoded)
 	}
-	if decoded.Craft.Components["magazine"] != "extended-magazine" || len(decoded.Craft.Components) != 1 {
+	if decoded.Craft.Components["receiver"] != "rifle-receiver" || len(decoded.Craft.Components) != 1 {
 		t.Fatalf("components = %v", decoded.Craft.Components)
 	}
-	// An empty component is a stock slot and must not survive as a reference.
+	// An empty component is not a part and must not survive as a reference.
 	empty := appendMessage(appendVarint(nil, 1, ClientCraft), 7,
-		appendMessage(appendString(nil, 1, "starter-rifle"), 2, appendString(nil, 1, "muzzle")))
+		appendMessage(appendString(nil, 1, "starter-rifle"), 2, appendString(nil, 1, "barrel")))
 	decoded, err = DecodeClient(empty)
 	if err != nil {
-		t.Fatalf("decode stock craft: %v", err)
+		t.Fatalf("decode incomplete craft: %v", err)
 	}
 	if len(decoded.Craft.Components) != 0 {
-		t.Fatalf("a stock slot survived as %v", decoded.Craft.Components)
+		t.Fatalf("an empty slot survived as %v", decoded.Craft.Components)
 	}
 }
 
@@ -356,7 +356,7 @@ func TestStacksDropEmptiesAndSort(t *testing.T) {
 	if len(stacks) != 2 || stacks[0].Material != "salvaged-plate" || stacks[1].Count != 2 {
 		t.Fatalf("stacks = %+v", stacks)
 	}
-	item := CraftedItem{ID: "itm-1", Weapon: "starter-rifle", Components: map[string]string{"muzzle": "suppressor", "barrel": "long-barrel"}}
+	item := CraftedItem{ID: "itm-1", Weapon: "starter-rifle", Components: map[string]string{"receiver": "rifle-receiver", "barrel": "service-rifle-barrel"}}
 	if string(encodeItem(item)) != string(encodeItem(item)) {
 		t.Fatal("one item produced two encodings")
 	}

@@ -132,18 +132,22 @@ live row" to "what this character owns" by the Phase 2.2 unlock ledger.
 
 Only `player_kill` has a trigger: mob kills, harvesting, and outpost discovery are priced in the table and awarded by Phases 4.3, 4.1, and 3, and Phase 4.4 tunes the curve against the pacing targets. Keystone IDs share the ledger's shape but have no rows until Phase 2.7. Phase 2.4 widened the Gunslinger's basic set to four categories and its gadget pool to the riot shield, smoke, and flashbangs without touching the draw; a developer-mode level grant now reaches the rest of the ledger before mob XP lands; the Mage's is still one staff and one spell until Phase 2.5.
 
-### 2.3 Slotted-blueprint crafting
-- [x] Blueprint + slot + component definitions with material costs and **behavioural** (not power) effects ([components.json](data/tuning/components.json), [crafting.go](server/internal/crafting/crafting.go), [progression-and-crafting.md](docs/game/design/progression-and-crafting.md#slotted-blueprint-crafting))
-- [x] Gun slots: muzzle, barrel, scope, trigger, magazine — two options each, costed in structural materials so geography never hard-locks a Gunslinger
-- [x] Staff slots: core, focus, conduit — element-aligned shards price the element-typed parts
-- [x] Crafting gated to safe zones; raw materials must be hauled there (`World.Craft`/`ErrCraftingLocked`, [architecture.md](docs/architecture.md#slotted-blueprint-crafting))
-- [x] Crafting UI: blueprint, slots, compatible components, owned/required materials with shortfalls, plain-language behaviour changes, spend confirmation, rejection outcomes ([system-interfaces.md](docs/game/ui/system-interfaces.md#safe-zone-loadout-and-crafting), [crafting.ts](web/src/game/crafting.ts), [main.ts](web/src/main.ts))
+### 2.3 Recipe-blueprint crafting
+- [x] Generic blueprints + independently costed component recipes + authoritative finished-weapon recipes; a complete arrangement resolves the result and ambiguous recipes fail tuning validation ([components.json](data/tuning/components.json), [crafting.go](server/internal/crafting/crafting.go), [progression-and-crafting.md](docs/game/design/progression-and-crafting.md#recipe-blueprint-crafting))
+- [x] Realistic gun slots: receiver, barrel, action, feed, sight; explicit recipes for pistol, revolver, SMG, shotgun, service rifle, marksman, sniper, LMG, and launcher
+- [x] Staffs are exactly one crafted mana crystal plus one wood-based stave; crystals apply bounded all-spell effects, staves apply no effects, and stave tier must meet or exceed crystal tier
+- [x] Ash / runed oak / resonant ironwood stave tiers, with metal bands and magical infusions added to the higher-tier material recipes
+- [x] Crafting gated to safe zones; raw materials must be hauled there (`World.Craft`/`ErrCraftingLocked`, [architecture.md](docs/architecture.md#recipe-blueprint-crafting))
+- [x] Crafting UI: generic blueprint silhouette, drag/drop blanks with click/tap fallback, result preview, recipe list with explanations, staff subassembly/tier presentation, material shortfalls, spend confirmation, and rejection outcomes ([system-interfaces.md](docs/game/ui/system-interfaces.md#safe-zone-loadout-and-crafting), [crafting.ts](web/src/game/crafting.ts), [main.ts](web/src/main.ts))
 - [x] Crafted items are equippable: the weapon slot names either a stock row or an instance, resolved through `crafting.Inventory.Equipped` on the same path
-- [x] Test: recipe legality, cost aggregation, per-material shortfalls, atomic refusals, modifier application, the shared projectile row surviving unmutated, items round-tripping through a rejoin, and the inventory capacity
+- [x] Test: all ten finished recipes resolve from parts, incomplete/incoherent recipes fail, staff tiers are enforced, all-spell damage/healing/cooldown modifiers apply, costs aggregate, refusals are atomic, shared rows survive unmutated, items round-trip through a rejoin, and inventory capacity holds
 
-Components declare an open `modifiers` map, but only over attributes the simulation reads, and the loader
-rejects `interval_ms` outright: fire cadence is the DPS axis, and crafting changes handling and ceiling.
-Recoil, spread, and scoped movement joined the vocabulary with Phase 2.4 and the gun components now use them.
+Components declare an open `modifiers` map, but only over attributes the simulation consumes, and the loader
+rejects `interval_ms` outright. Gun parts remain primarily handling/reach choices; mana crystals are the bounded
+exception that may alter all-spell damage/healing without editing a spell-specific row. Staves deliberately have no
+modifier: their wood and infusions establish containment tier. Crystal and stave recipes commit atomically into the
+finished staff rather than creating loose intermediate inventory. Pre-revamp component IDs retire onto the new catalog
+and are moved to their live slot when an old crafted item rejoins.
 Nothing produces a material yet — harvesting is Phase 4.1 — so the only source is the bounded
 developer-mode grant behind the Phase 1.7 authorization wrapper, and an ordinary player sees accurate
 shortfalls until then. Death drops (Phase 4.2) will drop carried materials and keep crafted gear, which is
@@ -184,7 +188,7 @@ stone wall sequences after it.
 - [ ] Author the settled 5 × 4 spell grid — all twenty rows, every element to tier 4 so affinity's 4 + 2 build is satisfiable ([mage.md](docs/game/design/mage.md#the-spell-grid))
 - [ ] Stone wall: dynamic destructible collider, one per caster, placement rules, and lifetime carried in the rewind history ([mage.md](docs/game/design/mage.md#stone-wall)) — common entity and box-collision substrate exists; sequence behavior after 2.6 so it ships blocking line of sight
 - [ ] Spell tiers 1–4 scaling mana, cooldown, telegraph, payoff, and whiff punishment
-- [ ] Staff components alter element bias and cast/area shape beyond projectile geometry; cast speed, mana cost, and projectile shape already run through Phase 2.3's modifiers
+- [ ] Mana crystals add element bias and area-shape behavior beyond projectile geometry; cast speed, mana cost, projectile shape, cooldown, and all-spell damage/healing already run through Phase 2.3's modifiers
 - [ ] Test: no spell delivers instant point-and-click damage
 
 ### 2.6 Line of sight

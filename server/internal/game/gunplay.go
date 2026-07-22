@@ -278,7 +278,7 @@ func (w *World) hitscan(p *Player, ability tuning.Ability, origin, direction Vec
 // band hit and a grazing one is worth less: the shotgun's identity is the
 // condition it imposes, never extra damage.
 func (w *World) pelletDamage(ability tuning.Ability) float64 {
-	damage := w.tuning.Tables.BandDamage(ability.DamageBand)
+	damage := w.tuning.Tables.BandDamage(ability.DamageBand) * ability.DamageScale()
 	if ability.Projectile == nil {
 		return damage
 	}
@@ -288,7 +288,7 @@ func (w *World) pelletDamage(ability tuning.Ability) float64 {
 // hitscanDamage is what an instant round is worth at the distance it landed:
 // the band, after the same falloff a travelling round would have paid.
 func (p *Player) hitscanDamage(w *World, ability tuning.Ability, distance float64) float64 {
-	return w.tuning.Tables.BandDamage(ability.DamageBand) * ability.Projectile.DamageScale(distance)
+	return w.tuning.Tables.BandDamage(ability.DamageBand) * ability.DamageScale() * ability.Projectile.DamageScale(distance)
 }
 
 // segmentEntry reports how far along a segment an entity is first touched.

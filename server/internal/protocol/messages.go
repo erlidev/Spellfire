@@ -85,8 +85,8 @@ type Loadout struct {
 	Spells  []string
 }
 
-// CraftRequest is one requested build. Components is the slot → component ID
-// choice; a slot the request omits is left stock.
+// CraftRequest is one requested build. Weapon is the client's preview and
+// Components must fill every required slot; the world derives the result.
 type CraftRequest struct {
 	Weapon     string
 	Components map[string]string
@@ -378,9 +378,8 @@ func decodeLoadout(data []byte) (Loadout, error) {
 	return out, nil
 }
 
-// decodeCraft reads a requested build. A slot the request leaves empty is a
-// stock choice and is dropped here, so the world never sees a slot pointing at
-// nothing.
+// decodeCraft reads a requested build. Empty pairs are dropped; recipe
+// validation later reports any required blank that remains unfilled.
 func decodeCraft(data []byte) (CraftRequest, error) {
 	out := CraftRequest{Components: map[string]string{}}
 	for len(data) > 0 {

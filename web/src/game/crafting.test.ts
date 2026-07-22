@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cost, describe as describeBuild, fitting, resolvedWeapon, shortfall, slotsOf } from "./crafting";
+import { cost, describe as describeBuild, fitting, recipeOf, resolvedWeapon, resultOf, shortfall, slotsOf } from "./crafting";
 import { bar, equippable, ledgerOf } from "./loadout";
 import { components, weapons } from "../tuning";
 import type { CraftedItem } from "../types";
@@ -16,7 +16,7 @@ function componentIn(slot: string): string {
 
 describe("crafting recipes", () => {
   it("exposes the blueprint's slots for the chosen category", () => {
-    expect(slotsOf(gun)).toEqual(components.blueprints[weapons[gun]!.blueprint]!.slots);
+    expect(slotsOf(gun)).toEqual(components.blueprints[recipeOf(gun)!.blueprint]!.slots);
     expect(slotsOf("not-a-weapon")).toEqual([]);
   });
 
@@ -24,15 +24,15 @@ describe("crafting recipes", () => {
     for (const slot of slotsOf(gun)) {
       for (const id of fitting(gun, slot)) {
         expect(components.components[id]!.slot).toBe(slot);
-        expect(components.components[id]!.blueprint).toBe(weapons[gun]!.blueprint);
+        expect(recipeOf(gun)!.slots[slot]).toContain(id);
       }
     }
   });
 
   it("adds the cost of every filled slot rather than overwriting it", () => {
-    const muzzle = componentIn("muzzle"), barrel = componentIn("barrel");
-    const total = cost(gun, { muzzle, barrel });
-    for (const [material, count] of Object.entries(components.components[muzzle]!.cost)) {
+    const receiver = componentIn("receiver"), barrel = componentIn("barrel");
+    const total = cost(gun, { receiver, barrel });
+    for (const [material, count] of Object.entries(components.components[receiver]!.cost)) {
       expect(total[material]).toBe(count + (components.components[barrel]!.cost[material] ?? 0));
     }
     expect(cost(gun, {})).toEqual({});
@@ -46,21 +46,29 @@ describe("crafting recipes", () => {
   });
 
   it("states behaviour in plain language, one line per filled slot", () => {
-    const muzzle = componentIn("muzzle");
-    const lines = describeBuild(gun, { muzzle });
+    const receiver = componentIn("receiver");
+    const lines = describeBuild(gun, { receiver });
     expect(lines).toHaveLength(1);
-    expect(lines[0]).toContain(components.components[muzzle]!.name);
+    expect(lines[0]).toContain(components.components[receiver]!.name);
     expect(describeBuild(gun, {})).toEqual([]);
+  });
+
+  it("derives the resulting weapon from a complete arrangement", () => {
+    const chosen: Record<string, string> = {};
+    for (const slot of slotsOf(gun)) chosen[slot] = fitting(gun, slot)[0]!;
+    expect(resultOf(chosen)).toBe(gun);
+    delete chosen.barrel;
+    expect(resultOf(chosen)).toBeUndefined();
   });
 });
 
 describe("crafted weapons on the bar", () => {
-  const item: CraftedItem = { id: "itm-1", weapon: gun, components: { magazine: componentIn("magazine") } };
+  const item: CraftedItem = { id: "itm-1", weapon: gun, components: { feed: componentIn("feed") } };
 
   it("resolves an equipped instance to its category and applies its components", () => {
     const resolved = resolvedWeapon(item.id, [item])!;
     const stock = weapons[gun]!;
-    const modifier = components.components[item.components.magazine!]!.modifiers.magazine_size;
+    const modifier = components.components[item.components.feed!]!.modifiers.magazine_size;
     expect(resolved.name).toBe(stock.name);
     if (modifier && stock.magazine_size) expect(resolved.magazine_size).not.toBe(stock.magazine_size);
     expect(resolvedWeapon(gun, [item])).toEqual(stock);

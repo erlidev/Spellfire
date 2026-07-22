@@ -21,7 +21,7 @@ import (
 // SchemaVersion is the table shape this build understands. Bump it only when a
 // table changes shape, and add the matching forward migration; a plain balance
 // edit bumps Manifest.Version instead and needs no code change.
-const SchemaVersion = 14
+const SchemaVersion = 15
 
 type Manifest struct {
 	// Version is the content revision. Bump it on any balance edit; a change
@@ -468,6 +468,12 @@ type Ability struct {
 	DodgeVector string      `json:"dodge_vector"`
 	DamageBand  string      `json:"damage_band"`
 	Projectile  *Projectile `json:"projectile"`
+	// Output multipliers are derived from an equipped mana crystal. They are not
+	// authored ability fields or persisted snapshots; zero means the untouched
+	// baseline of one. Healing is carried now so every future healing delivery
+	// uses the same all-spell crystal contract as damage.
+	DamageMultiplier  float64 `json:"-"`
+	HealingMultiplier float64 `json:"-"`
 	// RequiresScope gates the use on the weapon being scoped. It is what makes a
 	// sniper's hitscan a commitment rather than a free instant hit.
 	RequiresScope bool `json:"requires_scope"`
@@ -484,6 +490,20 @@ type Ability struct {
 	// Effects are the status effects each hit applies, resolved against the
 	// effects table.
 	Effects []string `json:"effects"`
+}
+
+func (a Ability) DamageScale() float64 {
+	if a.DamageMultiplier == 0 {
+		return 1
+	}
+	return a.DamageMultiplier
+}
+
+func (a Ability) HealingScale() float64 {
+	if a.HealingMultiplier == 0 {
+		return 1
+	}
+	return a.HealingMultiplier
 }
 
 // Interval is the cadence gate between uses of any ability — the global
@@ -660,9 +680,8 @@ type Progression struct {
 	BaseXP   int            `json:"base_xp"`
 	Growth   float64        `json:"growth"`
 	Sources  map[string]int `json:"sources"`
-	// CraftedItemCapacity bounds how many crafted weapons a character may own. A
-	// stock build costs no materials, so without a ceiling a client could mint
-	// rows forever; it is also the capacity outcome the crafting UI owes.
+	// CraftedItemCapacity bounds how many permanent crafted weapons a character
+	// may own and is also the capacity outcome the crafting UI owes.
 	CraftedItemCapacity int        `json:"crafted_item_capacity"`
 	StarterKit          StarterKit `json:"starter_kit"`
 	// AdminGrant bounds the developer-mode level grant, the same way
@@ -717,9 +736,21 @@ func (l Loadout) RequiredSameElement(tier int) int {
 }
 
 type Blueprint struct {
-	ID    string   `json:"-"`
-	Name  string   `json:"name"`
-	Slots []string `json:"slots"`
+	ID      string   `json:"-"`
+	Name    string   `json:"name"`
+	Summary string   `json:"summary"`
+	Slots   []string `json:"slots"`
+}
+
+// CraftRecipe is the authoritative shape of one finished weapon. Slots map
+// each blank on the generic blueprint to the component recipes accepted there.
+// The weapon row is the map key, so a complete set of parts resolves to one
+// category without trusting a category selected by the client.
+type CraftRecipe struct {
+	ID        string              `json:"-"`
+	Blueprint string              `json:"blueprint"`
+	Summary   string              `json:"summary"`
+	Slots     map[string][]string `json:"slots"`
 }
 
 // Component attribute names a modifier may scale. The map is open — a component
@@ -743,15 +774,21 @@ const (
 	AttrSpreadDegrees     = "spread_degrees"
 	AttrMoveSpreadDegrees = "move_spread_degrees"
 	AttrScopeMovement     = "scope_movement_multiplier"
+	// Staff-only output scalars. Unlike a gun part, a mana crystal is allowed to
+	// move spell output within the narrow bounds below; it applies to every spell
+	// cast through that staff rather than naming an element or spell row.
+	AttrSpellDamage  = "spell_damage"
+	AttrSpellHealing = "spell_healing"
 )
 
-// ComponentAttributes is the set a modifier may name. Damage is absent by
-// construction rather than by exclusion: it lives on the shared band row, not on
-// any numeric item field, so no component can reach it.
+// ComponentAttributes is the set a modifier may name. Mana crystals scale the
+// result of a spell through derived output multipliers; they still cannot edit
+// the shared damage-band row or a particular spell's authored values.
 var ComponentAttributes = []string{
 	AttrMagazineSize, AttrReloadMS, AttrCooldownMS, AttrWindupMS, AttrCostAmount,
 	AttrProjectileSpeed, AttrProjectileLife, AttrProjectileRadius,
 	AttrRecoilDegrees, AttrSpreadDegrees, AttrMoveSpreadDegrees, AttrScopeMovement,
+	AttrSpellDamage, AttrSpellHealing,
 }
 
 // MagazineAttributes only mean anything on a weapon that holds a magazine, so a
@@ -762,14 +799,13 @@ var MagazineAttributes = []string{AttrMagazineSize, AttrReloadMS}
 // have no recoil pattern to walk or scope to look through.
 var HandlingAttributes = []string{AttrRecoilDegrees, AttrSpreadDegrees, AttrMoveSpreadDegrees, AttrScopeMovement}
 
-// ForbiddenAttributes are the ones crafting may never touch. Fire cadence is the
-// DPS axis: scaling it moves an item out of its damage band, which is precisely
-// what progression-and-crafting.md forbids crafting from doing.
+// ForbiddenAttributes are the ones crafting may never touch. Fire cadence is an
+// unrestricted DPS axis; bounded mana-crystal output is the explicit exception.
 var ForbiddenAttributes = []string{AttrInterval}
 
-// Modifier bounds. Crafting changes handling and ceiling, so a component may
-// halve or double an attribute and no more; a modifier of exactly 1 is a row
-// that claims an effect it does not have.
+// Modifier bounds keep handling and mana-crystal output inside the compressed
+// progression envelope. A modifier of exactly 1 claims an effect it does not
+// have.
 const (
 	ModifierMin = 0.5
 	ModifierMax = 2.0
@@ -784,7 +820,12 @@ type Component struct {
 	Name      string `json:"name"`
 	Blueprint string `json:"blueprint"`
 	Slot      string `json:"slot"`
-	Effect    string `json:"effect"`
+	// Kind distinguishes ordinary gun parts from the two staff subassemblies.
+	// Tier is meaningful for mana crystals and staves: the stave must be at
+	// least as strong as the crystal it carries.
+	Kind   string `json:"kind"`
+	Tier   int    `json:"tier"`
+	Effect string `json:"effect"`
 	// Cost is the material ID → count one of this component consumes. Materials
 	// must be hauled to a safe zone before they can be spent.
 	Cost map[string]int `json:"cost"`
@@ -793,8 +834,9 @@ type Component struct {
 }
 
 type Components struct {
-	Blueprints map[string]Blueprint `json:"blueprints"`
-	Components map[string]Component `json:"components"`
+	Blueprints map[string]Blueprint   `json:"blueprints"`
+	Components map[string]Component   `json:"components"`
+	Recipes    map[string]CraftRecipe `json:"recipes"`
 }
 
 // ComponentsFor lists the components that fit one slot of a blueprint, in
@@ -1216,6 +1258,10 @@ func (t *Tables) stampIDs() {
 	for id, component := range t.Components.Components {
 		component.ID = id
 		t.Components.Components[id] = component
+	}
+	for id, recipe := range t.Components.Recipes {
+		recipe.ID = id
+		t.Components.Recipes[id] = recipe
 	}
 	for id, grade := range t.Materials.Grades {
 		grade.ID = id

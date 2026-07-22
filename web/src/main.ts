@@ -1,5 +1,5 @@
 import { API, type AdminEntityState } from "./api";
-import { buildableAmmunition, componentOf, cost as craftCost, craftable, describe, fitting, itemLabel, lockedCraftable, materialName, resolvedWeapon, shortfall, slotsOf } from "./game/crafting";
+import { buildableAmmunition, componentOf, cost as craftCost, craftable, describe, fitting, itemLabel, lockedCraftable, materialName, recipeOf, resolvedWeapon, resultOf, shortfall, slotsOf } from "./game/crafting";
 import { bar, barSlots, contentName, defaultLoadout, equippable, ledgerOf, loadoutProblem, locked, type Ledger, type LockedContent, type SlotKind } from "./game/loadout";
 import { Predictor } from "./game/prediction";
 import { joystickVector, movementButtons } from "./game/touch";
@@ -67,9 +67,8 @@ class SpellFire {
   // only on a confirmed craft, so nothing here is ever inferred from a snapshot.
   private items: CraftedItem[] = [];
   private materials: Record<string, number> = {};
-  // The unconfirmed build in the Crafting section: the weapon category and the
-  // component chosen per slot. Nothing is shown as spent until a Craft reply
-  // confirms it.
+  // The unconfirmed build in the Crafting section: a previewed recipe and the
+  // component chosen per blank. The complete parts determine the server result.
   private craftWeapon = "";
   private craftChoices: Record<string, string> = {};
   private craftStatus = "";
@@ -842,38 +841,99 @@ class SpellFire {
       return;
     }
 
-    // Blueprint choice. The category is the blueprint; its slots follow from it.
-    const blueprint = document.createElement("label"); blueprint.className = "loadout-slot";
-    const select = document.createElement("select");
-    select.disabled = !this.inSafety;
-    for (const id of buildable) select.append(new Option(weapons[id]?.name ?? id, id));
-    appendLocked(select, lockedCraftable(character.class, this.ledger));
-    select.value = this.craftWeapon;
-    select.addEventListener("change", () => { this.craftWeapon = select.value; this.craftChoices = {}; this.craftStatus = ""; this.renderMenu("crafting"); });
-    blueprint.append(document.createTextNode("Blueprint"), select);
-    content.append(blueprint);
+    const recipe = recipeOf(this.craftWeapon)!;
+    const workbench = document.createElement("div"); workbench.className = "craft-workbench";
+    const blueprint = document.createElement("div"); blueprint.className = `craft-blueprint ${recipe.blueprint}`;
+    const blueprintTitle = document.createElement("h4");
+    blueprintTitle.textContent = recipe.blueprint === "staff" ? "Staff assembly" : "Generic weapon blueprint";
+    const blueprintSummary = document.createElement("p"); blueprintSummary.textContent = recipe.summary;
+    const silhouette = document.createElement("div"); silhouette.className = "craft-silhouette"; silhouette.setAttribute("aria-hidden", "true");
+    blueprint.append(blueprintTitle, blueprintSummary, silhouette);
 
-    const slots = document.createElement("div"); slots.className = "loadout-slots";
+    const choosePart = (slot: string, id: string): void => {
+      const next = { ...this.craftChoices, [slot]: id };
+      // Changing one half of a staff may invalidate the other half. Clear the
+      // incompatible old half instead of presenting a build the server refuses.
+      if (recipe.blueprint === "staff") {
+        const other = slot === "crystal" ? "stave" : "crystal";
+        if (next[other] && !fitting(this.craftWeapon, other, next).includes(next[other]!)) delete next[other];
+      }
+      this.craftChoices = next; this.craftStatus = ""; this.renderMenu("crafting");
+    };
+
+    const slots = document.createElement("div"); slots.className = "craft-drop-slots";
     for (const slot of slotsOf(this.craftWeapon)) {
-      const row = document.createElement("label"); row.className = "loadout-slot";
-      const choice = document.createElement("select");
-      choice.disabled = !this.inSafety;
-      choice.append(new Option("Stock", ""));
-      const options = fitting(this.craftWeapon, slot);
-      for (const id of options) choice.append(new Option(componentOf(id)?.name ?? id, id));
-      if (!options.length) choice.append(new Option("No components fit this slot yet", "", true, true));
-      choice.value = this.craftChoices[slot] ?? "";
-      choice.addEventListener("change", () => {
-        if (choice.value) this.craftChoices[slot] = choice.value; else delete this.craftChoices[slot];
-        this.craftStatus = ""; this.renderMenu("crafting");
+      const drop = document.createElement("div"); drop.className = "craft-drop-slot"; drop.dataset.slot = slot;
+      const label = document.createElement("strong"); label.textContent = titleCase(slot);
+      const selected = componentOf(this.craftChoices[slot] ?? "");
+      const value = document.createElement("span"); value.textContent = selected ? `${selected.name} · T${selected.tier}` : "Drop a compatible part here";
+      if (selected) drop.classList.add("filled");
+      drop.addEventListener("dragover", (event) => {
+        if (this.inSafety) event.preventDefault();
       });
-      row.append(document.createTextNode(titleCase(slot)), choice);
-      slots.append(row);
+      drop.addEventListener("drop", (event) => {
+        event.preventDefault();
+        const id = event.dataTransfer?.getData("text/plain") ?? "";
+        if (fitting(this.craftWeapon, slot, this.craftChoices).includes(id)) choosePart(slot, id);
+      });
+      if (selected) {
+        const clear = document.createElement("button"); clear.className = "craft-clear"; clear.textContent = "Remove";
+        clear.disabled = !this.inSafety;
+        clear.addEventListener("click", () => { delete this.craftChoices[slot]; this.craftStatus = ""; this.renderMenu("crafting"); });
+        drop.append(label, value, clear);
+      } else drop.append(label, value);
+      slots.append(drop);
     }
-    content.append(slots);
+    blueprint.append(slots);
 
-    // What this build does, stated as behaviour rather than as multipliers: a
-    // rare part must never read as a higher power tier.
+    const preview = document.createElement("div"); preview.className = "craft-result";
+    const result = resultOf(this.craftChoices);
+    preview.innerHTML = result
+      ? `<strong>Result: ${weapons[result]?.name ?? result}</strong><span>Recipe complete and ready to craft.</span>`
+      : `<strong>Preview: ${weapons[this.craftWeapon]?.name ?? this.craftWeapon}</strong><span>Fill every blank to complete this recipe.</span>`;
+    blueprint.append(preview);
+
+    const recipes = document.createElement("aside"); recipes.className = "craft-recipes";
+    const recipeTitle = document.createElement("h4"); recipeTitle.textContent = recipe.blueprint === "staff" ? "Staff recipe" : "Craftable gun recipes";
+    recipes.append(recipeTitle);
+    for (const id of buildable) {
+      const candidate = recipeOf(id);
+      if (!candidate || candidate.blueprint !== recipe.blueprint) continue;
+      const button = document.createElement("button"); button.className = id === this.craftWeapon ? "active" : "";
+      button.innerHTML = `<strong>${weapons[id]?.name ?? id}</strong><small>${candidate.summary}</small>`;
+      button.addEventListener("click", () => { this.craftWeapon = id; this.craftChoices = {}; this.craftStatus = ""; this.renderMenu("crafting"); });
+      recipes.append(button);
+    }
+    for (const locked of lockedCraftable(character.class, this.ledger)) {
+      const candidate = recipeOf(locked.id);
+      if (!candidate || candidate.blueprint !== recipe.blueprint) continue;
+      const button = document.createElement("button"); button.disabled = true;
+      button.innerHTML = `<strong>${locked.name} · level ${locked.level}</strong><small>${candidate.summary}</small>`;
+      recipes.append(button);
+    }
+    workbench.append(blueprint, recipes); content.append(workbench);
+
+    const tray = document.createElement("div"); tray.className = "craft-parts";
+    const trayTitle = document.createElement("h4"); trayTitle.textContent = recipe.blueprint === "staff" ? "Crystal and stave recipes" : "Compatible parts";
+    tray.append(trayTitle);
+    for (const slot of slotsOf(this.craftWeapon)) {
+      const group = document.createElement("section");
+      const groupTitle = document.createElement("strong"); groupTitle.textContent = titleCase(slot); group.append(groupTitle);
+      for (const id of fitting(this.craftWeapon, slot, this.craftChoices)) {
+        const part = componentOf(id)!;
+        const price = Object.keys(part.cost).sort().map((material) => `${part.cost[material]} ${materialName(material)}`).join(", ");
+        const button = document.createElement("button"); button.className = "craft-part"; button.draggable = this.inSafety;
+        button.disabled = !this.inSafety;
+        button.innerHTML = `<strong>${part.name} · T${part.tier}</strong><small>${part.effect}</small><small class="craft-part-cost">Recipe: ${price}</small>`;
+        button.addEventListener("dragstart", (event) => event.dataTransfer?.setData("text/plain", id));
+        button.addEventListener("click", () => choosePart(slot, id));
+        group.append(button);
+      }
+      tray.append(group);
+    }
+    content.append(tray);
+
+    // What this build does in player-facing language rather than raw multipliers.
     const behaviour = describe(this.craftWeapon, this.craftChoices);
     const effects = document.createElement("ul"); effects.className = "craft-effects";
     if (behaviour.length) {
@@ -906,7 +966,7 @@ class SpellFire {
     const build = document.createElement("button");
     build.className = "primary";
     build.textContent = Object.keys(required).length ? "Craft — spend materials" : "Craft (no materials required)";
-    build.disabled = !this.inSafety || full || Object.keys(missing).length > 0;
+    build.disabled = !this.inSafety || full || !result || result !== this.craftWeapon || Object.keys(missing).length > 0;
     build.addEventListener("click", () => this.commitCraft(required));
     content.append(build);
 

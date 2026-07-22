@@ -360,7 +360,7 @@ func (t *Tables) validateProgression(r *report) {
 		r.require(contains(XPSources, source), "progression: source %q is not one the simulation awards; want one of %v", source, XPSources)
 	}
 	r.require(p.CraftedItemCapacity > 0,
-		"progression: crafted_item_capacity must be positive; a stock build costs nothing, so an unbounded inventory can be minted forever")
+		"progression: crafted_item_capacity must be positive; permanent crafted inventory must have a defined capacity")
 	r.require(p.StarterKit.Unlocks >= t.Loadout.BarSlots(),
 		"progression: starter_kit.unlocks %d cannot fill the %d-slot action bar", p.StarterKit.Unlocks, t.Loadout.BarSlots())
 	// The developer-mode grant is bounded by the curve it drives, so a request
@@ -407,11 +407,15 @@ func (t *Tables) validateComponents(r *report) {
 	for _, id := range sortedKeys(t.Components.Blueprints) {
 		blueprint := t.Components.Blueprints[id]
 		r.require(blueprint.Name != "", "components: blueprint %q has no name", id)
+		r.require(blueprint.Summary != "", "components: blueprint %q has no summary", id)
 		r.require(len(blueprint.Slots) > 0, "components: blueprint %q exposes no slots", id)
 	}
 	for _, id := range sortedKeys(t.Components.Components) {
 		component := t.Components.Components[id]
 		r.require(component.Name != "", "components: %q has no name", id)
+		r.require(contains([]string{"gun_part", "mana_crystal", "stave"}, component.Kind),
+			"components: %q has unknown kind %q", id, component.Kind)
+		r.require(component.Tier > 0, "components: %q must declare a positive tier", id)
 		// The crafting UI must state a behaviour change in plain language, so a
 		// row without one would leave a player spending materials on a mystery.
 		r.require(component.Effect != "", "components: %q must describe its behaviour in plain language for the crafting UI", id)
@@ -420,6 +424,12 @@ func (t *Tables) validateComponents(r *report) {
 			continue
 		}
 		r.require(contains(blueprint.Slots, component.Slot), "components: %q fills slot %q, which blueprint %q does not expose", id, component.Slot, component.Blueprint)
+		if component.Blueprint == "gun" {
+			r.require(component.Kind == "gun_part", "components: %q is a %s on the gun blueprint", id, component.Kind)
+		} else if component.Blueprint == "staff" {
+			want := map[string]string{"crystal": "mana_crystal", "stave": "stave"}[component.Slot]
+			r.require(want != "" && component.Kind == want, "components: %q is a %s in the staff %s slot; want %s", id, component.Kind, component.Slot, want)
+		}
 		// Materials must be hauled to a safe zone and spent. A free component
 		// would put a behaviour change outside the economy entirely.
 		if r.require(len(component.Cost) > 0, "components: %q declares no material cost; crafting is what the hauled materials are for", id) {
@@ -430,13 +440,77 @@ func (t *Tables) validateComponents(r *report) {
 		}
 		t.validateModifiers(r, id, component)
 	}
+	for _, id := range sortedKeys(t.Components.Recipes) {
+		recipe := t.Components.Recipes[id]
+		weapon, ok := t.Weapons[id]
+		if !r.require(ok, "components: recipe %q has no matching weapon row", id) {
+			continue
+		}
+		blueprint, ok := t.Components.Blueprints[recipe.Blueprint]
+		if !r.require(ok, "components: recipe %q references unknown blueprint %q", id, recipe.Blueprint) {
+			continue
+		}
+		r.require(weapon.Blueprint == recipe.Blueprint,
+			"components: recipe %q uses blueprint %q but its weapon uses %q", id, recipe.Blueprint, weapon.Blueprint)
+		r.require(recipe.Summary != "", "components: recipe %q has no player-facing summary", id)
+		for _, slot := range blueprint.Slots {
+			accepted, exists := recipe.Slots[slot]
+			if !r.require(exists && len(accepted) > 0, "components: recipe %q does not fill required %s slot", id, slot) {
+				continue
+			}
+			for _, componentID := range accepted {
+				component, live := t.Components.Components[componentID]
+				r.require(live, "components: recipe %q accepts unknown component %q", id, componentID)
+				if live {
+					r.require(component.Blueprint == recipe.Blueprint && component.Slot == slot,
+						"components: recipe %q puts %q in %s, but it belongs to %s/%s", id, componentID, slot, component.Blueprint, component.Slot)
+				}
+			}
+		}
+		for _, slot := range sortedKeys(recipe.Slots) {
+			r.require(contains(blueprint.Slots, slot), "components: recipe %q fills slot %q, which blueprint %q does not expose", id, slot, recipe.Blueprint)
+		}
+	}
+	for _, id := range sortedKeys(t.Weapons) {
+		_, ok := t.Components.Recipes[id]
+		r.require(ok, "components: weapon %q has no crafting recipe", id)
+	}
+	recipeIDs := sortedKeys(t.Components.Recipes)
+	for left := 0; left < len(recipeIDs); left++ {
+		for right := left + 1; right < len(recipeIDs); right++ {
+			a, b := t.Components.Recipes[recipeIDs[left]], t.Components.Recipes[recipeIDs[right]]
+			if a.Blueprint != b.Blueprint {
+				continue
+			}
+			ambiguous := true
+			for _, slot := range t.Components.Blueprints[a.Blueprint].Slots {
+				overlap := false
+				for _, component := range a.Slots[slot] {
+					if contains(b.Slots[slot], component) {
+						overlap = true
+						break
+					}
+				}
+				if !overlap {
+					ambiguous = false
+					break
+				}
+			}
+			r.require(!ambiguous, "components: recipes %q and %q can be built from the same parts", recipeIDs[left], recipeIDs[right])
+		}
+	}
 }
 
-// validateModifiers keeps crafting on the behaviour axis. The map is open — a
-// component names whatever attribute it changes — but a name the simulation
-// never reads would be a promise the world silently drops, and fire cadence is
-// rejected outright because scaling it moves an item out of its damage band.
+// validateModifiers keeps every modifier on an attribute the simulation
+// consumes. Mana crystals have a narrow output exception; fire cadence remains
+// rejected outright because scaling it is an unrestricted DPS multiplier.
 func (t *Tables) validateModifiers(r *report, id string, component Component) {
+	// A stave is structural support. Its tier gates the crystal it can safely
+	// carry, and it intentionally contributes no combat modifier of its own.
+	if component.Kind == "stave" {
+		r.require(len(component.Modifiers) == 0, "components: stave %q must not have magical modifiers", id)
+		return
+	}
 	if !r.require(len(component.Modifiers) > 0, "components: %q declares no modifiers; a component that changes nothing is not a choice", id) {
 		return
 	}
@@ -444,7 +518,7 @@ func (t *Tables) validateModifiers(r *report, id string, component Component) {
 	for _, attribute := range sortedKeys(component.Modifiers) {
 		modifier := component.Modifiers[attribute]
 		if contains(ForbiddenAttributes, attribute) {
-			r.addf("components: %q modifies %q, which crafting may never touch: fire cadence is the damage band, and crafting changes handling and ceiling only", id, attribute)
+			r.addf("components: %q modifies %q, which crafting may never touch: fire cadence is an unrestricted DPS multiplier", id, attribute)
 			continue
 		}
 		if !r.require(contains(ComponentAttributes, attribute),
@@ -459,6 +533,9 @@ func (t *Tables) validateModifiers(r *report, id string, component Component) {
 		}
 		if contains(HandlingAttributes, attribute) {
 			r.require(handling, "components: %q modifies %q, but no %q weapon has gunplay handling to change", id, attribute, component.Blueprint)
+		}
+		if attribute == AttrSpellDamage || attribute == AttrSpellHealing {
+			r.require(component.Kind == "mana_crystal", "components: %q modifies %q, but only a mana crystal may alter all-spell output", id, attribute)
 		}
 	}
 }

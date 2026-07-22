@@ -480,6 +480,22 @@ func (w *World) craftedItems(saved []model.CraftedItem) []model.CraftedItem {
 			continue
 		}
 		item.Weapon = resolved.ID
+		// Component IDs and slot names may both change when a blueprint is
+		// revamped. Resolve each persisted part and place it in the live row's
+		// slot, so old saves remain usable without carrying legacy slots into the
+		// current crafting UI.
+		parts := map[string]string{}
+		for _, oldSlot := range sortedKeys(item.Components) {
+			part, live := w.tuning.Tables.Resolve("component", item.Components[oldSlot])
+			if !live || part.ID == "" {
+				continue
+			}
+			component := w.tuning.Tables.Components.Components[part.ID]
+			if component.Blueprint == w.tuning.Tables.Weapons[item.Weapon].Blueprint {
+				parts[component.Slot] = component.ID
+			}
+		}
+		item.Components = parts
 		items = append(items, item.Clone())
 	}
 	return items
@@ -582,8 +598,8 @@ var ErrCraftingLocked = errors.New("Crafting is only available inside a safe zon
 // after a disconnect.
 var ErrCraftingUnavailable = errors.New("You cannot craft right now.")
 
-// CraftRequest is one requested build: the weapon category, and the component
-// filling each slot the blueprint exposes. An unnamed slot is left stock.
+// CraftRequest is one requested build: a client preview and the component
+// filling each required blank. The complete parts determine the weapon.
 type CraftRequest struct {
 	Weapon     string
 	Components map[string]string
@@ -610,15 +626,22 @@ func (w *World) Craft(id string, request CraftRequest, itemID string) (model.Cra
 		return model.CraftedItem{}, fmt.Errorf("You can only keep %d crafted weapons. Nothing was spent.", capacity)
 	}
 	components := filledSlots(request.Components)
-	if err := crafting.Validate(w.tuning.Tables, p.Class, w.inventory(p), request.Weapon, components); err != nil {
+	weaponID, err := crafting.Result(w.tuning.Tables, components)
+	if err != nil {
 		return model.CraftedItem{}, err
 	}
-	cost := crafting.Cost(w.tuning.Tables, request.Weapon, components)
+	if request.Weapon != "" && request.Weapon != weaponID {
+		return model.CraftedItem{}, fmt.Errorf("Those parts build %s, not %s.", w.tuning.Tables.Weapons[weaponID].Name, w.tuning.Tables.Weapons[request.Weapon].Name)
+	}
+	if err := crafting.Validate(w.tuning.Tables, p.Class, w.inventory(p), weaponID, components); err != nil {
+		return model.CraftedItem{}, err
+	}
+	cost := crafting.Cost(w.tuning.Tables, weaponID, components)
 	if short := crafting.Shortfall(cost, p.Materials); len(short) > 0 {
 		return model.CraftedItem{}, w.shortfallError(short)
 	}
 	crafting.Spend(p.Materials, cost)
-	item := model.CraftedItem{ID: itemID, CharacterID: p.ID, Weapon: request.Weapon, Components: components}
+	item := model.CraftedItem{ID: itemID, CharacterID: p.ID, Weapon: weaponID, Components: components}
 	p.Items = append(p.Items, item)
 	return item.Clone(), nil
 }
@@ -667,8 +690,8 @@ func (w *World) shortfallError(short map[string]int) error {
 	return fmt.Errorf("You are short %s.", strings.Join(parts, ", "))
 }
 
-// filledSlots drops the slots the request left stock, so an empty choice is
-// never stored as a component reference to nothing.
+// filledSlots drops empty wire pairs so they are never persisted as references
+// to nothing. Recipe resolution still requires every real blueprint slot.
 func filledSlots(components map[string]string) map[string]string {
 	filled := make(map[string]string, len(components))
 	for slot, component := range components {

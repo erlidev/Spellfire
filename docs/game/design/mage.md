@@ -66,4 +66,4 @@ The wall is the only spell that is not just a table row. It creates the first dy
 
 ## Staffs
 
-Staffs use the shared [slotted-blueprint system](progression-and-crafting.md#slotted-blueprint-crafting), with components such as core, focus, and conduit. Components alter behavior—cast speed, mana cost, projectile or area shape, element bias, or keystone-like tradeoffs—without inflating the damage band.
+Staffs use the shared [recipe-blueprint system](progression-and-crafting.md#recipe-blueprint-crafting). Each staff is exactly one crafted mana crystal and one stave: crystals apply general effects such as cast timing, mana efficiency, spell damage/healing, or projectile/area shape, while wood and infusions determine the stave tier required to contain stronger crystals.

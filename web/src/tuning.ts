@@ -57,9 +57,10 @@ export interface Spell { name: string; element: string; tier: number; starter?: 
 export interface Gadget { name: string; class: CharacterClass; starter?: boolean; unlock_level: number; ability: string }
 export interface ProgressionTable { max_level: number; base_xp: number; growth: number; sources: Record<string, number>; crafted_item_capacity: number; starter_kit: { unlocks: number }; admin_grant: AdminField }
 export interface LoadoutTable { weapon_slots: number; gadget_slots: number; spell_slots: number; affinity: { same_element_per_tier: number } }
-export interface Blueprint { name: string; slots: string[] }
-export interface Component { name: string; blueprint: string; slot: string; effect: string; cost: Record<string, number>; modifiers: Record<string, number> }
-export interface ComponentsTable { blueprints: Record<string, Blueprint>; components: Record<string, Component> }
+export interface Blueprint { name: string; summary: string; slots: string[] }
+export interface Component { name: string; blueprint: string; slot: string; kind: "gun_part" | "mana_crystal" | "stave"; tier: number; effect: string; cost: Record<string, number>; modifiers: Record<string, number> }
+export interface CraftRecipe { blueprint: string; summary: string; slots: Record<string, string[]> }
+export interface ComponentsTable { blueprints: Record<string, Blueprint>; components: Record<string, Component>; recipes: Record<string, CraftRecipe> }
 export interface Grade { name: string; tier: number }
 export interface MaterialKind { name: string; universal: boolean; source: string; summary: string }
 export interface Material { name: string; grade: string; kind: string; biome?: string }

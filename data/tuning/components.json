@@ -1,142 +1,82 @@
 {
   "blueprints": {
     "gun": {
-      "name": "Gun",
-      "slots": ["muzzle", "barrel", "scope", "trigger", "magazine"]
+      "name": "Weapon blueprint",
+      "summary": "Fit a receiver, barrel, action, feed system, and sight. The complete arrangement determines the gun category.",
+      "slots": ["receiver", "barrel", "action", "feed", "sight"]
     },
     "staff": {
-      "name": "Staff",
-      "slots": ["core", "focus", "conduit"]
+      "name": "Staff assembly",
+      "summary": "Craft a mana crystal from magical materials, then pair it with a stave strong enough to contain it.",
+      "slots": ["crystal", "stave"]
     }
   },
   "components": {
-    "muzzle-brake": {
-      "name": "Muzzle brake",
-      "blueprint": "gun",
-      "slot": "muzzle",
-      "effect": "Rounds leave the barrel faster and the muzzle settles between shots. The heavier muzzle makes reloads slower.",
-      "cost": { "salvaged-plate": 4 },
-      "modifiers": { "projectile_speed": 1.15, "reload_ms": 1.1, "recoil_degrees": 0.7 }
-    },
-    "suppressor": {
-      "name": "Suppressor",
-      "blueprint": "gun",
-      "slot": "muzzle",
-      "effect": "Subsonic rounds travel more slowly but stay in flight far longer, and the weapon wanders less while you move.",
-      "cost": { "salvaged-plate": 3, "tempered-plate": 1 },
-      "modifiers": { "projectile_speed": 0.85, "projectile_life": 1.4, "move_spread_degrees": 0.8 }
-    },
-    "long-barrel": {
-      "name": "Long barrel",
-      "blueprint": "gun",
-      "slot": "barrel",
-      "effect": "A longer bore drives rounds out much faster and groups the standing shot, but tightens them into a thinner shot that is easier to miss with.",
-      "cost": { "salvaged-plate": 5, "tempered-plate": 2 },
-      "modifiers": { "projectile_speed": 1.3, "projectile_radius": 0.8, "spread_degrees": 0.7 }
-    },
-    "short-barrel": {
-      "name": "Short barrel",
-      "blueprint": "gun",
-      "slot": "barrel",
-      "effect": "A stubby bore handles quickly, reloads fast, and stays steadier on the move, giving up muzzle velocity for it.",
-      "cost": { "salvaged-plate": 3 },
-      "modifiers": { "projectile_speed": 0.85, "reload_ms": 0.8, "move_spread_degrees": 0.75 }
-    },
-    "ranged-optic": {
-      "name": "Ranged optic",
-      "blueprint": "gun",
-      "slot": "scope",
-      "effect": "Shots stay in flight much longer, so they reach targets further out, and the sight is light enough to keep moving while scoped.",
-      "cost": { "salvaged-plate": 3, "tempered-plate": 3 },
-      "modifiers": { "projectile_life": 1.4, "scope_movement_multiplier": 1.25 }
-    },
-    "close-optic": {
-      "name": "Close optic",
-      "blueprint": "gun",
-      "slot": "scope",
-      "effect": "A wide bead makes shots easier to land up close and steadier on the move, at the cost of how far they carry.",
-      "cost": { "salvaged-plate": 2 },
-      "modifiers": { "projectile_radius": 1.25, "projectile_life": 0.8, "move_spread_degrees": 0.8 }
-    },
-    "match-trigger": {
-      "name": "Match trigger",
-      "blueprint": "gun",
-      "slot": "trigger",
-      "effect": "A consistent break makes every shot land a little wider and groups the standing shot tightly. The mechanism is slower to clear on a reload.",
-      "cost": { "tempered-plate": 3 },
-      "modifiers": { "projectile_radius": 1.15, "reload_ms": 1.15, "spread_degrees": 0.7 }
-    },
-    "light-trigger": {
-      "name": "Light trigger",
-      "blueprint": "gun",
-      "slot": "trigger",
-      "effect": "A light pull gets the weapon back into action faster and sends rounds out slightly slower, and the weapon kicks harder each shot.",
-      "cost": { "salvaged-plate": 2, "tempered-plate": 1 },
-      "modifiers": { "reload_ms": 0.8, "projectile_speed": 0.9, "recoil_degrees": 1.2 }
-    },
-    "extended-magazine": {
-      "name": "Extended magazine",
-      "blueprint": "gun",
-      "slot": "magazine",
-      "effect": "Holds half again as many rounds, and takes considerably longer to swap.",
-      "cost": { "salvaged-plate": 4, "tempered-plate": 2 },
-      "modifiers": { "magazine_size": 1.5, "reload_ms": 1.3 }
-    },
-    "quick-magazine": {
-      "name": "Quick magazine",
-      "blueprint": "gun",
-      "slot": "magazine",
-      "effect": "Swaps far faster in exchange for holding fewer rounds.",
-      "cost": { "salvaged-plate": 3, "tempered-plate": 1 },
-      "modifiers": { "magazine_size": 0.8, "reload_ms": 0.65 }
-    },
-    "focusing-core": {
-      "name": "Focusing core",
-      "blueprint": "staff",
-      "slot": "core",
-      "effect": "Casts cost noticeably less mana, and take longer to commit before they release.",
-      "cost": { "salvaged-plate": 3, "arcane-shard": 1 },
-      "modifiers": { "cost_amount": 0.75, "windup_ms": 1.3 }
-    },
-    "surging-core": {
-      "name": "Surging core",
-      "blueprint": "staff",
-      "slot": "core",
-      "effect": "Casts commit much faster, giving opponents less warning, and burn more mana each time.",
-      "cost": { "tempered-plate": 2, "storm-shard": 2 },
-      "modifiers": { "windup_ms": 0.7, "cost_amount": 1.3 }
-    },
-    "wide-focus": {
-      "name": "Wide focus",
-      "blueprint": "staff",
-      "slot": "focus",
-      "effect": "Shapes a broader, slower bolt that is easier to connect with.",
-      "cost": { "salvaged-plate": 3, "ember-shard": 1 },
-      "modifiers": { "projectile_radius": 1.35, "projectile_speed": 0.8 }
-    },
-    "narrow-focus": {
-      "name": "Narrow focus",
-      "blueprint": "staff",
-      "slot": "focus",
-      "effect": "Shapes a fast, thin bolt that crosses the gap quickly and is easier to miss with.",
-      "cost": { "salvaged-plate": 3, "rime-shard": 1 },
-      "modifiers": { "projectile_speed": 1.35, "projectile_radius": 0.75 }
-    },
-    "reaching-conduit": {
-      "name": "Reaching conduit",
-      "blueprint": "staff",
-      "slot": "conduit",
-      "effect": "Bolts persist far longer before fading, at a small mana premium.",
-      "cost": { "tempered-plate": 2, "stone-shard": 2 },
-      "modifiers": { "projectile_life": 1.4, "cost_amount": 1.15 }
-    },
-    "channeling-conduit": {
-      "name": "Channeling conduit",
-      "blueprint": "staff",
-      "slot": "conduit",
-      "effect": "Draws less mana per cast and sends bolts out more slowly.",
-      "cost": { "tempered-plate": 2, "arcane-shard": 2 },
-      "modifiers": { "cost_amount": 0.8, "projectile_speed": 0.85 }
-    }
+    "pistol-receiver": { "name": "Pistol receiver", "blueprint": "gun", "slot": "receiver", "kind": "gun_part", "tier": 1, "effect": "A compact locked-breech frame keeps handling light.", "cost": { "salvaged-plate": 3 }, "modifiers": { "reload_ms": 0.92 } },
+    "revolver-frame": { "name": "Revolver frame", "blueprint": "gun", "slot": "receiver", "kind": "gun_part", "tier": 1, "effect": "A rigid wheel-gun frame trades quick reloads for steady alignment.", "cost": { "salvaged-plate": 4 }, "modifiers": { "spread_degrees": 0.9 } },
+    "smg-receiver": { "name": "SMG receiver", "blueprint": "gun", "slot": "receiver", "kind": "gun_part", "tier": 1, "effect": "A compact stamped receiver stays controllable while moving.", "cost": { "salvaged-plate": 5 }, "modifiers": { "move_spread_degrees": 0.88 } },
+    "shotgun-receiver": { "name": "Shotgun receiver", "blueprint": "gun", "slot": "receiver", "kind": "gun_part", "tier": 1, "effect": "A broad receiver supports heavy shells and absorbs some muzzle climb.", "cost": { "salvaged-plate": 6 }, "modifiers": { "recoil_degrees": 0.9 } },
+    "rifle-receiver": { "name": "Rifle receiver", "blueprint": "gun", "slot": "receiver", "kind": "gun_part", "tier": 1, "effect": "A service receiver balances field handling and durability.", "cost": { "salvaged-plate": 6, "tempered-plate": 1 }, "modifiers": { "reload_ms": 0.95 } },
+    "marksman-receiver": { "name": "Precision receiver", "blueprint": "gun", "slot": "receiver", "kind": "gun_part", "tier": 2, "effect": "A bedded receiver improves settled shot grouping.", "cost": { "salvaged-plate": 5, "tempered-plate": 3 }, "modifiers": { "spread_degrees": 0.75 } },
+    "sniper-receiver": { "name": "Long-action receiver", "blueprint": "gun", "slot": "receiver", "kind": "gun_part", "tier": 3, "effect": "A stiff long action controls recoil at the cost of a slower reload.", "cost": { "tempered-plate": 5, "resonant-plate": 1 }, "modifiers": { "recoil_degrees": 0.78, "reload_ms": 1.12 } },
+    "lmg-receiver": { "name": "LMG receiver", "blueprint": "gun", "slot": "receiver", "kind": "gun_part", "tier": 3, "effect": "A reinforced receiver steadies sustained fire but adds servicing time.", "cost": { "salvaged-plate": 8, "tempered-plate": 4 }, "modifiers": { "recoil_degrees": 0.82, "reload_ms": 1.1 } },
+    "launcher-receiver": { "name": "Launcher chassis", "blueprint": "gun", "slot": "receiver", "kind": "gun_part", "tier": 3, "effect": "A braced chassis carries the launch tube and slows follow-up handling.", "cost": { "tempered-plate": 6, "resonant-plate": 2 }, "modifiers": { "projectile_speed": 1.08 } },
+
+    "pistol-barrel": { "name": "Pistol barrel", "blueprint": "gun", "slot": "barrel", "kind": "gun_part", "tier": 1, "effect": "A short rifled barrel keeps the weapon quick and slightly reduces range.", "cost": { "salvaged-plate": 2 }, "modifiers": { "projectile_life": 0.92 } },
+    "revolver-barrel": { "name": "Revolver barrel", "blueprint": "gun", "slot": "barrel", "kind": "gun_part", "tier": 1, "effect": "A medium rifled barrel improves muzzle velocity.", "cost": { "salvaged-plate": 3 }, "modifiers": { "projectile_speed": 1.08 } },
+    "short-rifled-barrel": { "name": "Short rifled barrel", "blueprint": "gun", "slot": "barrel", "kind": "gun_part", "tier": 1, "effect": "A compact barrel stays mobile but gives up projectile lifetime.", "cost": { "salvaged-plate": 3 }, "modifiers": { "projectile_life": 0.85, "move_spread_degrees": 0.92 } },
+    "smoothbore-barrel": { "name": "Smoothbore barrel", "blueprint": "gun", "slot": "barrel", "kind": "gun_part", "tier": 1, "effect": "A short smoothbore opens the close-range pattern.", "cost": { "salvaged-plate": 4 }, "modifiers": { "projectile_radius": 1.12 } },
+    "service-rifle-barrel": { "name": "Service rifle barrel", "blueprint": "gun", "slot": "barrel", "kind": "gun_part", "tier": 1, "effect": "A general-purpose rifled barrel raises velocity without excess weight.", "cost": { "salvaged-plate": 5, "tempered-plate": 1 }, "modifiers": { "projectile_speed": 1.12 } },
+    "precision-barrel": { "name": "Free-float precision barrel", "blueprint": "gun", "slot": "barrel", "kind": "gun_part", "tier": 2, "effect": "A long free-float barrel tightens settled grouping and carries rounds farther.", "cost": { "tempered-plate": 4 }, "modifiers": { "spread_degrees": 0.7, "projectile_life": 1.2 } },
+    "heavy-barrel": { "name": "Heavy machine barrel", "blueprint": "gun", "slot": "barrel", "kind": "gun_part", "tier": 3, "effect": "A heavy barrel resists climb during sustained fire.", "cost": { "tempered-plate": 5, "resonant-plate": 1 }, "modifiers": { "recoil_degrees": 0.72 } },
+    "launch-tube": { "name": "Venturi launch tube", "blueprint": "gun", "slot": "barrel", "kind": "gun_part", "tier": 3, "effect": "A resonant-lined tube keeps the rocket stable in flight.", "cost": { "tempered-plate": 5, "resonant-plate": 2 }, "modifiers": { "projectile_radius": 0.9, "projectile_speed": 1.12 } },
+
+    "semi-auto-action": { "name": "Semi-automatic action", "blueprint": "gun", "slot": "action", "kind": "gun_part", "tier": 1, "effect": "A conventional cycling action clears quickly on reload.", "cost": { "salvaged-plate": 3 }, "modifiers": { "reload_ms": 0.92 } },
+    "hammer-action": { "name": "Double-action hammer", "blueprint": "gun", "slot": "action", "kind": "gun_part", "tier": 1, "effect": "A deliberate hammer pull slightly steadies each shot.", "cost": { "salvaged-plate": 2 }, "modifiers": { "spread_degrees": 0.92 } },
+    "blowback-action": { "name": "Blowback action", "blueprint": "gun", "slot": "action", "kind": "gun_part", "tier": 1, "effect": "A simple blowback action reloads easily but kicks harder.", "cost": { "salvaged-plate": 3 }, "modifiers": { "reload_ms": 0.86, "recoil_degrees": 1.12 } },
+    "pump-action": { "name": "Pump action", "blueprint": "gun", "slot": "action", "kind": "gun_part", "tier": 1, "effect": "A manually locked action contains the shell reliably and tames recoil.", "cost": { "salvaged-plate": 4 }, "modifiers": { "recoil_degrees": 0.84 } },
+    "gas-action": { "name": "Gas-operated action", "blueprint": "gun", "slot": "action", "kind": "gun_part", "tier": 2, "effect": "A tuned gas system reduces recoil and takes longer to service.", "cost": { "salvaged-plate": 4, "tempered-plate": 2 }, "modifiers": { "recoil_degrees": 0.8, "reload_ms": 1.08 } },
+    "bolt-action": { "name": "Turn-bolt action", "blueprint": "gun", "slot": "action", "kind": "gun_part", "tier": 3, "effect": "A locked bolt produces a clean, stable shot.", "cost": { "tempered-plate": 4, "resonant-plate": 1 }, "modifiers": { "spread_degrees": 0.65 } },
+    "break-action": { "name": "Break-open ignition", "blueprint": "gun", "slot": "action", "kind": "gun_part", "tier": 3, "effect": "A simple sealed ignition train accelerates the rocket cleanly.", "cost": { "tempered-plate": 4 }, "modifiers": { "projectile_speed": 1.1 } },
+
+    "pistol-magazine": { "name": "Pistol box magazine", "blueprint": "gun", "slot": "feed", "kind": "gun_part", "tier": 1, "effect": "A compact detachable box swaps quickly.", "cost": { "salvaged-plate": 2 }, "modifiers": { "reload_ms": 0.88 } },
+    "six-cylinder": { "name": "Six-round cylinder", "blueprint": "gun", "slot": "feed", "kind": "gun_part", "tier": 1, "effect": "A precisely timed cylinder improves shot alignment.", "cost": { "salvaged-plate": 3 }, "modifiers": { "spread_degrees": 0.9 } },
+    "smg-magazine": { "name": "Thirty-round stick magazine", "blueprint": "gun", "slot": "feed", "kind": "gun_part", "tier": 1, "effect": "A long stick magazine increases capacity and slows the swap.", "cost": { "salvaged-plate": 4 }, "modifiers": { "magazine_size": 1.15, "reload_ms": 1.08 } },
+    "tube-magazine": { "name": "Tubular shell magazine", "blueprint": "gun", "slot": "feed", "kind": "gun_part", "tier": 1, "effect": "A fixed tube carries an extra shell but is slower to replenish.", "cost": { "salvaged-plate": 4 }, "modifiers": { "magazine_size": 1.15, "reload_ms": 1.12 } },
+    "rifle-magazine": { "name": "Rifle box magazine", "blueprint": "gun", "slot": "feed", "kind": "gun_part", "tier": 1, "effect": "A curved detachable box adds capacity with a modest reload cost.", "cost": { "salvaged-plate": 4, "tempered-plate": 1 }, "modifiers": { "magazine_size": 1.2, "reload_ms": 1.08 } },
+    "marksman-magazine": { "name": "Low-profile precision magazine", "blueprint": "gun", "slot": "feed", "kind": "gun_part", "tier": 2, "effect": "A low-profile box clears the firing position quickly.", "cost": { "tempered-plate": 3 }, "modifiers": { "reload_ms": 0.88 } },
+    "internal-magazine": { "name": "Internal precision magazine", "blueprint": "gun", "slot": "feed", "kind": "gun_part", "tier": 3, "effect": "A rigid internal feed preserves alignment but reloads slowly.", "cost": { "tempered-plate": 3, "resonant-plate": 1 }, "modifiers": { "spread_degrees": 0.85, "reload_ms": 1.18 } },
+    "belt-box": { "name": "Linked belt box", "blueprint": "gun", "slot": "feed", "kind": "gun_part", "tier": 3, "effect": "A large belt box carries more rounds and takes much longer to change.", "cost": { "salvaged-plate": 6, "tempered-plate": 4 }, "modifiers": { "magazine_size": 1.3, "reload_ms": 1.25 } },
+    "rocket-cradle": { "name": "Single-rocket cradle", "blueprint": "gun", "slot": "feed", "kind": "gun_part", "tier": 3, "effect": "A centered cradle improves rocket launch consistency.", "cost": { "tempered-plate": 3, "resonant-plate": 1 }, "modifiers": { "projectile_radius": 0.9 } },
+
+    "iron-sights": { "name": "Iron sights", "blueprint": "gun", "slot": "sight", "kind": "gun_part", "tier": 1, "effect": "Simple irons stay steady while moving.", "cost": { "salvaged-plate": 1 }, "modifiers": { "move_spread_degrees": 0.92 } },
+    "bead-sight": { "name": "Shotgun bead", "blueprint": "gun", "slot": "sight", "kind": "gun_part", "tier": 1, "effect": "A broad bead favors close target acquisition.", "cost": { "salvaged-plate": 1 }, "modifiers": { "projectile_radius": 1.08 } },
+    "red-dot-sight": { "name": "Reflex sight", "blueprint": "gun", "slot": "sight", "kind": "gun_part", "tier": 2, "effect": "A clear reflex point tightens moving shots.", "cost": { "salvaged-plate": 2, "tempered-plate": 1 }, "modifiers": { "move_spread_degrees": 0.78 } },
+    "magnified-optic": { "name": "Magnified optic", "blueprint": "gun", "slot": "sight", "kind": "gun_part", "tier": 2, "effect": "Magnification improves settled precision while adding scoped weight.", "cost": { "tempered-plate": 3 }, "modifiers": { "spread_degrees": 0.72, "scope_movement_multiplier": 0.9 } },
+    "telescopic-optic": { "name": "Telescopic optic", "blueprint": "gun", "slot": "sight", "kind": "gun_part", "tier": 3, "effect": "A long optic extends practical reach and commits the shooter more heavily.", "cost": { "tempered-plate": 4, "resonant-plate": 1 }, "modifiers": { "projectile_life": 1.18, "scope_movement_multiplier": 0.82 } },
+    "ladder-sight": { "name": "Launcher ladder sight", "blueprint": "gun", "slot": "sight", "kind": "gun_part", "tier": 2, "effect": "A range ladder keeps slow rockets on a narrower line.", "cost": { "tempered-plate": 2 }, "modifiers": { "spread_degrees": 0.75 } },
+
+    "quartz-clock-crystal": { "name": "Clockwork quartz crystal", "blueprint": "staff", "slot": "crystal", "kind": "mana_crystal", "tier": 1, "effect": "Shortens every spell cooldown by 15% and slightly lengthens its cast commitment.", "cost": { "arcane-shard": 2, "salvaged-plate": 2 }, "modifiers": { "cooldown_ms": 0.85, "windup_ms": 1.08 } },
+    "ember-prism-crystal": { "name": "Ember prism crystal", "blueprint": "staff", "slot": "crystal", "kind": "mana_crystal", "tier": 2, "effect": "Increases all spell damage by 12% and raises mana costs by 10%.", "cost": { "ember-shard": 3, "tempered-plate": 2 }, "modifiers": { "spell_damage": 1.12, "cost_amount": 1.1 } },
+    "mercy-pearl-crystal": { "name": "Mercy pearl crystal", "blueprint": "staff", "slot": "crystal", "kind": "mana_crystal", "tier": 2, "effect": "Increases all spell healing by 18%; it does not add healing to spells that have none.", "cost": { "rime-shard": 2, "arcane-shard": 2, "tempered-plate": 1 }, "modifiers": { "spell_healing": 1.18 } },
+    "channeling-crystal": { "name": "Channeling crystal", "blueprint": "staff", "slot": "crystal", "kind": "mana_crystal", "tier": 1, "effect": "Reduces the mana cost of every spell by 18% but slows its projectile.", "cost": { "arcane-shard": 2, "salvaged-plate": 3 }, "modifiers": { "cost_amount": 0.82, "projectile_speed": 0.9 } },
+    "stormglass-crystal": { "name": "Stormglass crystal", "blueprint": "staff", "slot": "crystal", "kind": "mana_crystal", "tier": 3, "effect": "Shortens cast windups by 22% and increases all spell damage by 8%, at a substantial mana premium.", "cost": { "storm-shard": 4, "resonant-plate": 2 }, "modifiers": { "windup_ms": 0.78, "spell_damage": 1.08, "cost_amount": 1.2 } },
+    "geomancer-crystal": { "name": "Geomancer crystal", "blueprint": "staff", "slot": "crystal", "kind": "mana_crystal", "tier": 3, "effect": "Broadens every spell projectile or area by 20% and slows its travel.", "cost": { "stone-shard": 4, "resonant-plate": 2 }, "modifiers": { "projectile_radius": 1.2, "projectile_speed": 0.88 } },
+
+    "ash-stave": { "name": "Ash stave", "blueprint": "staff", "slot": "stave", "kind": "stave", "tier": 1, "effect": "Tier 1 support. Ash is light and accepts only tier 1 mana crystals.", "cost": { "ash-heartwood": 5 }, "modifiers": {} },
+    "oak-stave": { "name": "Runed oak stave", "blueprint": "staff", "slot": "stave", "kind": "stave", "tier": 2, "effect": "Tier 2 support. Tempered bands and infused arcane dust contain tier 1–2 crystals.", "cost": { "oak-heartwood": 5, "tempered-plate": 2, "arcane-shard": 1 }, "modifiers": {} },
+    "ironwood-stave": { "name": "Resonant ironwood stave", "blueprint": "staff", "slot": "stave", "kind": "stave", "tier": 3, "effect": "Tier 3 support. Resonant metal and elemental infusions contain any current crystal.", "cost": { "ironwood-heartwood": 5, "resonant-plate": 2, "storm-shard": 1, "stone-shard": 1 }, "modifiers": {} }
+  },
+  "recipes": {
+    "field-pistol": { "blueprint": "gun", "summary": "Compact defensive sidearm: locked-breech pistol receiver, short barrel, semi-auto action, box magazine, and simple sights.", "slots": { "receiver": ["pistol-receiver"], "barrel": ["pistol-barrel"], "action": ["semi-auto-action"], "feed": ["pistol-magazine"], "sight": ["iron-sights", "red-dot-sight"] } },
+    "service-revolver": { "blueprint": "gun", "summary": "Reliable wheel gun: rigid frame, revolver barrel, double-action hammer, timed cylinder, and iron sights.", "slots": { "receiver": ["revolver-frame"], "barrel": ["revolver-barrel"], "action": ["hammer-action"], "feed": ["six-cylinder"], "sight": ["iron-sights"] } },
+    "compact-smg": { "blueprint": "gun", "summary": "Close-quarters automatic: stamped SMG receiver, short rifled barrel, blowback action, stick magazine, and reflex-capable sights.", "slots": { "receiver": ["smg-receiver"], "barrel": ["short-rifled-barrel"], "action": ["blowback-action"], "feed": ["smg-magazine"], "sight": ["iron-sights", "red-dot-sight"] } },
+    "breaching-shotgun": { "blueprint": "gun", "summary": "Pump shotgun: shell receiver, smoothbore barrel, locked pump action, tubular magazine, and a close-range bead.", "slots": { "receiver": ["shotgun-receiver"], "barrel": ["smoothbore-barrel"], "action": ["pump-action"], "feed": ["tube-magazine"], "sight": ["bead-sight"] } },
+    "starter-rifle": { "blueprint": "gun", "summary": "General-purpose service rifle: rifle receiver and barrel, gas system, detachable magazine, and field sights.", "slots": { "receiver": ["rifle-receiver"], "barrel": ["service-rifle-barrel"], "action": ["gas-action"], "feed": ["rifle-magazine"], "sight": ["iron-sights", "red-dot-sight"] } },
+    "marksman-rifle": { "blueprint": "gun", "summary": "Semi-automatic precision rifle: bedded receiver, free-float barrel, semi-auto action, low-profile magazine, and magnified glass.", "slots": { "receiver": ["marksman-receiver"], "barrel": ["precision-barrel"], "action": ["semi-auto-action"], "feed": ["marksman-magazine"], "sight": ["magnified-optic"] } },
+    "long-sniper": { "blueprint": "gun", "summary": "Long-range bolt rifle: stiff long action, precision barrel, turn bolt, internal magazine, and telescopic optic.", "slots": { "receiver": ["sniper-receiver"], "barrel": ["precision-barrel"], "action": ["bolt-action"], "feed": ["internal-magazine"], "sight": ["telescopic-optic"] } },
+    "support-lmg": { "blueprint": "gun", "summary": "Belt-fed support weapon: reinforced LMG receiver, heavy barrel, gas action, belt box, and durable field sights.", "slots": { "receiver": ["lmg-receiver"], "barrel": ["heavy-barrel"], "action": ["gas-action"], "feed": ["belt-box"], "sight": ["iron-sights", "red-dot-sight"] } },
+    "field-launcher": { "blueprint": "gun", "summary": "Single-shot rocket launcher: braced chassis, venturi tube, sealed ignition, rocket cradle, and range ladder.", "slots": { "receiver": ["launcher-receiver"], "barrel": ["launch-tube"], "action": ["break-action"], "feed": ["rocket-cradle"], "sight": ["ladder-sight"] } },
+    "starter-staff": { "blueprint": "staff", "summary": "A two-part focus. Craft one mana crystal for its all-spell effect, then mount it in a stave of equal or higher tier.", "slots": { "crystal": ["quartz-clock-crystal", "ember-prism-crystal", "mercy-pearl-crystal", "channeling-crystal", "stormglass-crystal", "geomancer-crystal"], "stave": ["ash-stave", "oak-stave", "ironwood-stave"] } }
   }
 }

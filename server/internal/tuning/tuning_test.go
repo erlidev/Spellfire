@@ -646,9 +646,9 @@ func TestGadgetRowsAreValidatedLikeSpells(t *testing.T) {
 	}
 }
 
-// Crafting is the behaviour axis. The loader is what keeps it there: a modifier
-// on fire cadence is the damage band by another name, and a modifier the
-// simulation never reads is a promise the world silently drops.
+// Crafting names only consumed attributes. Even with the mana-crystal output
+// exception, fire cadence is an unrestricted DPS multiplier and an unread name
+// is a promise the world would silently drop.
 func TestComponentModifiersStayOnTheBehaviourAxis(t *testing.T) {
 	component := func(modifiers string) string {
 		return `{"blueprints": {"gun": {"name": "Gun", "slots": ["muzzle"]}, "staff": {"name": "Staff", "slots": ["core"]}},

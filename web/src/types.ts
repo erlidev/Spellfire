@@ -23,7 +23,7 @@ export interface LoadoutSet { weapon: string; gadgets: string[]; spells: string[
  */
 export interface CraftedItem { id: string; weapon: string; components: Record<string, string> }
 
-/** One requested build. A slot the request omits is left stock. */
+/** One requested build. `weapon` is a preview; the complete parts determine the authoritative result. */
 export interface CraftRequest { weapon: string; components: Record<string, string> }
 
 export interface Entity {
