@@ -22,7 +22,7 @@ Bands are separated by incentive, not walls. Low-tier rewards should not interes
 Biomes and danger bands are independent:
 
 - **Biome determines type.** A fire biome yields fire-aligned material and parts at every radius.
-- **Radius determines grade.** The biome's outer reaches yield rarer versions.
+- **Radius determines grade.** The biome's outer reaches yield rarer versions, and grade is what feeds the [rarity tiers](progression-and-crafting.md#rarity-tiers): depth is the vertical axis of progression, so getting stronger means taking more risk rather than putting in more hours.
 
 This two-dimensional taxonomy gives every rare recipe a contestable geographic source. Structural and common materials remain available everywhere so geography never hard-locks a build.
 

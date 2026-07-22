@@ -2,8 +2,11 @@
 
 These rules apply everywhere. Breaking one breaks a [design pillar](pillars.md).
 
-- “Stronger” means more commitment or skill ceiling within the same power band, never a larger unconditional number.
-- Access is gated; power is not. Affinity, unlocks, and rarity control available tools, not their dominance.
+- “Stronger” means more commitment or skill ceiling plus a bounded numeric gain paid out of the [vertical budget](progression-and-crafting.md#the-vertical-budget), never an unconditional number that grows with content.
+- The starter-to-maxed power ratio is capped at ~2× effective combat power, and no single equipped item may carry more than a third of that gain.
+- Raw TTK never falls below 2.0 s, whatever the gear. Reactability outranks reward.
+- Rarity is at least half horizontal. A rarer item must also change conditions, handling, or behavior; a pure stat step is not a valid tier.
+- Access is gated and power is bounded. Affinity, unlocks, and rarity control which tools are available and how far inside the budget they reach, never dominance outside it.
 - Specific materials may be biome-gated; common structural materials are universal.
 - Breadth matters only during safe-zone preparation. Loadouts lock in the open world.
 - Every damaging tool has a dodge vector and a punish window. Reload/recoil and mana/cooldowns create symmetric downtime.

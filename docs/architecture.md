@@ -113,7 +113,7 @@ Implemented authoritative rules include:
 - one ability path for every deliberate action, and one status-effect layer applied through it (see [abilities and effects](#abilities-and-effects));
 - effective-damage attribution and most-contribution kill credit through a bounded combat log;
 - the nine settled gun categories, separated by handling rather than by damage: magazine, reload, range, recoil pattern, spread, weight class, scope, pellets, and blast (see [gunplay](#gunplay));
-- approximately three-second uncontested raw TTK from the shared 100-health/10-damage/300-ms-cadence tuning band;
+- approximately three-second uncontested raw TTK from the shared 100-health/10-damage/300-ms-cadence tuning band — the equal-gear anchor, with every component still Common tier until [rarity tiers](game/design/progression-and-crafting.md#rarity-tiers) land in Phase 2.7;
 - no PvP damage inside the protected hub/fringe, while projectiles may still resolve visibly;
 - deterministic ordering for player and projectile processing and deterministic tree generation.
 
@@ -169,7 +169,7 @@ Both classes lay out over **one six-slot action bar**, which the tables enforce 
 
 The Mage's affinity rule is the specialisation cost: a tier-N spell needs N−1 other spells of its element in the same set. The rule's shape is locked by [`mage.md`](game/design/mage.md#element-affinity) and only the multiplier is tunable, so the table validates that a tier-4 signature stays equippable inside the bar it shares.
 
-**The safe-zone lock is the economy's keystone.** `World.SetLoadout` refuses any change from outside `world.SafeRadius`, and from a dead or lingering body, so owning more options improves preparation and never the power carried into one fight. It is enforced on the mutation, not on the UI: a client that ignores its own disabled controls is still refused. Respec inside safety is free — nothing is charged or consumed — and a committed change arrives as a fresh kit, full magazine and no cooldowns, both of which are only reachable where the lock already allows the change.
+**The safe-zone lock is the economy's keystone.** `World.SetLoadout` refuses any change from outside `world.SafeRadius`, and from a dead or lingering body, so what a player owns is committed before the fight rather than answered into it. It is enforced on the mutation, not on the UI: a client that ignores its own disabled controls is still refused. Respec inside safety is free — nothing is charged or consumed — and a committed change arrives as a fresh kit, full magazine and no cooldowns, both of which are only reachable where the lock already allows the change.
 
 Commits travel over the same socket as everything else authoritative: `CLIENT_LOADOUT` carries the requested set, and the server always answers with `SERVER_LOADOUT` carrying the set that actually holds, plus a rejection reason when it refused. That reply is not terminal the way `SERVER_ERROR` is, so a refusal never drops the connection, and nothing is shown as equipped until it arrives. A committed set is persisted immediately rather than at the next autosave, because it is a deliberate commit rather than incidental world state. Loadouts cannot be edited outside the world at all: there is no HTTP mutation path, so a character logged out in the Deadlands cannot respec from the home screen.
 

@@ -18,8 +18,10 @@ Contribution is pooled by squad. Personal rankings would make teammates compete 
 
 | Reward | Eligibility | Distribution |
 |---|---|---|
-| Rare/signature | Top four contributing squads or soloists | Split by contribution ratio |
+| Signature materials | Top four contributing squads or soloists | Split by contribution ratio |
 | Participation | Everyone above threshold | Base materials, XP, currency |
+
+Rim bosses are the only source of [Signature-tier](progression-and-crafting.md#rarity-tiers) materials, which makes them the gate on the last third of the [vertical budget](progression-and-crafting.md#the-vertical-budget). That is deliberate: the strongest gear is earned in the most contested, most cooperative content, and it is a slow item-by-item climb rather than a single unlock.
 
 The participation threshold is a tunable percentage of boss health, not a flat value, so it scales and cannot be earned with one trivial hit.
 

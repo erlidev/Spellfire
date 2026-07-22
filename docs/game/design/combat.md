@@ -4,7 +4,9 @@ Combat is lethal when uncontested and durable only through player decisions. Bot
 
 ## Time-to-kill
 
-Unanswered damage kills in about **three seconds**. This raw TTK is locked and anchors the compressed stat band.
+Unanswered damage kills in about **three seconds** between players of equal gear. This raw TTK is locked and anchors the stat band.
+
+Gear moves it within a hard range. Across the full [vertical budget](progression-and-crafting.md#the-vertical-budget) — maxed Signature build against starter equipment — raw TTK runs from about **2.1 s** down to about **4.1 s** up, a near two-for-one exchange in the geared player's favor. **2.0 s is a floor** no combination of rarity, crystal, or parts may breach, because damage arriving faster than a player can react to it stops being combat. Where a heavy-burst band and a maxed damage multiplier would cross that floor, the multiplier is capped, not the band.
 
 Effective TTK should be much longer because players mitigate, escape, reposition, break line of sight, and trade cooldowns. The gap between raw and effective TTK must come from skill.
 
@@ -23,7 +25,8 @@ A shotgun and a rifle cannot both deal the same damage per hit, but they must ki
 Three rules keep this from becoming per-item damage authoring:
 
 - **Bands are few and shared.** New content picks a band; it does not get one.
-- **Every band resolves to the same TTK** within tolerance. The band test computes effective DPS from the band's damage and the ability's cadence, and fails any item that lands outside it. A higher band buys larger single hits and a worse miss, never faster killing.
+- **Every band resolves to the same TTK** within tolerance, at Common tier. The band test computes effective DPS from the band's damage and the ability's cadence, and fails any item that lands outside it. A higher band buys larger single hits and a worse miss, never faster killing.
+- **Rarity multiplies the band; it never re-authors it.** A rarer item applies its tier's bounded multiplier to the band's damage, so the band test runs against the Common anchor and separately asserts that the multiplier stays inside the [vertical budget](progression-and-crafting.md#the-vertical-budget). Cadence is never touched by rarity — rate of fire is band identity, and letting rarity move it would multiply the two axes together.
 - **Falloff and spread are band-compatible.** A shotgun reaches its band only at its intended range; a sniper reaches it only when scoped. Reducing conditions is how a heavy band stays fair, so range and accuracy conditions belong on the item, not the band.
 
 ## Shared combat roles
@@ -40,11 +43,11 @@ Balance equivalent roles across classes instead of comparing guns and spells ad 
 | Zone | Walls, traps, denial, or vision | Smoke, mines, deployables | Fire and Earth |
 | Range | Engagement distance | Weapon class and optic | Element and spell choice |
 
-Fixed equipped slots enforce the power budget. Progression adds safe-zone choices, never more power carried into one fight.
+Fixed equipped slots enforce the role budget: no build covers every role, whatever its gear is worth. Progression adds safe-zone choices and a bounded amount of power inside the roles a player has already committed to.
 
 ## Keystones
 
-Keystones change behavior rather than enlarge numbers. A dash might empower the next spell but double its mana cost; a gun might overheat instead of reloading and lock after sustained fire. These tradeoffs create build identity under compressed progression.
+Keystones change behavior rather than enlarge numbers. A dash might empower the next spell but double its mana cost; a gun might overheat instead of reloading and lock after sustained fire. They stay outside the [vertical budget](progression-and-crafting.md#the-vertical-budget) entirely: keystones are a build-identity axis, and letting them carry power too would put a second multiplier on top of gear.
 
 ## Universal dash
 

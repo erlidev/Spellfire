@@ -13,7 +13,7 @@ Recently resolved, now owned by their topic documents: outpost exit camping and 
 ## Deferred systems
 
 - Netcode and server architecture beyond the implemented foundation. The radial world may inform area-of-interest partitioning.
-- Monetization and cosmetics, restricted to non-vertical cosmetic or convenience value.
+- Monetization and cosmetics, restricted to cosmetic or convenience value. Nothing sold may draw on the [vertical budget](progression-and-crafting.md#the-vertical-budget); the budget is earned from materials only.
 - Marketplace and player trading.
 - Guilds, territory, and possible outpost capture.
 - Onboarding and tutorials, especially for the Gunslinger's high floor and low-skill Mage perception.

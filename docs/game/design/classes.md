@@ -14,6 +14,8 @@ SpellFire has two non-hybrid classes. Gunslingers and Mages eventually unlock th
 
 The asymmetry creates three balance problems: mirror matches for each class and the cross-class match. At low skill, Mage forgiveness may feel oppressive; at high skill, Gunslingers can dodge telegraphs while fully converting aim. This perception gap is an accepted, permanent tuning cost—not permission for either class to break the [shared combat budget](combat.md#shared-combat-roles).
 
+Both classes climb the same [vertical budget](progression-and-crafting.md#the-vertical-budget) through different items: the Gunslinger's through gun parts, the Mage's through the staff's crystal. Neither may reach further up it than the other.
+
 ## Build visibility
 
 A Mage's dominant element colors the character and staff, advertising likely spells. A Gunslinger's equipped gun is always visible and must reveal range, rate-of-fire, and weight class. Their deployables and situational heavy swap stay hidden until used.

@@ -8,11 +8,11 @@ The Gunslinger is a mechanical, aim-and-movement class. Mastery comes from aim, 
 - Every gun has recoil; moving while firing increases spread. Accuracy trades against mobility.
 - Recoil is a fixed left/right pattern the muzzle *walks*, not a cone it is thrown into. Each shot steps the muzzle from where the last one left it, the first shot of a settled weapon is always true, and a quiet window settles it back to aim. The walked muzzle is drawn on the weapon and knocks the camera, so the pattern is something a player reads and compensates for rather than something they infer from missed shots.
 - Guns use magazines and reloads. Ammo is effectively infinite except for crafted special ammunition such as rockets.
-- Heavier classes impose more recoil, movement spread, or slowdown. They offer higher mastery payoff within the same effective damage band—not free damage.
+- Heavier classes impose more recoil, movement spread, or slowdown. They offer higher mastery payoff within the same effective damage band—not free damage. Damage differences between two guns come from their parts' rarity, never from their weight.
 
 ## Weapon categories
 
-Nine categories cover the armory. Weight class is the balance axis: it sets recoil, movement spread, and slowdown, and it never sets damage. Every category shares the [damage bands](combat.md#damage-bands), so a category is a set of conditions and a handling profile, not a power level.
+Nine categories cover the armory. Weight class is the balance axis: it sets recoil, movement spread, and slowdown, and it never sets damage. Every category shares the [damage bands](combat.md#damage-bands), so a category is a set of conditions and a handling profile, not a power level. Power comes from the rarity of the parts a gun is built from, and a Rare pistol and a Rare LMG sit at the same point in the [vertical budget](progression-and-crafting.md#the-vertical-budget).
 
 | Category | Weight | Band | Role | Identity |
 |---|---|---|---|---|
@@ -26,7 +26,7 @@ Nine categories cover the armory. Weight class is the balance axis: it sets reco
 | LMG | Heavy | Sustained | Damage, Zone | Large magazine, spin-up, long reload, heavy slowdown. Suppression and area denial. |
 | Launcher | Heavy | Heavy burst | Burst, Control | Ground-indicator area damage with knockback, fed by finite crafted rockets. |
 
-Categories are not unlocked in a power order. A pistol is a valid rim loadout; heavy categories cost rare materials because they demand commitment, not because they win fights ([`invariants.md`](invariants.md)).
+Categories are not unlocked in a power order. A pistol built from Signature parts is a valid rim loadout; heavy categories cost rare materials because they demand commitment, not because they occupy a higher rung ([`invariants.md`](invariants.md)). The axis that does climb is part rarity, and it climbs the same way for every category.
 
 ## Snipers
 
@@ -50,6 +50,6 @@ The riot shield blocks only a frontal arc, slows its user, and prevents firing w
 
 The Gunslinger has no skill tree or handling attributes. A flat permanent ledger records gun-part and blueprint unlocks earned through level or discovery.
 
-Rare materials gate heavy weapons economically. Heavy weapons remain situational loadout choices and must share the starter weapon's effective damage band; rarity buys commitment and skill ceiling. Without a skill-tree gate, progression pace depends almost entirely on material drop rates, making [economy pacing](progression-and-crafting.md#progression-pacing) a critical tuning problem.
+Rare materials gate heavy weapons economically. Heavy weapons remain situational loadout choices: their category buys commitment and skill ceiling, while the [rarity of their parts](progression-and-crafting.md#rarity-tiers) buys the bounded damage step every category can reach equally. Without a skill-tree gate, progression pace depends almost entirely on material drop rates, making [economy pacing](progression-and-crafting.md#progression-pacing) a critical tuning problem.
 
 Gun assembly uses the shared [`progression-and-crafting.md`](progression-and-crafting.md#recipe-blueprint-crafting) system. The finished category is resolved from a complete receiver, barrel, action, feed, and sight arrangement rather than selected independently of its parts.

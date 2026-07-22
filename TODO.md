@@ -200,7 +200,9 @@ stone wall sequences after it.
 - [ ] Keystones: behaviour-changing tradeoffs (empowered-but-costlier casts, overheat-instead-of-reload)
 - [ ] Add the sustained / burst / heavy-burst damage bands to [combat.json](data/tuning/combat.json); only `standard` exists, and one band cannot carry both a shotgun and a rifle ([combat.md](docs/game/design/combat.md#damage-bands)) — Phase 2.4's nine categories all point at `standard` and are separated by handling alone until this lands
 - [ ] Damage/DPS resolver computing from item data instead of one constant
-- [ ] Automated band test: every weapon and spell lands inside the effective damage band ([pillars.md](docs/game/design/pillars.md#p2--vertical-progression-stays-compressed))
+- [ ] Automated band test: every weapon and spell lands inside the effective damage band at Common tier ([pillars.md](docs/game/design/pillars.md#p2--vertical-progression-is-real-and-bounded))
+- [ ] Rarity tiers on components and materials, with each tier's bounded multiplier applied to the band anchor and never to cadence ([progression-and-crafting.md](docs/game/design/progression-and-crafting.md#rarity-tiers))
+- [ ] Vertical-budget validation on the assembled item: total damage ≤ ×1.45, effective health ≤ ×1.38, no single item past a third of the gain, and no combination pulling raw TTK under 2.0 s ([progression-and-crafting.md](docs/game/design/progression-and-crafting.md#the-vertical-budget))
 
 ---
 

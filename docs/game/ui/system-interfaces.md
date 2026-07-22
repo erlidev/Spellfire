@@ -13,7 +13,8 @@ Crafting shows:
 - owned and required materials, including shortfalls;
 - the resulting weapon preview only when every blank completes one recipe;
 - a side list of craftable recipes with concise explanations, plus locked recipes labelled by unlock level;
-- behavior changes in plain language;
+- behavior changes in plain language, and the part's [rarity tier](../design/progression-and-crafting.md#rarity-tiers) beside them;
+- for a completed arrangement, where the result lands on the vertical scale against the character's current weapon — a direct better/worse comparison, not a raw multiplier, since the numbers are bounded and a player should not have to do arithmetic to know whether to spend;
 - a spend confirmation summary;
 - success, capacity, stale-state, and server-rejection outcomes.
 

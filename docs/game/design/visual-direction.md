@@ -66,6 +66,7 @@ Players are recognizable bodies holding separate weapons, not bodies fused with 
 - Guns and staffs rotate around a hand pivot so aim direction is always readable.
 - Gunslinger deployables and situational heavy swaps appear only when used, preserving the [visibility asymmetry](classes.md#build-visibility).
 - Crafted recipes directly drive weapon silhouettes, joining gameplay data and appearance.
+- **Rarity is visible on the weapon, never on the body.** Because gear now carries a bounded [power step](progression-and-crafting.md#the-vertical-budget), a player deciding whether to engage must be able to read roughly what they are engaging. Tier reads through a non-hue channel on the gun or staff — added segments, a heavier accent, an inlay count — so it survives the palette and stays subordinate to the element color the staff already carries.
 
 Mobs may use fused body/attachment silhouettes to distinguish them from players. Nodes form material-colored clusters, drops use the material color, and bosses are large biome-themed constructs with distant silhouette clarity.
 
@@ -77,6 +78,7 @@ Mobs may use fused body/attachment silhouettes to distinguish them from players.
 | Outline | Self, squad, neutral, or hostile allegiance |
 | Overhead ring | Threat, target, or squad marker; redundant with outline |
 | Shape/silhouette | Actor class and projectile type |
+| Weapon detail | Crafted item rarity tier |
 | Opacity | Pending, active, or resolved telegraph state |
 
 Spell telegraphs use a shared translucent circle, cone, line, or ring in the element hue. The shape names the area; hue names the element; fill/intensity shows time to impact; resolution flashes. Players learn this grammar once.

@@ -14,6 +14,8 @@ Raw materials can be crafted or spent only in safe zones. Unspent materials are 
 
 Insurance scales only with danger tier and never with squad size. Squads already split loot and reduce deaths; taxing group size would contradict the cooperation pillar. A geared player primarily loses position and the walk back from a safe outpost.
 
+Crafted gear surviving death is what keeps [vertical progression](progression-and-crafting.md#the-vertical-budget) from becoming a death spiral. A player who is already outgunned loses the haul that would have closed the gap, not the gear holding them where they are, so a losing streak costs progress rather than compounding into helplessness.
+
 ### Respawn
 
 The respawn timer is roughly five seconds — long enough to register the loss, short enough that dying is not a break from playing. It does not scale with danger tier, gear, or killstreak; the walk back already scales with depth.

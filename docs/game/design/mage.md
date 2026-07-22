@@ -37,7 +37,7 @@ With six slots, the current examples are concise:
 - **3 + 3:** two tier-3 identities.
 - **2 + 2 + 2:** a flexible tier-2 generalist with no signature.
 
-Higher tiers mean more mana, cooldown, telegraph, payoff, and whiff punishment—not more unconditional power. A player who dodges the signature owns its downtime window.
+Higher tiers mean more mana, cooldown, telegraph, payoff, and whiff punishment. Tier is a commitment axis, not the vertical one: a tier-4 signature and a tier-1 spam spell both scale with the staff's crystal, so a Mage's power comes from what they crafted, and their build identity from what they equipped. A player who dodges the signature owns its downtime window.
 
 ## The spell grid
 
@@ -51,7 +51,7 @@ Every element is authored to tier 4. This is a floor, not a flourish: affinity r
 | **Arcane** | **Arcane missile** — homing, but always with travel time | **Ward** — absorbing shield on self or an ally | **Nullify** — strips effects and shields, returns mana | **Rift** — paired teleport repositioning the caster and squad |
 | **Earth** | **Stone shard** — slow, heavy bolt with knockback | **Stone wall** — a placed, destructible solid barrier | **Upheaval** — ground indicator, knockback and a brief root | **Bulwark** — armor to the caster and nearby allies, plus a shockwave |
 
-Tier sets cost and commitment, not power: higher tiers spend more mana, hold longer cooldowns, telegraph longer, and leave a worse whiff. Tier 1 is mana-gated and always available; tier 4 is cooldown-gated and defines the window a dodging opponent earns.
+Tier sets cost and commitment, not the vertical step: higher tiers spend more mana, hold longer cooldowns, telegraph longer, and leave a worse whiff. Tier 1 is mana-gated and always available; tier 4 is cooldown-gated and defines the window a dodging opponent earns. The [rarity of the staff](#staffs) is what moves output, and it moves every row of this grid together.
 
 Each row carries at least one counterplay vector — travel time, cast time, telegraph, or ground indicator — because the [ability schema](../../architecture.md#abilities-and-effects) rejects a damaging spell without one. Non-damaging rows (Rime ward, Ward, Nullify, Rift, Stone wall) are exempt from the requirement, and pay their cost in mana and cooldown instead.
 
@@ -67,3 +67,5 @@ The wall is the only spell that is not just a table row. It creates the first dy
 ## Staffs
 
 Staffs use the shared [recipe-blueprint system](progression-and-crafting.md#recipe-blueprint-crafting). Each staff is exactly one crafted mana crystal and one stave: crystals apply general effects such as cast timing, mana efficiency, spell damage/healing, or projectile/area shape, while wood and infusions determine the stave tier required to contain stronger crystals.
+
+The staff is the Mage's whole share of the [vertical budget](progression-and-crafting.md#the-vertical-budget) — the counterpart to the Gunslinger's gun parts — because spells themselves are unlocks rather than items. A rarer crystal must therefore also earn its horizontal half: a shorter cast, a wider area, a cheaper cost, not only a larger `spell_damage` figure.

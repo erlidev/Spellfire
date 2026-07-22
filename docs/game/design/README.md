@@ -11,7 +11,7 @@ The design fixes system shape, not false precision. Unless a value is explicitly
 - [`classes.md`](classes.md) — shared class structure and matchup contract
 - [`gunslinger.md`](gunslinger.md) — gunplay, weapon categories, defense, and progression
 - [`mage.md`](mage.md) — spell counterplay, elements, the spell grid, affinity, and staffs
-- [`progression-and-crafting.md`](progression-and-crafting.md) — progression layers, crafting, and persistence
+- [`progression-and-crafting.md`](progression-and-crafting.md) — progression layers, the vertical budget, rarity tiers, crafting, and persistence
 - [`world.md`](world.md) — danger bands, biomes, outposts, and travel
 - [`economy-death-and-pve.md`](economy-death-and-pve.md) — hauling, death, resources, and mobs
 - [`squads-and-world-bosses.md`](squads-and-world-bosses.md) — cooperation, credit, and boss rewards
