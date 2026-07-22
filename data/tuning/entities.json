@@ -66,6 +66,20 @@
       ]
     }
   },
+  "smoke": {
+    "mass": -1,
+    "max_health": -1,
+    "collision_objects": [],
+    "admin": {
+      "name": "Smoke cloud",
+      "spawnable": true,
+      "fields": [
+        { "attribute": "deployable.ability", "label": "Ability", "input": "select", "scope": "spawn", "default": "smoke-throw", "options": [{ "value": "smoke-throw", "label": "Smoke canister" }] },
+        { "attribute": "transform.position", "label": "Position", "input": "position", "scope": "edit", "default": "[0,0]", "min": -3000, "max": 3000, "step": 1 },
+        { "attribute": "deployable.radius", "label": "Radius", "input": "number", "scope": "edit", "default": "190", "min": 20, "max": 800, "step": 10 }
+      ]
+    }
+  },
   "wall": {
     "mass": -1,
     "max_health": -1,

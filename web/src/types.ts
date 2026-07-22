@@ -37,6 +37,8 @@ export interface Entity {
   mass: number; deleting: boolean; deleteProgress: number;
   /** The two committed stances, visible to everyone so both can be played around. */
   scoped: boolean; guarding: boolean;
+  /** Where the muzzle sits relative to aim, and the body's total shot count. */
+  recoilDegrees: number; shots: number;
 }
 
 export interface Collider {

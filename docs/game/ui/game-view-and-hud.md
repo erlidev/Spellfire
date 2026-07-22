@@ -12,6 +12,8 @@ Camera behavior must:
 - avoid motion that undermines aim or telegraph reading;
 - keep world indicators registered to entities;
 - enforce the Gunslinger's [limited sniper scope](../design/gunslinger.md#snipers);
+- knock briefly with each of the local player's shots, scaled to the weapon's recoil, without ever rotating aim away from the pointer;
+- go completely white while the local player is [flashed](../design/gunslinger.md#defense), and clear as the status ends — the server is already sending nothing to draw behind it;
 - account for UI safe areas and touch controls when framing threats.
 
 ## Actor labels
@@ -48,6 +50,8 @@ The initial interaction binding is E on keyboard and Use on touch. The protocol 
 ## Slot selection
 
 The [six equipped slots](../design/progression-and-crafting.md#slots) bind to **1–6**, and the **mouse wheel** steps through them and wraps in both directions. Touch gets six slot buttons; that is the minimum viable placement rather than the settled one, and a touch layout that carries six slots without crowding the aim and movement zones is still owed. The selection travels with every input, so the server resolves the use button against the slot the player actually had selected rather than against whatever arrived last. An empty slot does nothing, visibly: it is a slot the player has not filled, not a failure to report. Bindings are remappable once [remappable controls](accessibility.md) land.
+
+Firing is legible from outside the shooter as well as inside it: the drawn weapon sits wherever the recoil pattern has walked it, and each shot shoves it back along its own axis with a muzzle flash. Both come from the snapshot, so an opponent watching a spray sees the same walk its owner does — that is what makes a pattern something to play around. A deployed smoke cloud draws over the bodies inside it as drifting volume rather than a flat disc, and a gadget with a cooldown of its own shows the time remaining on its slot.
 
 Combat feedback covers damage, healing/shields, status, unavailable cooldown/mana, reload, and death using the design's [telegraph and primitive grammar](../design/visual-direction.md#readability-system). Floating numbers are **Open**; if adopted, they are suppressible and cannot cover telegraphs.
 

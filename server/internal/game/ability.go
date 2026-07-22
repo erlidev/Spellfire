@@ -161,7 +161,7 @@ func (w *World) spawnRewoundProjectile(p *Player, ability tuning.Ability, direct
 		Element:   w.playerElement(p),
 		Damage:    w.pelletDamage(ability),
 		Remaining: ability.Projectile.LifeSeconds, Effects: ability.Effects,
-		Spec: *ability.Projectile, Blast: ability.Blast,
+		Spec: *ability.Projectile, Blast: ability.Blast, Deploy: ability.Deployable,
 	}
 	if ability.Blast != nil {
 		projectile.BlastEffects = ability.Blast.Effects
@@ -183,6 +183,9 @@ func (w *World) spawnRewoundProjectile(p *Player, ability tuning.Ability, direct
 			duration = now.Sub(at)
 		}
 		if w.advanceProjectile(projectile, duration.Seconds(), at.Add(duration), true) {
+			// A round resolved inside the rewind window never becomes an entity,
+			// so anything it was carrying has to be placed here instead.
+			w.deployFrom(projectile, projectile.Position, now)
 			return
 		}
 	}
@@ -201,7 +204,7 @@ func (w *World) deliverAt(ownerID string, origin, direction Vec, ability tuning.
 		OwnerID: ownerID, Element: element,
 		Damage:    w.pelletDamage(ability),
 		Remaining: ability.Projectile.LifeSeconds, Effects: ability.Effects,
-		Spec: *ability.Projectile, Blast: ability.Blast,
+		Spec: *ability.Projectile, Blast: ability.Blast, Deploy: ability.Deployable,
 	}
 	if ability.Blast != nil {
 		projectile.BlastEffects = ability.Blast.Effects

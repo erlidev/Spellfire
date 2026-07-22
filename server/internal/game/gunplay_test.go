@@ -28,9 +28,9 @@ func launched(w *World, ownerID string) []Vec {
 	return directions
 }
 
-// Recoil is a fixed pattern, not a random cone: successive shots leave on the
-// exact offsets the weapon declares, scaled by its weight class, so a burst is
-// a shape a player can learn and compensate for.
+// Recoil is a fixed pattern, not a random cone: each shot steps the muzzle by
+// the entry the weapon declares, from wherever the last shot left it, so a
+// burst walks a shape a player can learn and compensate for.
 func TestRecoilWalksTheWeaponsFixedPattern(t *testing.T) {
 	w, now := testWorld()
 	p := carrying(t, w, addTestPlayer(w, "p", model.Gunslinger, Vec{1500, 0}, now), "starter-rifle")
@@ -39,8 +39,15 @@ func TestRecoilWalksTheWeaponsFixedPattern(t *testing.T) {
 	weight := w.tuning.Tables.WeightOf(weapon)
 	aim := Vec{1, 0}
 
-	for shot, want := range weapon.Recoil.Pattern {
+	// The expected muzzle position is the model stated plainly: what the last
+	// shot left, settled by the quiet since, plus this shot's step.
+	offset := 0.0
+	for shot := range weapon.Recoil.Pattern {
 		at := now.Add(time.Duration(shot) * cadence)
+		if shot > 0 {
+			offset = settledRecoil(offset, cadence, weapon.Recoil.Recovery())
+		}
+		offset += weapon.Recoil.DegreesAt(shot) * weight.RecoilMultiplier
 		w.projectiles = map[string]*Projectile{}
 		fire(w, p, uint32(shot+1), at)
 		directions := launched(w, p.ID)
@@ -50,33 +57,42 @@ func TestRecoilWalksTheWeaponsFixedPattern(t *testing.T) {
 		// Standing still, the only thing off aim is the pattern: the shipped
 		// standing spread is a fraction of a degree, so the tolerance is that.
 		got := degreesOff(directions[0], aim)
-		if math.Abs(got-want*weight.RecoilMultiplier) > weapon.Spread.StandingDegrees {
-			t.Fatalf("shot %d left %.3f degrees off aim, want %.3f", shot, got, want*weight.RecoilMultiplier)
+		if math.Abs(got-offset) > weapon.Spread.StandingDegrees {
+			t.Fatalf("shot %d left %.3f degrees off aim, want %.3f", shot, got, offset)
 		}
 	}
 }
 
-// The pattern is the reward for burst discipline: stop shooting for the
-// weapon's recovery window and the next shot starts the burst over.
-func TestRecoilRecoversAfterTheWeaponGoesQuiet(t *testing.T) {
+// A settled first shot is always true, and the walked muzzle is what the
+// snapshot carries: recoil is only a skill axis if it can be seen.
+func TestRecoilIsVisibleAndSettlesBackToAim(t *testing.T) {
 	w, now := testWorld()
 	p := carrying(t, w, addTestPlayer(w, "p", model.Gunslinger, Vec{1500, 0}, now), "starter-rifle")
 	weapon := equippedWeapon(w, p)
 	cadence := equippedAbility(w, p).Interval() + time.Millisecond
 
 	fire(w, p, 1, now)
+	if got := w.recoilDegrees(p, now); got != 0 {
+		t.Fatalf("a settled first shot walked the muzzle %.3f degrees", got)
+	}
 	fire(w, p, 2, now.Add(cadence))
-	if p.Shot != 2 {
-		t.Fatalf("two shots left the pattern at index %d", p.Shot)
+	walked := w.recoilDegrees(p, now.Add(cadence))
+	if math.Abs(walked) < 1 {
+		t.Fatalf("the second shot moved the muzzle %.3f degrees, which nobody can see", walked)
 	}
-	w.projectiles = map[string]*Projectile{}
+	half := now.Add(cadence).Add(weapon.Recoil.Recovery() / 2)
+	if settling := w.recoilDegrees(p, half); math.Abs(settling) >= math.Abs(walked) {
+		t.Fatalf("the muzzle sat at %.3f degrees halfway through recovery, no closer to aim than %.3f", settling, walked)
+	}
 	quiet := now.Add(cadence).Add(weapon.Recoil.Recovery() + time.Millisecond)
-	fire(w, p, 3, quiet)
-	if p.Shot != 1 {
-		t.Fatalf("the pattern did not recover: index %d after the recovery window", p.Shot)
+	if settled := w.recoilDegrees(p, quiet); settled != 0 {
+		t.Fatalf("the muzzle never settled: %.3f degrees off aim after the recovery window", settled)
 	}
-	if got := math.Abs(degreesOff(launched(w, p.ID)[0], Vec{1, 0})); got > weapon.Spread.StandingDegrees {
-		t.Fatalf("the recovered shot left %.3f degrees off aim, want the pattern's first entry", got)
+	snapshot := w.SnapshotFor(p.ID, now.Add(cadence), protocol.ServerSnapshot)
+	for _, entity := range snapshot.Entities {
+		if entity.ID == p.ID && entity.RecoilDegrees == 0 {
+			t.Fatal("the snapshot reported a walked muzzle as sitting on aim")
+		}
 	}
 }
 
@@ -91,13 +107,20 @@ func TestMoveSpreadWidensWithSpeed(t *testing.T) {
 		// A fresh body per sample, so the two runs draw the same spread seeds
 		// and differ only by how fast they are travelling.
 		p := carrying(t, w, addTestPlayer(w, "runner", model.Gunslinger, Vec{1500, 0}, now), "starter-rifle")
-		worst := 0.0
+		weight := w.tuning.Tables.WeightOf(weapon)
+		worst, recoil := 0.0, 0.0
 		for shot := 0; shot < 8; shot++ {
 			at := now.Add(time.Duration(shot) * cadence)
+			if shot > 0 {
+				recoil = settledRecoil(recoil, cadence, weapon.Recoil.Recovery())
+			}
+			recoil += weapon.Recoil.DegreesAt(shot) * weight.RecoilMultiplier
 			w.projectiles = map[string]*Projectile{}
 			w.ApplyInput(p.ID, protocol.Input{Sequence: uint32(shot + 1), Buttons: buttons | ButtonFire, AimX: 1, ClientTimeMS: uint64(at.UnixMilli())})
 			w.Step(at)
-			off := math.Abs(degreesOff(launched(w, p.ID)[0], Vec{1, 0})) - math.Abs(weapon.Recoil.DegreesAt(shot))
+			// The pattern is identical in both runs, so subtracting it leaves
+			// exactly what the body's own speed cost the shot.
+			off := math.Abs(degreesOff(launched(w, p.ID)[0], Vec{1, 0}) - recoil)
 			worst = math.Max(worst, off)
 		}
 		w.RemovePlayer(p.ID)

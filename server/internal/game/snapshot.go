@@ -28,9 +28,16 @@ func (w *World) SnapshotFor(playerID string, now time.Time, kind uint64) protoco
 		}
 	}
 	radiusSq := viewDistance * viewDistance
+	// A flashbang takes vision whole, and a smoke cloud takes it along one line.
+	// Both are enforced here rather than drawn over on the client: what a player
+	// cannot see, a client is never sent.
+	blind := w.blinded(viewer)
+	hidden := func(at Vec) bool {
+		return at.Sub(viewer.Position).LengthSq() > radiusSq || blind || w.occluded(viewer.Position, at)
+	}
 	for _, id := range sortedPlayerIDs(w.players) {
 		p := w.players[id]
-		if id != playerID && p.Position.Sub(viewer.Position).LengthSq() > radiusSq {
+		if id != playerID && hidden(p.Position) {
 			continue
 		}
 		resource := p.Mana
@@ -52,11 +59,12 @@ func (w *World) SnapshotFor(playerID string, now time.Time, kind uint64) protoco
 			Mass: float32(p.Mass), Radius: float32(p.circleRadius()),
 			Deleting: p.Deleting, DeleteProgress: float32(p.deleteProgress(now)),
 			Scoped: p.Scoped, Guarding: p.Guarding,
+			RecoilDegrees: float32(w.recoilDegrees(p, now)), Shots: p.Fired,
 		})
 	}
 	for _, id := range sortedProjectileIDs(w.projectiles) {
 		p := w.projectiles[id]
-		if p.Position.Sub(viewer.Position).LengthSq() > radiusSq {
+		if hidden(p.Position) {
 			continue
 		}
 		message.Entities = append(message.Entities, protocol.Entity{
@@ -69,7 +77,7 @@ func (w *World) SnapshotFor(playerID string, now time.Time, kind uint64) protoco
 	}
 	for _, id := range sortedTelegraphIDs(w.telegraphs) {
 		telegraph := w.telegraphs[id]
-		if telegraph.Position.Sub(viewer.Position).LengthSq() > radiusSq {
+		if hidden(telegraph.Position) {
 			continue
 		}
 		message.Entities = append(message.Entities, protocol.Entity{
@@ -84,6 +92,24 @@ func (w *World) SnapshotFor(playerID string, now time.Time, kind uint64) protoco
 			Mass: float32(telegraph.Mass), Deleting: telegraph.Deleting, DeleteProgress: float32(telegraph.deleteProgress(now)),
 		})
 	}
+	for _, id := range sortedDeployableIDs(w.deployables) {
+		deployable := w.deployables[id]
+		// A cloud is never hidden by a cloud: what is standing in the world is
+		// exactly what explains why everything behind it went missing.
+		if blind || deployable.Position.Sub(viewer.Position).LengthSq() > (viewDistance+deployable.Field.Radius)*(viewDistance+deployable.Field.Radius) {
+			continue
+		}
+		message.Entities = append(message.Entities, protocol.Entity{
+			Type: protocol.EntityDeployable, ID: deployable.ID, ClassName: deployable.Kind, OwnerID: deployable.OwnerID,
+			X: float32(deployable.Position.X), Y: float32(deployable.Position.Y),
+			Radius: float32(deployable.Field.Radius), Alive: deployable.Alive, Mass: float32(deployable.Mass),
+			Allegiance: ownerAllegiance(viewer, w.players[deployable.OwnerID]),
+			Deleting:   deployable.Deleting, DeleteProgress: float32(deployable.deleteProgress(now)),
+		})
+	}
+	// Terrain is deliberately outside the occlusion rule: static cover blinking
+	// in and out as a cloud drifts would desynchronise the client's own
+	// collision prediction, and the cloud drawn over it already hides it.
 	for _, item := range w.worldItems {
 		if item == nil || (!item.Alive && !item.Deleting) {
 			continue

@@ -1,6 +1,6 @@
 import { API, type AdminEntityState } from "./api";
-import { buildableAmmunition, componentOf, cost as craftCost, craftable, describe, fitting, itemLabel, materialName, resolvedWeapon, shortfall, slotsOf } from "./game/crafting";
-import { bar, barSlots, contentName, defaultLoadout, equippable, ledgerOf, loadoutProblem, type Ledger, type SlotKind } from "./game/loadout";
+import { buildableAmmunition, componentOf, cost as craftCost, craftable, describe, fitting, itemLabel, lockedCraftable, materialName, resolvedWeapon, shortfall, slotsOf } from "./game/crafting";
+import { bar, barSlots, contentName, defaultLoadout, equippable, ledgerOf, loadoutProblem, locked, type Ledger, type LockedContent, type SlotKind } from "./game/loadout";
 import { Predictor } from "./game/prediction";
 import { GameView } from "./game/view";
 import { GameSocket } from "./net/socket";
@@ -34,6 +34,7 @@ class SpellFire {
   private adminEditDraft: Record<string, string> = {};
   private adminSearch = "";
   private adminMaterialCount = materialsTable.admin_grant.default;
+  private adminLevel = progressionTable.admin_grant.default;
   private adminPositionPick?: string;
   private menuRefreshFrame = 0;
   private menuCollapseTimer = 0;
@@ -50,6 +51,11 @@ class SpellFire {
   private xp = 0;
   private xpNext = 0;
   private selectedSlot = 0;
+  private previousButtons = 0;
+  // When each gadget's own lockout is next expected to be over, keyed by gadget
+  // ID. It is a readout, never a gate: the input is sent regardless and the
+  // server decides.
+  private cooldowns: Record<string, number> = {};
   private inSafety = true;
   private respecOwed = false;
   private loadoutStatus = "";
@@ -265,6 +271,25 @@ class SpellFire {
     const input = this.predictor.step(buttons, this.aim.x, this.aim.y, this.selectedSlot, performance.now(), handlingScale(weapon, guard, scoped, guarding));
     this.socket?.sendInput(input);
     this.setScopeView(scoped, weapon?.scope?.view_bonus ?? 0);
+    this.trackCooldown(buttons);
+    this.previousButtons = buttons;
+  }
+
+  /**
+   * Starts the local readout for a gadget's own lockout on the press that used
+   * it. The server owns the real cooldown and refuses anything early; this only
+   * answers "why did nothing happen", which a twenty-second gadget with no
+   * feedback at all reads as a broken button.
+   */
+  private trackCooldown(buttons: number): void {
+    if (!(buttons & Buttons.Fire) || (this.previousButtons & Buttons.Fire)) return;
+    const slot = bar(this.activeCharacter?.class ?? "gunslinger", this.loadout, this.items)[this.selectedSlot];
+    if (!slot?.id || slot.kind !== "gadget") return;
+    const ability = abilities[gadgetsTable[slot.id]?.ability ?? ""];
+    if (!ability?.cooldown_ms) return;
+    const ready = this.cooldowns[slot.id] ?? 0;
+    if (Date.now() < ready) return;
+    this.cooldowns[slot.id] = Date.now() + ability.cooldown_ms;
   }
 
   /** The barrier the selected slot holds, or undefined for any other slot. */
@@ -334,8 +359,9 @@ class SpellFire {
     const label = (index: number) => `${index + 1}`;
     element("ability-bar").replaceChildren(...slots.map((slot) => {
       const cell = document.createElement("div");
-      cell.className = slot.index === this.selectedSlot ? "slot selected" : "slot";
-      cell.innerHTML = `<kbd>${label(slot.index)}</kbd><span>${escapeHTML(slot.name || "Empty")}</span>`;
+      const left = Math.max(0, Math.ceil(((this.cooldowns[slot.id] ?? 0) - Date.now()) / 1000));
+      cell.className = `${slot.index === this.selectedSlot ? "slot selected" : "slot"}${left ? " cooling" : ""}`;
+      cell.innerHTML = `<kbd>${label(slot.index)}</kbd><span>${escapeHTML(slot.name || "Empty")}</span>${left ? `<small>${left}s</small>` : ""}`;
       return cell;
     }));
     element("touch-slots").replaceChildren(...slots.map((slot) => {
@@ -370,6 +396,9 @@ class SpellFire {
       this.refreshOpenMenu();
     }
     this.inSafety = safe;
+    // The bar carries the gadget cooldown readout, so it is redrawn on every
+    // snapshot rather than only when the equipped set changes.
+    this.renderAbilityBar();
     this.refreshOpenMenu();
   }
 
@@ -413,7 +442,7 @@ class SpellFire {
       case "loadout": return JSON.stringify([this.inSafety, this.loadout, this.draft, this.respecOwed, this.loadoutStatus, this.items]);
       case "crafting": return JSON.stringify([this.inSafety, this.materials, this.items, this.craftWeapon, this.craftChoices, this.craftStatus, this.ledger.size]);
       case "inventory": return JSON.stringify([this.materials, this.items, this.loadout.weapon]);
-      case "admin": return JSON.stringify([this.adminMode, this.adminSpawnID, this.adminSpawnConfig, this.adminSelected, this.adminEditDraft, this.adminSearch, this.adminMaterialID, this.adminMaterialCount, this.adminPositionPick]);
+      case "admin": return JSON.stringify([this.adminMode, this.adminSpawnID, this.adminSpawnConfig, this.adminSelected, this.adminEditDraft, this.adminSearch, this.adminMaterialID, this.adminMaterialCount, this.adminLevel, this.adminPositionPick]);
       default: return this.menuTab;
     }
   }
@@ -446,7 +475,7 @@ class SpellFire {
     const search = query.toLowerCase();
     const entries = Object.entries(entityDefinitions).filter(([, definition]) => definition.admin.spawnable && (definition.admin.name.toLowerCase().includes(search))).sort(([, left], [, right]) => left.admin.name.localeCompare(right.admin.name));
     const selectedEditor = this.adminSelected ? this.adminEditorMarkup(this.adminSelected) : "<p>Select mode lets you click any visible entity and edit the fields its archetype exposes.</p>";
-    content.innerHTML = `<h3>Developer tools</h3><p>Choose a pointer mode. The floating panel stays interactive while movement and the world remain under your control.</p><div class="admin-modes">${(["off", "spawn", "select", "delete"] as const).map((mode) => `<button data-admin-mode="${mode}" aria-pressed="${this.adminMode === mode}" class="${mode === "delete" ? "danger-button" : ""}">${titleCase(mode)}</button>`).join("")}</div><label>Search spawnables<input id="admin-spawn-search" value="${escapeHTML(query)}" placeholder="Player, projectile, tree…" /></label><div id="admin-spawn-list" class="admin-spawn-list">${entries.map(([id, definition]) => `<button data-admin-spawn="${escapeHTML(id)}" aria-pressed="${id === this.adminSpawnID}"><strong>${escapeHTML(definition.admin.name)}</strong><small>${escapeHTML(id)}</small></button>`).join("") || "<p>No spawnables match.</p>"}</div>${selected ? this.adminConfigMarkup(selected) : "<p class=\"error\">No spawnable is configured.</p>"}<section class="admin-selected"><h4>Selected entity</h4>${selectedEditor}</section><form id="admin-materials-form" novalidate><h4>Grant materials</h4><label>Material<select id="admin-material-select">${Object.keys(materialsTable.materials).sort().map((id) => `<option value="${escapeHTML(id)}"${id === this.adminMaterialID ? " selected" : ""}>${escapeHTML(materialsTable.materials[id]!.name)}</option>`).join("")}</select></label>${this.adminFieldMarkup(materialsTable.admin_grant, "admin-material-count", this.adminMaterialCount)}<button class="secondary" type="submit">Grant to your character</button></form><p id="admin-notice" class="error" role="status"></p>`;
+    content.innerHTML = `<h3>Developer tools</h3><p>Choose a pointer mode. The floating panel stays interactive while movement and the world remain under your control.</p><div class="admin-modes">${(["off", "spawn", "select", "delete"] as const).map((mode) => `<button data-admin-mode="${mode}" aria-pressed="${this.adminMode === mode}" class="${mode === "delete" ? "danger-button" : ""}">${titleCase(mode)}</button>`).join("")}</div><label>Search spawnables<input id="admin-spawn-search" value="${escapeHTML(query)}" placeholder="Player, projectile, tree…" /></label><div id="admin-spawn-list" class="admin-spawn-list">${entries.map(([id, definition]) => `<button data-admin-spawn="${escapeHTML(id)}" aria-pressed="${id === this.adminSpawnID}"><strong>${escapeHTML(definition.admin.name)}</strong><small>${escapeHTML(id)}</small></button>`).join("") || "<p>No spawnables match.</p>"}</div>${selected ? this.adminConfigMarkup(selected) : "<p class=\"error\">No spawnable is configured.</p>"}<section class="admin-selected"><h4>Selected entity</h4>${selectedEditor}</section><form id="admin-progress-form" novalidate><h4>Set level</h4><p>Levelling is the only thing that grants content, and a player kill is its only trigger until mobs land. This reaches the same grant path.</p>${this.adminFieldMarkup(progressionTable.admin_grant, "admin-level", this.adminLevel)}<button class="secondary" type="submit">Apply to your character</button></form><form id="admin-materials-form" novalidate><h4>Grant materials</h4><label>Material<select id="admin-material-select">${Object.keys(materialsTable.materials).sort().map((id) => `<option value="${escapeHTML(id)}"${id === this.adminMaterialID ? " selected" : ""}>${escapeHTML(materialsTable.materials[id]!.name)}</option>`).join("")}</select></label>${this.adminFieldMarkup(materialsTable.admin_grant, "admin-material-count", this.adminMaterialCount)}<button class="secondary" type="submit">Grant to your character</button></form><p id="admin-notice" class="error" role="status"></p>`;
     for (const button of document.querySelectorAll<HTMLButtonElement>("[data-admin-mode]")) button.addEventListener("click", () => this.setAdminMode(button.dataset.adminMode as typeof this.adminMode));
     element<HTMLInputElement>("admin-spawn-search").addEventListener("input", (event) => { this.adminSearch = (event.currentTarget as HTMLInputElement).value; this.renderAdminMenu(content, this.adminSearch); });
     for (const button of document.querySelectorAll<HTMLButtonElement>("[data-admin-spawn]")) button.addEventListener("click", () => { this.adminSpawnID = button.dataset.adminSpawn ?? ""; this.adminSpawnConfig = this.defaultAdminConfig(this.adminSpawnID); this.renderAdminMenu(content, query); });
@@ -464,7 +493,9 @@ class SpellFire {
     element<HTMLInputElement>("admin-material-count").addEventListener("input", (event) => { this.adminMaterialCount = (event.currentTarget as HTMLInputElement).value; });
     document.getElementById("admin-entity-form")?.addEventListener("submit", (event) => void this.applyAdminEntity(event as SubmitEvent));
     element<HTMLSelectElement>("admin-material-select").addEventListener("change", (event) => { this.adminMaterialID = (event.currentTarget as HTMLSelectElement).value; });
+    element<HTMLInputElement>("admin-level").addEventListener("input", (event) => { this.adminLevel = (event.currentTarget as HTMLInputElement).value; });
     element<HTMLFormElement>("admin-materials-form").addEventListener("submit", (event) => void this.grantAdminMaterials(event));
+    element<HTMLFormElement>("admin-progress-form").addEventListener("submit", (event) => void this.grantAdminLevel(event));
   }
 
   private adminConfigMarkup(selected: EntityDefinition): string {
@@ -608,6 +639,22 @@ class SpellFire {
     } catch (error) { notice.textContent = messageOf(error); notice.classList.add("error"); }
   }
 
+  /**
+   * Sets the character's level from developer mode. The server grants whatever
+   * the levels unlock and pushes the change back on its own progress path, so
+   * nothing here has to guess what a level is worth.
+   */
+  private async grantAdminLevel(event: SubmitEvent): Promise<void> {
+    event.preventDefault();
+    if (!this.activeCharacter) return;
+    const level = Number(element<HTMLInputElement>("admin-level").value);
+    const notice = element("admin-notice"); notice.textContent = "";
+    try {
+      await this.api.adminProgress(this.activeCharacter.id, level);
+      notice.textContent = `Set to level ${level}. New options appear in Loadout and Crafting.`; notice.classList.remove("error");
+    } catch (error) { notice.textContent = messageOf(error); notice.classList.add("error"); }
+  }
+
   private async applyAdminEntity(event: SubmitEvent): Promise<void> {
     event.preventDefault();
     if (!this.activeCharacter || !this.adminSelected) return;
@@ -698,7 +745,10 @@ class SpellFire {
 
     if (!this.craftWeapon) {
       const empty = document.createElement("p");
-      empty.textContent = "You have not unlocked a weapon to build from yet.";
+      const next = lockedCraftable(character.class, this.ledger)[0];
+      empty.textContent = next
+        ? `You have not unlocked a weapon to build from yet. ${next.name} unlocks at level ${next.level}.`
+        : "You have not unlocked a weapon to build from yet.";
       content.append(empty);
       return;
     }
@@ -708,6 +758,7 @@ class SpellFire {
     const select = document.createElement("select");
     select.disabled = !this.inSafety;
     for (const id of buildable) select.append(new Option(weapons[id]?.name ?? id, id));
+    appendLocked(select, lockedCraftable(character.class, this.ledger));
     select.value = this.craftWeapon;
     select.addEventListener("change", () => { this.craftWeapon = select.value; this.craftChoices = {}; this.craftStatus = ""; this.renderMenu("crafting"); });
     blueprint.append(document.createTextNode("Blueprint"), select);
@@ -891,6 +942,7 @@ class SpellFire {
     if (kind !== "weapon") select.append(new Option("Empty", ""));
     for (const option of options) select.append(new Option(contentName(kind, option, this.items), option));
     if (!options.length && kind !== "weapon") select.append(new Option(kind === "gadget" ? "No gadgets unlocked yet" : "No spells unlocked yet", "", true, true));
+    appendLocked(select, locked(character.class, this.ledger, kind));
     select.value = id;
     select.addEventListener("change", () => { this.editDraft(kind, index, select.value); });
     row.append(document.createTextNode(label), select);
@@ -964,6 +1016,19 @@ function adminPositionValue(value: string): [number, number] {
 
 function roundAdminCoordinate(value: number): number { return Math.round(value * 100) / 100; }
 function formatAdminNumber(value: number): string { return Number.isFinite(value) ? String(Math.round(value * 100) / 100) : "0"; }
+/**
+ * Lists content the character has not unlocked as disabled options, labelled
+ * with the level that grants it. Hiding a locked row entirely is what makes a
+ * kit look empty rather than unfinished.
+ */
+function appendLocked(select: HTMLSelectElement, rows: LockedContent[]): void {
+  for (const row of rows) {
+    const option = new Option(`${row.name} — unlocks at level ${row.level}`, row.id);
+    option.disabled = true;
+    select.append(option);
+  }
+}
+
 function messageOf(error: unknown): string { return error instanceof Error ? error.message : "Something went wrong."; }
 function titleCase(value: string): string { return value.charAt(0).toUpperCase() + value.slice(1); }
 function escapeHTML(value: string): string { const span = document.createElement("span"); span.textContent = value; return span.innerHTML; }

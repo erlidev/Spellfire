@@ -11,5 +11,6 @@
   "crafted_item_capacity": 24,
   "starter_kit": {
     "unlocks": 6
-  }
+  },
+  "admin_grant": { "attribute": "progression.level", "label": "Level", "input": "number", "scope": "edit", "default": "1", "min": 1, "max": 30, "step": 1 }
 }

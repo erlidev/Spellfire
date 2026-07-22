@@ -1,14 +1,32 @@
 import { Application, Container, Graphics, Text } from "pixi.js";
 // Install eval-free polyfills so WebGL works under a CSP without 'unsafe-eval'. Side-effect import; must run before the renderer is created.
 import "pixi.js/unsafe-eval";
-import { abilities, projectileByKind, safeRadius, simulation, world } from "../tuning";
+import { abilities, effects, projectileByKind, safeRadius, simulation, world } from "../tuning";
 import type { Entity, ServerMessage } from "../types";
 import { Allegiance, EntityType } from "../types";
 import type { Predictor } from "./prediction";
 import { telegraphStyle } from "./telegraph";
 
 interface Sample { at: number; entity: Entity }
-interface ActorView { root: Container; body: Graphics; weapon: Graphics; health: Graphics; stance: Graphics; label: Text; type: number }
+interface ActorView {
+  root: Container; body: Graphics; weapon: Graphics; health: Graphics; stance: Graphics; label: Text; type: number;
+  /** The last shot count seen for this body, and when it changed: one shot is one kick. */
+  shots: number; firedAt: number;
+  /** Deterministic puff layout, for a deployable field. Empty for everything else. */
+  puffs: Puff[]; bornAt: number;
+}
+interface Puff { graphic: Graphics; distance: number; angle: number; radius: number; drift: number }
+
+// How a shot reads: the weapon is shoved back along its own axis and a flash
+// sits at the muzzle for the same window, and the local camera is knocked with
+// it. The window is short enough to survive the fastest cadence in the tables.
+const kickMS = 130;
+const kickDistance = 9;
+const shakeDistance = 5;
+// Smoke is drawn as a handful of overlapping puffs that drift around the centre
+// rather than one flat disc, so a cloud reads as volume the moment it lands.
+const puffCount = 9;
+const puffFadeMS = 320;
 
 const colors = {
   ground: 0x16233a, grid: 0x2c405e, safe: 0x7ee1bb, rim: 0x8d5260, self: 0xffffff, hostile: 0xff6f69,
@@ -28,6 +46,15 @@ export class GameView {
   private ground = new Graphics();
   private telegraphLayer = new Container();
   private entityLayer = new Container();
+  // Fields draw over bodies: a cloud that players rendered on top of would show
+  // exactly what the server just stopped sending.
+  private fogLayer = new Container();
+  // The blackout a flashbang leaves. It lives on the stage rather than in the
+  // world container, because it is the viewer's eyes rather than a place.
+  private blackout = new Graphics();
+  private blindedSince = 0;
+  private blindedUntil = 0;
+  private shakeUntil = 0;
   private actors = new Map<string, ActorView>();
   private samples = new Map<string, Sample[]>();
   private localID = "";
@@ -41,8 +68,8 @@ export class GameView {
   async init(host: HTMLElement): Promise<void> {
     await this.app.init({ resizeTo: window, antialias: true, backgroundColor: colors.ground, resolution: Math.min(2, devicePixelRatio), autoDensity: true });
     host.replaceChildren(this.app.canvas);
-    this.world.addChild(this.ground, this.telegraphLayer, this.entityLayer);
-    this.app.stage.addChild(this.world);
+    this.world.addChild(this.ground, this.telegraphLayer, this.entityLayer, this.fogLayer);
+    this.app.stage.addChild(this.world, this.blackout);
     this.app.ticker.add(() => this.renderFrame());
     this.initialized = true;
   }
@@ -115,18 +142,56 @@ export class GameView {
   private renderFrame(): void {
     const predictor = this.predictor;
     if (!predictor) return;
+    const now = performance.now();
     const width = this.app.screen.width, height = this.app.screen.height;
-    const cameraX = predictor.x + this.scopeOffset.x, cameraY = predictor.y + this.scopeOffset.y;
+    const shake = this.cameraShake(now);
+    const cameraX = predictor.x + this.scopeOffset.x + shake.x, cameraY = predictor.y + this.scopeOffset.y + shake.y;
     this.world.position.set(width / 2 - cameraX, height / 2 - cameraY);
     this.drawGround(cameraX, cameraY, width, height);
     const local = this.latestEntities.get(this.localID);
-    if (local) this.drawEntity({ ...local, x: predictor.x, y: predictor.y, aimX: predictor.aimX, aimY: predictor.aimY }, true);
-    const renderAt = performance.now() - simulation.interpolation_delay_ms;
+    if (local) this.drawEntity({ ...local, x: predictor.x, y: predictor.y, aimX: predictor.aimX, aimY: predictor.aimY }, true, now);
+    const renderAt = now - simulation.interpolation_delay_ms;
     for (const [id, samples] of this.samples) {
       const entity = interpolate(samples, renderAt);
-      if (entity) this.drawEntity(entity, false);
+      if (entity) this.drawEntity(entity, false, now);
       else if (!this.latestEntities.has(id)) this.removeActor(id);
     }
+    this.drawBlackout(local, now, width, height);
+  }
+
+  /**
+   * The knock a shot gives the local camera. It decays over the same window the
+   * weapon's own kick does, and it is an offset rather than a rotation so aiming
+   * stays exactly where the pointer is.
+   */
+  private cameraShake(now: number): { x: number; y: number } {
+    const left = this.shakeUntil - now;
+    if (left <= 0) return { x: 0, y: 0 };
+    const strength = (left / kickMS) * shakeDistance;
+    return { x: Math.sin(now / 9) * strength, y: Math.cos(now / 7) * strength };
+  }
+
+  /**
+   * A flashbang takes vision whole, so the client shows exactly that: the world
+   * is behind a white sheet for as long as the status runs, then it lifts. The
+   * server has already stopped sending anything to draw behind it — this is the
+   * player-facing half of a rule that is enforced on the wire.
+   */
+  private drawBlackout(local: Entity | undefined, now: number, width: number, height: number): void {
+    const blinded = Boolean(local?.effectIDs.some((id) => effects[id]?.kind === "blind"));
+    if (blinded) {
+      if (now > this.blindedUntil) this.blindedSince = now;
+      this.blindedUntil = now;
+    }
+    // The sheet lifts over the same window a real flash fades: instantly total,
+    // then clearing, so the player knows when they have their eyes back.
+    const since = now - this.blindedSince, lifting = now - this.blindedUntil;
+    let alpha = 0;
+    if (blinded) alpha = since < 120 ? 1 : 0.94;
+    else if (lifting < 420) alpha = 0.94 * (1 - lifting / 420);
+    this.blackout.clear();
+    if (alpha <= 0.01) return;
+    this.blackout.rect(0, 0, width, height).fill({ color: 0xffffff, alpha });
   }
 
   private drawGround(cameraX: number, cameraY: number, width: number, height: number): void {
@@ -139,17 +204,18 @@ export class GameView {
     this.ground.circle(0, 0, world.radius).stroke({ color: colors.rim, width: 8, alpha: .8 });
   }
 
-  private drawEntity(entity: Entity, self: boolean): void {
+  private drawEntity(entity: Entity, self: boolean, now = performance.now()): void {
     let view = this.actors.get(entity.id);
     if (view && view.type !== entity.type) { this.removeActor(entity.id); view = undefined; }
     if (!view) {
-      view = this.createActor(entity, self); this.actors.set(entity.id, view);
-      (entity.type === EntityType.Telegraph ? this.telegraphLayer : this.entityLayer).addChild(view.root);
+      view = this.createActor(entity, self, now); this.actors.set(entity.id, view);
+      this.layerFor(entity.type).addChild(view.root);
     }
     view.root.position.set(entity.x, entity.y);
     view.root.alpha = entity.deleting ? Math.max(0, 1 - entity.deleteProgress) : entity.alive ? entity.lingering ? .62 : 1 : .32;
+    if (entity.type === EntityType.Deployable) { this.drawField(view, now); return; }
     if (entity.type === EntityType.Player) {
-      view.weapon.rotation = Math.atan2(entity.aimY, entity.aimX);
+      this.drawRecoil(view, entity, self, now);
       view.health.clear().roundRect(-27, -39, 54, 7, 3).fill(colors.outline).roundRect(-25, -37, 50 * Math.max(0, entity.health / Math.max(1, entity.maxHealth)), 3, 2).fill(entity.health > 30 ? 0x65d89d : 0xff7f73);
       view.label.text = entity.lingering ? `${entity.name} · offline` : entity.name;
       if (entity.invulnerable) view.health.circle(0, 0, 27).stroke({ color: colors.safe, width: 3, alpha: .9 });
@@ -165,9 +231,61 @@ export class GameView {
     }
   }
 
-  private createActor(entity: Entity, self: boolean): ActorView {
+  private layerFor(type: number): Container {
+    if (type === EntityType.Telegraph) return this.telegraphLayer;
+    return type === EntityType.Deployable ? this.fogLayer : this.entityLayer;
+  }
+
+  /**
+   * What a shot looks like from outside the shooter: the muzzle sits wherever
+   * the weapon's pattern has walked it, and each new shot shoves the weapon back
+   * along its own axis with a flash at the barrel. Both come from the snapshot —
+   * the offset the server is simulating and the body's own shot count — so every
+   * player sees the same walk, not a local guess at one.
+   */
+  private drawRecoil(view: ActorView, entity: Entity, self: boolean, now: number): void {
+    if (entity.shots > view.shots) {
+      view.shots = entity.shots; view.firedAt = now;
+      if (self) this.shakeUntil = now + kickMS;
+    }
+    const aim = Math.atan2(entity.aimY, entity.aimX);
+    view.weapon.rotation = aim + entity.recoilDegrees * Math.PI / 180;
+    const kick = Math.max(0, 1 - (now - view.firedAt) / kickMS);
+    view.weapon.position.set(-Math.cos(view.weapon.rotation) * kickDistance * kick, -Math.sin(view.weapon.rotation) * kickDistance * kick);
+    this.drawMuzzleFlash(view, kick);
+  }
+
+  private drawMuzzleFlash(view: ActorView, kick: number): void {
+    const flash = view.weapon.children[0] as Graphics | undefined;
+    if (!flash) return;
+    flash.clear();
+    if (kick <= 0) return;
+    const reach = 10 + 16 * kick;
+    flash.moveTo(40, 0).lineTo(40 + reach, -7 * kick).lineTo(40 + reach * 1.35, 0).lineTo(40 + reach, 7 * kick).closePath()
+      .fill({ color: colors.bullet, alpha: .85 * kick });
+  }
+
+  /**
+   * A deployed field, drawn as drifting puffs rather than a disc. The layout is
+   * seeded from the field's own identity so it is stable frame to frame, and it
+   * fades in on arrival and out with the shared removal fade.
+   */
+  private drawField(view: ActorView, now: number): void {
+    const age = now - view.bornAt;
+    const arriving = Math.min(1, age / puffFadeMS);
+    for (const puff of view.puffs) {
+      const angle = puff.angle + (age / 1000) * puff.drift;
+      const breathe = 1 + Math.sin(age / 620 + puff.angle) * .08;
+      puff.graphic.position.set(Math.cos(angle) * puff.distance, Math.sin(angle) * puff.distance);
+      puff.graphic.scale.set(breathe);
+      puff.graphic.alpha = .5 * arriving;
+    }
+  }
+
+  private createActor(entity: Entity, self: boolean, now = performance.now()): ActorView {
     const root = new Container(), body = new Graphics(), weapon = new Graphics(), health = new Graphics(), stance = new Graphics();
     const outline = allegianceColor(entity.allegiance, self);
+    const puffs: Puff[] = [];
     if (entity.type === EntityType.Telegraph) {
       this.drawTelegraph(body, entity);
     } else if (entity.type === EntityType.Projectile) {
@@ -186,7 +304,20 @@ export class GameView {
     } else if (entity.type === EntityType.Node) {
       body.circle(-8, 2, 9).circle(7, 5, 11).circle(1, -8, 8).fill(elementColors[entity.element] ?? colors.tree).stroke({ color: outline, width: 3 });
     } else if (entity.type === EntityType.Deployable) {
-      body.rect(-15, -15, 30, 30).fill(colors.gunner).stroke({ color: outline, width: 4 });
+      // The puffs are laid out from a hash of the field's ID, so a cloud looks
+      // the same to everyone watching it and never reshuffles between frames.
+      const seed = hash(entity.id), radius = entity.radius || 120;
+      for (let index = 0; index < puffCount; index++) {
+        const spin = fraction(seed + index * 97);
+        const puff = new Graphics();
+        const size = radius * (.4 + fraction(seed + index * 31) * .25);
+        puff.circle(0, 0, size).fill({ color: 0xdfe6ef, alpha: 1 });
+        puffs.push({
+          graphic: puff, distance: radius * .55 * fraction(seed + index * 53),
+          angle: spin * Math.PI * 2, radius: size, drift: (spin - .5) * .5,
+        });
+        body.addChild(puff);
+      }
     } else if (entity.type === EntityType.Boss) {
       body.moveTo(0, -42).lineTo(38, -18).lineTo(32, 34).lineTo(-32, 34).lineTo(-38, -18).closePath().fill(0x657186).stroke({ color: outline, width: 7 });
     } else if (entity.type === EntityType.WorldItem && entity.className === "tree") {
@@ -204,9 +335,13 @@ export class GameView {
       body.moveTo(-17, -17).lineTo(18, -13).lineTo(17, 16).lineTo(-18, 14).closePath().fill(colors.gunner).stroke({ color: outline, width: 4 });
       weapon.roundRect(8, -5, 36, 10, 2).fill(0x5c6674).stroke({ color: colors.outline, width: 3 }).rect(18, 5, 10, 8).fill(0x353e4c);
     }
+    // Every actor that holds something carries a muzzle flash child, drawn only
+    // while a shot is fresh.
+    if (entity.type === EntityType.Player) weapon.addChild(new Graphics());
     const label = new Text({ text: entity.name, style: { fontFamily: "system-ui", fontSize: 12, fill: 0xffffff, stroke: { color: colors.outline, width: 3 } } }); label.anchor.set(.5); label.position.set(0, -50);
     root.addChild(body, stance, weapon, health, label);
-    return { root, body, weapon, health, stance, label, type: entity.type };
+    if (entity.type === EntityType.Deployable) label.visible = false;
+    return { root, body, weapon, health, stance, label, type: entity.type, shots: entity.shots, firedAt: 0, puffs, bornAt: now };
   }
 
   /**
@@ -262,6 +397,20 @@ function interpolate(samples: Sample[], at: number): Entity | undefined {
     return { ...next.entity, x: previous.entity.x + (next.entity.x - previous.entity.x) * t, y: previous.entity.y + (next.entity.y - previous.entity.y) * t, aimX: previous.entity.aimX + (next.entity.aimX - previous.entity.aimX) * t, aimY: previous.entity.aimY + (next.entity.aimY - previous.entity.aimY) * t, telegraphState: sameTelegraphPhase ? next.entity.telegraphState : previous.entity.telegraphState, telegraphProgress: sameTelegraphPhase ? previous.entity.telegraphProgress + (next.entity.telegraphProgress - previous.entity.telegraphProgress) * t : previous.entity.telegraphProgress, deleteProgress: sameDeletionPhase ? previous.entity.deleteProgress + (next.entity.deleteProgress - previous.entity.deleteProgress) * t : next.entity.deleteProgress };
   }
   return samples.at(-1)?.entity;
+}
+
+// hash and fraction give a deployable a stable, well-spread layout from its own
+// identity, so nothing has to travel on the wire to describe how a cloud looks.
+function hash(value: string): number {
+  let h = 2166136261;
+  for (let index = 0; index < value.length; index++) { h ^= value.charCodeAt(index); h = Math.imul(h, 16777619); }
+  return h >>> 0;
+}
+
+function fraction(state: number): number {
+  let x = Math.imul(state ^ (state >>> 15), 2246822507);
+  x = Math.imul(x ^ (x >>> 13), 3266489909);
+  return ((x ^ (x >>> 16)) >>> 0) / 4294967296;
 }
 
 function allegianceColor(allegiance: number, self: boolean): number {

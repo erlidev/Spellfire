@@ -115,8 +115,8 @@ through the authorization wrapper; client visibility alone never grants access.
 - [x] Menu Loadout section: view anywhere, edit only in safety, with an explicit lock reason ([system-interfaces.md](docs/game/ui/system-interfaces.md#safe-zone-loadout-and-crafting), [main.ts](web/src/main.ts))
 - [x] Slot selection: 1–6 and the mouse wheel on desktop, six buttons on touch, carried per input so the server resolves the use button against the selected slot ([game-view-and-hud.md](docs/game/ui/game-view-and-hud.md#slot-selection))
 
-`gadgets.json` carries the riot shield from Phase 2.4; the remaining slots stay empty until Phase 2.6
-unblocks smoke and flashbangs, and an empty slot performs nothing rather than erroring. A Mage's slot one falls back to
+`gadgets.json` carries the riot shield, the smoke canister, and the flashbang from Phase 2.4; the
+remaining slots stay empty, and an empty slot performs nothing rather than erroring. A Mage's slot one falls back to
 its staff's declared spell, so a set emptied by a content withdrawal can still fight. Loadouts cannot
 be edited outside the world at all — there is no HTTP mutation path — so logging out in the Deadlands
 is not a way to respec. Keystone slots wait on Phase 2.7. The equippable set is narrowed from "every
@@ -130,7 +130,7 @@ live row" to "what this character owns" by the Phase 2.2 unlock ledger.
 - [x] `loadout.Equippable`/`Validate`/`Resolve` intersect with the ledger, so unowned content is refused on the mutation path rather than merely hidden by the menu
 - [x] Test: a zero-material character can fill a coherent loadout immediately ([progression_test.go](server/internal/progression/progression_test.go)), plus starter-kit stability/randomness, level grants, ledger-gated validation, and the separate progression save path
 
-Only `player_kill` has a trigger: mob kills, harvesting, and outpost discovery are priced in the table and awarded by Phases 4.3, 4.1, and 3, and Phase 4.4 tunes the curve against the pacing targets. Keystone IDs share the ledger's shape but have no rows until Phase 2.7. Phase 2.4 widened the Gunslinger's basic set to four categories and its gadget pool to the riot shield without touching the draw; the Mage's is still one staff and one spell until Phase 2.5.
+Only `player_kill` has a trigger: mob kills, harvesting, and outpost discovery are priced in the table and awarded by Phases 4.3, 4.1, and 3, and Phase 4.4 tunes the curve against the pacing targets. Keystone IDs share the ledger's shape but have no rows until Phase 2.7. Phase 2.4 widened the Gunslinger's basic set to four categories and its gadget pool to the riot shield, smoke, and flashbangs without touching the draw; a developer-mode level grant now reaches the rest of the ledger before mob XP lands; the Mage's is still one staff and one spell until Phase 2.5.
 
 ### 2.3 Slotted-blueprint crafting
 - [x] Blueprint + slot + component definitions with material costs and **behavioural** (not power) effects ([components.json](data/tuning/components.json), [crafting.go](server/internal/crafting/crafting.go), [progression-and-crafting.md](docs/game/design/progression-and-crafting.md#slotted-blueprint-crafting))
@@ -150,7 +150,8 @@ shortfalls until then. Death drops (Phase 4.2) will drop carried materials and k
 already the split the inventory surface states.
 
 ### 2.4 Gunslinger kit
-- [x] Recoil model: a fixed left/right pattern unique to each gun, walked per shot and recovered after a quiet window, scaled by weight class ([gunplay.go](server/internal/game/gunplay.go), [weapons.json](data/tuning/weapons.json), [architecture.md](docs/architecture.md#gunplay))
+- [x] Recoil model: a fixed left/right pattern unique to each gun, *stepped* per shot from where the last one left the muzzle and settled back to aim after a quiet window, scaled by weight class ([gunplay.go](server/internal/game/gunplay.go), [weapons.json](data/tuning/weapons.json), [architecture.md](docs/architecture.md#gunplay))
+- [x] Recoil is visible: the walked offset and the body's shot count reach the wire, so the drawn weapon sits where the pattern put it and every shot kicks the weapon, flashes the muzzle, and knocks the local camera ([view.ts](web/src/game/view.ts), [game-view-and-hud.md](docs/game/ui/game-view-and-hud.md#camera))
 - [x] Move-spread interpolated from standing to moving by actual speed, drawn deterministically from the shooter and its shot count ([gunslinger.md](docs/game/design/gunslinger.md#gunplay), `World.spreadDegrees`)
 - [x] Weight classes with recoil / spread / slowdown tradeoffs inside one damage band ([combat.json](data/tuning/combat.json), `World.handlingScale`; prediction applies the same multiplier)
 - [x] The nine settled gun categories — pistol, revolver, SMG, shotgun, assault rifle, marksman, sniper, LMG, launcher ([gunslinger.md](docs/game/design/gunslinger.md#weapon-categories), [weapons.json](data/tuning/weapons.json))
@@ -158,16 +159,23 @@ already the split the inventory surface states.
 - [x] Snipers: hitscan to a weapon cap while scoped, then travel-time projectile with falloff and hard max range ([gunslinger.md](docs/game/design/gunslinger.md#snipers), `World.hitscan`)
 - [x] Scope mode: peripheral blackout, view pushed toward the aim, server-side scoped state affecting movement, spread, and what the snapshot sends; camera exception in [game-view-and-hud.md](docs/game/ui/game-view-and-hud.md#camera)
 - [x] Riot shield: frontal arc only, slows the user, locks fire, blocks bullets/projectiles, does not block a blast ([gunslinger.md](docs/game/design/gunslinger.md#defense), `World.blockedBy`)
-- [ ] Smoke (LOS break) and flashbang (aim disruption) deployables — depends on 2.6
+- [x] Smoke deployable: a thrown canister leaves a standing field that hides anything across it from the snapshot — not from the renderer — while revealing bodies close enough to touch, drawn as drifting particles ([deployable.go](server/internal/game/deployable.go), `World.occluded`, [gadgets.json](data/tuning/gadgets.json))
+- [x] Flashbang: a thrown blast that takes vision whole for its window through a `blind` status, dealing no damage; a blinded body is sent nothing but itself and the client paints the blackout ([effects.json](data/tuning/effects.json), `World.blinded`)
+- [x] Developer-mode level grant so content above the opening kit can be reached and exercised before mob XP lands — `POST /api/admin/progress`, bounded by `progression.admin_grant` ([administration.md](docs/administration.md))
+- [x] Locked weapons, gadgets, and spells are listed disabled with the level that grants them, in both the Loadout and Crafting surfaces ([system-interfaces.md](docs/game/ui/system-interfaces.md#safe-zone-loadout-and-crafting))
 - [x] Rare materials gate heavy weapons economically, never statistically: sniper, LMG, and launcher declare `requires_craft` and a material cost, so they have no stock configuration and must be built
-- [x] Test: pattern determinism and recovery, spread widening with speed, the pellet cone dividing one band hit, weight moving handling and never damage, the withheld-category gate, scope gating hitscan, falloff and hard range, shield arc and fire lock, finite ammunition, and blast reach ([gunplay_test.go](server/internal/game/gunplay_test.go))
+- [x] Test: pattern determinism and recovery, the walked muzzle reaching the snapshot and settling back to aim, spread widening with speed, the pellet cone dividing one band hit, weight moving handling and never damage, the withheld-category gate, scope gating hitscan, falloff and hard range, shield arc and fire lock, finite ammunition, and blast reach ([gunplay_test.go](server/internal/game/gunplay_test.go)); a canister deploying where it lands and expiring, smoke hiding what is behind it but not what is touching it, a flashbang blinding without damaging, and a thrown gadget leaving the gun's pattern alone ([deployable_test.go](server/internal/game/deployable_test.go))
 
 Every category shares the `standard` band and fires no faster than the 300 ms
 baseline, because with one band cadence *is* DPS. Rate-of-fire identity — the
 SMG's spray, the sniper's single heavy shot — waits on Phase 2.7's sustained,
 burst, and heavy-burst bands; what separates the nine today is handling.
-Smoke and flashbangs are deliberately unauthored rather than stubbed: both are
-line-of-sight and aim-disruption tools and Phase 2.6 owns the substrate.
+Smoke and flashbangs did not wait for 2.6. Smoke carries its own narrow rule —
+a cloud on the segment between two bodies hides them from each other, and both
+are enforced by what the server *sends* rather than by what the client draws —
+which is the case a canister is bought for and nothing more. General line of
+sight through cover and walls is still Phase 2.6's substrate, and the Mage's
+stone wall sequences after it.
 
 ### 2.5 Mage kit
 - [ ] Author per-spell cooldowns and costs — the second resource axis alongside mana ([mage.md](docs/game/design/mage.md#mana-and-cooldowns)); 1.3 enforces both from `abilities.json`, and every shipped row still declares a zero cooldown

@@ -45,7 +45,8 @@ export interface Cost { kind: "none" | "ammo" | "mana" | "material"; material?: 
 export interface Telegraph { shape: "circle" | "cone" | "line" | "ring"; radius?: number; length?: number; width?: number; angle_degrees?: number; active_ms: number; resolved_ms: number }
 export interface Blast { radius: number; effects?: string[] }
 export interface Guard { arc_degrees: number; movement_multiplier: number }
-export interface Ability { name: string; cost: Cost; interval_ms: number; cooldown_ms: number; windup_ms?: number; telegraph?: Telegraph; dodge_vector?: string; damage_band?: string; projectile?: Projectile; effects?: string[]; requires_scope?: boolean; blast?: Blast; guard?: Guard }
+export interface Deployable { kind: string; radius: number; duration_ms: number; reveal_radius: number }
+export interface Ability { name: string; cost: Cost; interval_ms: number; cooldown_ms: number; windup_ms?: number; telegraph?: Telegraph; dodge_vector?: string; damage_band?: string; projectile?: Projectile; effects?: string[]; requires_scope?: boolean; blast?: Blast; guard?: Guard; deployable?: Deployable }
 export interface Effect { name: string; kind: string; stacking: string; duration_ms: number; tick_ms?: number; damage_band?: string; damage_fraction?: number; speed_multiplier?: number; speed?: number; absorb_hits?: number }
 export interface Recoil { pattern: number[]; recovery_ms: number }
 export interface Spread { standing_degrees: number; moving_degrees: number }
@@ -54,7 +55,7 @@ export interface Weapon { name: string; class: CharacterClass; blueprint: string
 export interface Ammunition { name: string; class: CharacterClass; material: string; count: number; cost: Record<string, number> }
 export interface Spell { name: string; element: string; tier: number; starter?: boolean; unlock_level: number; ability: string }
 export interface Gadget { name: string; class: CharacterClass; starter?: boolean; unlock_level: number; ability: string }
-export interface ProgressionTable { max_level: number; base_xp: number; growth: number; sources: Record<string, number>; crafted_item_capacity: number; starter_kit: { unlocks: number } }
+export interface ProgressionTable { max_level: number; base_xp: number; growth: number; sources: Record<string, number>; crafted_item_capacity: number; starter_kit: { unlocks: number }; admin_grant: AdminField }
 export interface LoadoutTable { weapon_slots: number; gadget_slots: number; spell_slots: number; affinity: { same_element_per_tier: number } }
 export interface Blueprint { name: string; slots: string[] }
 export interface Component { name: string; blueprint: string; slot: string; effect: string; cost: Record<string, number>; modifiers: Record<string, number> }

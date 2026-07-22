@@ -17,7 +17,7 @@ function entity(overrides: Partial<Entity> = {}): Entity {
     health: 100, maxHealth: 100, mana: 10, acknowledgedInput: 0, alive: true, ownerID: "",
     element: "", squadID: "", allegiance: 1, telegraphState: 0, invulnerable: false, telegraphShape: "",
     radius: 0, length: 0, width: 0, angleDegrees: 0, telegraphProgress: 0, abilityID: "", lingering: false, effectIDs: [],
-    mass: 1, deleting: false, deleteProgress: 0, scoped: false, guarding: false,
+    mass: 1, deleting: false, deleteProgress: 0, scoped: false, guarding: false, recoilDegrees: 0, shots: 0,
     ...overrides,
   };
 }

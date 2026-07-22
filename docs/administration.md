@@ -78,6 +78,13 @@ Material grants remain available for any live material. Their count is bounded
 by `materials.admin_grant`; grants are persisted inventory and therefore a real
 economy mutation, unlike temporary entity overrides.
 
+Level grants set the controlling character's level and add everything the levels
+it now holds unlock, bounded by `progression.admin_grant`. They exist because a
+player kill is the only XP trigger until mob combat lands, so without them the
+weapons, gadgets, and blueprints above the opening kit could never be reached or
+tested. Like a material grant this is a persisted change to a real character,
+not a fixture; lowering a level does not take an unlock back.
+
 Spawned training players are non-persistent fixtures: they are visible,
 collidable, and damageable like a player but never occupy an account slot or
 become a saved character. Developer overrides reset when the administrator's
@@ -85,7 +92,8 @@ body leaves the world. Granted materials do not: they are ordinary carried
 inventory from the moment they land, persisted and spendable like any other, so
 a grant on a live account is a real economy change rather than a fixture. The
 HTTP commands are `POST /api/admin/spawn`, `POST /api/admin/entity/inspect`,
-`/edit`, `/delete`, and `POST /api/admin/materials`; the legacy
+`/edit`, `/delete`, `POST /api/admin/materials`, and
+`POST /api/admin/progress`; the legacy
 `POST /api/admin/attributes` remains compatible. Each verifies the
 session's admin role and that the selected in-world character belongs to that
 account.

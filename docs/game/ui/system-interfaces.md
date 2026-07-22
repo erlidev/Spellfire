@@ -15,6 +15,8 @@ Crafting shows:
 - a spend confirmation summary;
 - success, capacity, stale-state, and server-rejection outcomes.
 
+Both surfaces also list content the character has *not* unlocked, disabled and labelled with the level that grants it. A kit that hides everything still locked reads as finished rather than as a starting point, and a player has no reason to believe an empty gadget slot will ever fill.
+
 Loadout validates slot limits, Mage affinity, and other equip rules before commit. Leaving a safe zone visibly locks the final set; viewing remains available everywhere.
 
 ## Death and respawn

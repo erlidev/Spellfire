@@ -49,6 +49,8 @@ fieldset input { width: auto; } fieldset small { display: block; grid-column: 2;
 .bar { height: 11px; overflow: hidden; border: 2px solid #080e19; border-radius: 7px; background: #2a3140; }.bar i { display: block; width: 100%; height: 100%; background: #65d89d; transition: width .12s; }.bar.resource i { background: #5dbde8; }
 .abilities { bottom: max(15px, env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); display: flex; padding: 7px; gap: 5px; }
 .abilities .slot { min-width: 76px; padding: 4px 6px; border: 1px solid transparent; border-radius: 7px; text-align: center; font-size: .65rem; }
+.abilities .slot.cooling { opacity: .55; }
+.abilities .slot small { display: block; color: #ffd166; font-variant-numeric: tabular-nums; }
 .abilities .slot span { display: block; color: #9fb1ca; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* Selection is marked by border and weight as well as fill, never colour alone. */
 .abilities .slot.selected { border-color: #ffd166; background: #2a3958; }.abilities .slot.selected span { color: #edf4ff; font-weight: 700; }

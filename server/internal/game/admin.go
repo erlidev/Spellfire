@@ -33,6 +33,7 @@ type adminTarget struct {
 	player     *Player
 	projectile *Projectile
 	telegraph  *Telegraph
+	deployable *Deployable
 }
 
 type adminAttributeAdapter struct {
@@ -60,6 +61,25 @@ var adminAttributeRegistry = map[string]adminAttributeAdapter{
 				return err
 			}
 			t.entity.Position = position
+			return nil
+		},
+	},
+	"deployable.radius": {
+		get: func(t adminTarget) (string, bool) {
+			if t.deployable == nil {
+				return "", false
+			}
+			return formatNumber(t.deployable.Field.Radius), true
+		},
+		set: func(t adminTarget, value string) error {
+			if t.deployable == nil {
+				return unsupportedAttribute("deployable.radius")
+			}
+			radius, err := strconv.ParseFloat(value, 64)
+			if err != nil || radius <= 0 {
+				return fmt.Errorf("radius %q is not a positive number", value)
+			}
+			t.deployable.Field.Radius = radius
 			return nil
 		},
 	},
@@ -248,6 +268,8 @@ func (w *World) adminSpawn(request AdminSpawn, now time.Time) error {
 		return w.adminProjectile(request.Position, values)
 	case "telegraph":
 		return w.adminTelegraph(request.Position, values, now)
+	case "smoke":
+		return w.adminDeployable(request.Position, values, now)
 	case "tree", "wall":
 		w.nextAdminEntity++
 		entity := newEntity(fmt.Sprintf("admin-%s-%d", request.ID, w.nextAdminEntity), request.ID, request.Position, definition, EntityOverrides{})
@@ -283,7 +305,7 @@ func (w *World) adminProjectile(position Vec, values map[string]string) error {
 	projectile := &Projectile{
 		Element: values["render.element"], Damage: w.pelletDamage(ability),
 		Remaining: ability.Projectile.LifeSeconds, Effects: ability.Effects,
-		Spec: *ability.Projectile, Blast: ability.Blast,
+		Spec: *ability.Projectile, Blast: ability.Blast, Deploy: ability.Deployable,
 	}
 	if ability.Blast != nil {
 		projectile.BlastEffects = ability.Blast.Effects
@@ -306,6 +328,21 @@ func (w *World) adminTelegraph(position Vec, values map[string]string, now time.
 		return fmt.Errorf("ability %q has no telegraph", ability.ID)
 	}
 	telegraph.AdminSpawned = true
+	return nil
+}
+
+// adminDeployable drops one authored field where it was clicked, so smoke can
+// be placed and looked through without a Gunslinger having to throw it.
+func (w *World) adminDeployable(position Vec, values map[string]string, now time.Time) error {
+	ability := w.tuning.Tables.Abilities[values["deployable.ability"]]
+	if ability.Deployable == nil {
+		return fmt.Errorf("ability %q deploys nothing", ability.ID)
+	}
+	deployable := w.deploy("", *ability.Deployable, position, now)
+	if deployable == nil {
+		return fmt.Errorf("ability %q deploys unknown archetype %q", ability.ID, ability.Deployable.Kind)
+	}
+	deployable.AdminSpawned = true
 	return nil
 }
 
@@ -409,6 +446,9 @@ func (w *World) adminTarget(id string) (adminTarget, bool) {
 	}
 	if value := w.telegraphs[id]; value != nil {
 		return adminTarget{entity: &value.Entity, telegraph: value}, true
+	}
+	if value := w.deployables[id]; value != nil {
+		return adminTarget{entity: &value.Entity, deployable: value}, true
 	}
 	for _, value := range w.worldItems {
 		if value != nil && value.ID == id {

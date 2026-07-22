@@ -145,6 +145,39 @@
       "silhouette": "bolt"
     }
   },
+  "smoke-throw": {
+    "name": "Smoke canister",
+    "cost": { "kind": "none", "amount": 0 },
+    "interval_ms": 400,
+    "cooldown_ms": 20000,
+    "projectile": {
+      "kind": "smoke-canister",
+      "speed": 620,
+      "life_seconds": 0.7,
+      "radius": 7,
+      "silhouette": "bolt"
+    },
+    "deployable": {
+      "kind": "smoke",
+      "radius": 190,
+      "duration_ms": 9000,
+      "reveal_radius": 70
+    }
+  },
+  "flash-throw": {
+    "name": "Flashbang",
+    "cost": { "kind": "none", "amount": 0 },
+    "interval_ms": 400,
+    "cooldown_ms": 26000,
+    "projectile": {
+      "kind": "flash-canister",
+      "speed": 700,
+      "life_seconds": 0.65,
+      "radius": 6,
+      "silhouette": "bolt"
+    },
+    "blast": { "radius": 300, "effects": ["flash-blind"] }
+  },
   "riot-shield-raise": {
     "name": "Riot shield",
     "cost": { "kind": "none", "amount": 0 },

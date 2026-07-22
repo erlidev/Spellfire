@@ -6,6 +6,7 @@ The Gunslinger is a mechanical, aim-and-movement class. Mastery comes from aim, 
 
 - Most guns fire dodgeable projectiles. Only snipers use hitscan.
 - Every gun has recoil; moving while firing increases spread. Accuracy trades against mobility.
+- Recoil is a fixed left/right pattern the muzzle *walks*, not a cone it is thrown into. Each shot steps the muzzle from where the last one left it, the first shot of a settled weapon is always true, and a quiet window settles it back to aim. The walked muzzle is drawn on the weapon and knocks the camera, so the pattern is something a player reads and compensates for rather than something they infer from missed shots.
 - Guns use magazines and reloads. Ammo is effectively infinite except for crafted special ammunition such as rockets.
 - Heavier classes impose more recoil, movement spread, or slowdown. They offer higher mastery payoff within the same effective damage band—not free damage.
 
@@ -38,6 +39,9 @@ Effective fire requires scoping. The scope exposes only a controllable area near
 Military equipment covers two needs:
 
 - **Vision and aim disruption:** smoke breaks line of sight; flashbangs disrupt aim. These excel against other Gunslingers but are weaker against forgiving, ground-targeted magic.
+  - A **smoke canister** is thrown and leaves a standing cloud for a fixed window. Anyone on the far side of it stops being visible at all — the server stops sending them — while two bodies close enough to touch still see each other, so a cloud is cover rather than a personal blindfold. It blocks nothing physically: bullets, blasts, and bodies pass straight through.
+  - A **flashbang** is thrown and goes off as an area that takes vision *whole* for a short window, without dealing damage or slowing anyone. Its counterplay is the travel time of the canister and the ground it covers, which is why it disrupts a fight rather than deciding one.
+  - Both carry long cooldowns of their own on top of the shared cadence: they are openers and disengages, not a rate of fire.
 - **Burst denial:** the universal dash and a deployable riot shield answer a Mage opener.
 
 The riot shield blocks only a frontal arc, slows its user, and prevents firing while raised. It blocks frontal bullets and projectiles, not ground effects placed behind or beneath it. These costs preserve the cross-class bait-and-punish fight: Mages dodge bullets, Gunslingers dodge telegraphs, and both try to draw out the other's hard stop.

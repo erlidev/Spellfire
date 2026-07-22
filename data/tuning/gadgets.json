@@ -5,5 +5,19 @@
     "starter": true,
     "unlock_level": 3,
     "ability": "riot-shield-raise"
+  },
+  "smoke-grenade": {
+    "name": "Smoke canister",
+    "class": "gunslinger",
+    "starter": true,
+    "unlock_level": 4,
+    "ability": "smoke-throw"
+  },
+  "flashbang": {
+    "name": "Flashbang",
+    "class": "gunslinger",
+    "starter": true,
+    "unlock_level": 6,
+    "ability": "flash-throw"
   }
 }

@@ -97,6 +97,23 @@ export function equippable(characterClass: CharacterClass, ledger: Ledger, kind:
   return characterClass === "mage" ? Object.keys(spells).filter(owns).sort() : [];
 }
 
+/**
+ * Content of a slot kind the character has not unlocked yet, with the level
+ * that grants it. The menu shows these beside what is equippable, disabled: a
+ * player who cannot see that a gadget exists has no reason to believe the slot
+ * will ever fill, and progression is only motivating if it is legible.
+ */
+export function locked(characterClass: CharacterClass, ledger: Ledger, kind: SlotKind): LockedContent[] {
+  const rows: Record<string, { name: string; unlock_level: number; class?: CharacterClass }> =
+    kind === "weapon" ? weapons : kind === "gadget" ? gadgets : (characterClass === "mage" ? spells : {});
+  return Object.keys(rows)
+    .filter((id) => !ledger.has(id) && (rows[id]!.class ?? characterClass) === characterClass)
+    .map((id) => ({ id, name: rows[id]!.name, level: rows[id]!.unlock_level }))
+    .sort((left, right) => left.level - right.level || left.id.localeCompare(right.id));
+}
+
+export interface LockedContent { id: string; name: string; level: number }
+
 /** Display name of equippable content, whatever kind it is. */
 export function contentName(kind: SlotKind, id: string, items: readonly CraftedItem[] = []): string {
   if (kind === "weapon") {

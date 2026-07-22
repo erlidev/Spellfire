@@ -122,3 +122,38 @@ func TestTheEngineDrainsAndPersistsProgressionChanges(t *testing.T) {
 		t.Fatal("a progression write also wrote world state")
 	}
 }
+
+// The developer level grant is the only way above the opening kit until mob XP
+// lands, so it has to grant exactly what the level unlocks, stay inside the
+// bound the table declares, and never take an unlock back.
+func TestGrantProgressUnlocksWhatTheLevelHoldsAndIsBounded(t *testing.T) {
+	w, now := testWorld()
+	p := addTestPlayer(w, "p", model.Gunslinger, Vec{}, now)
+	table := w.tuning.Tables.Progression
+
+	progress, err := w.GrantProgress(p.ID, table.MaxLevel)
+	if err != nil {
+		t.Fatalf("a grant at the cap was refused: %v", err)
+	}
+	if progress.Level != table.MaxLevel || !p.ProgressDirty {
+		t.Fatalf("level %d, dirty %v: the grant did not reach the persistence path", progress.Level, p.ProgressDirty)
+	}
+	for _, id := range w.tuning.Tables.UnlocksThrough(table.MaxLevel) {
+		if !p.Unlocks.Has(id) {
+			t.Fatalf("the cap did not grant %q", id)
+		}
+	}
+	owned := p.Unlocks.Len()
+	if _, err := w.GrantProgress(p.ID, 1); err != nil {
+		t.Fatalf("dropping back to level 1 was refused: %v", err)
+	}
+	if p.Unlocks.Len() != owned {
+		t.Fatalf("dropping a level confiscated %d unlocks; the ledger is permanent", owned-p.Unlocks.Len())
+	}
+	if _, err := w.GrantProgress(p.ID, table.MaxLevel+1); err == nil {
+		t.Fatal("a level past the table's own cap was accepted")
+	}
+	if _, err := w.GrantProgress("nobody", 2); err == nil {
+		t.Fatal("a grant to a body that is not in the world was accepted")
+	}
+}

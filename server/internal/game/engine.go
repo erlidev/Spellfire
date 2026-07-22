@@ -359,6 +359,16 @@ func (e *Engine) AdminDelete(playerID, entityID string) error {
 // GrantMaterials is the developer-mode material source. Harvesting is what
 // legitimately produces a material; until Phase 4.1 lands this is the only way
 // to exercise a real crafting spend, so it is authorized like every other admin
+// GrantProgress is the developer-mode level source. The world validates the
+// requested level against the progression table's own bound, and the ordinary
+// progress drain persists and pushes what it granted on the next tick.
+func (e *Engine) GrantProgress(playerID string, level int) error {
+	e.mu.Lock()
+	_, err := e.world.GrantProgress(playerID, level)
+	e.mu.Unlock()
+	return err
+}
+
 // feature and persisted like every other change to what a body carries.
 func (e *Engine) GrantMaterials(playerID string, grants map[string]int) error {
 	e.mu.Lock()

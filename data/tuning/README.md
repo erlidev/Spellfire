@@ -38,10 +38,21 @@ Rules, from [`invariants.md`](../../docs/game/design/invariants.md) and
   have zero travel speed. The loader rejects both, and it also rejects a dodge
   vector the simulation cannot deliver or a cast-time/telegraph claim without
   the windup and shared geometry that make its counterplay real.
-- **One ability contract.** Anything that acts — a gun, a spell, and later a
-  mob or a deployable — points at an `abilities.json` row for its cost,
-  cadence, cooldown, counterplay, delivery, and effects. Weapons and spells hold
-  identity only.
+- **One ability contract.** Anything that acts — a gun, a spell, a gadget, and
+  later a mob — points at an `abilities.json` row for its cost, cadence,
+  cooldown, counterplay, delivery, and effects. Weapons, spells, and gadgets
+  hold identity only. Delivery has four shapes and an ability declares at most
+  the ones that fit: a travelling `projectile`, the `blast` its impact resolves
+  into, the `deployable` field it leaves standing, and the `guard` it raises
+  instead of throwing anything.
+- **A deployable is a field, not a wall.** A `deployable` row names an
+  `entities.json` archetype with no collision geometry, a radius, a lifetime,
+  and a `reveal_radius` inside which it stops hiding anyone. It changes what can
+  be seen, never where a body may walk, and it must carry a cooldown so one body
+  cannot cover the world in them.
+- **A projectile that deals no damage has to deliver something.** A round with
+  no damage band must declare a deployable or a blast, or it is a body the world
+  carries and nobody ever feels.
 - **One telegraph grammar.** Windups emit an authoritative telegraph entity
   whose circle, cone, line, or ring geometry and phase durations come from the
   ability row. Owner type never changes the wire or renderer path.
@@ -71,10 +82,10 @@ Rules, from [`invariants.md`](../../docs/game/design/invariants.md) and
 | `world.json` | World radius, spawn radius, danger bands, procedural tree parameters, fixed fixtures |
 | `combat.json` | Role and dodge-vector vocabularies, player movement/resources, universal dash, weight classes, damage bands |
 | `loadout.json` | Slot counts per kind and the Mage affinity multiplier |
-| `progression.json` | XP curve, the XP each source awards, the starter-kit draw size, and the crafted-item capacity |
+| `progression.json` | XP curve, the XP each source awards, the starter-kit draw size, the crafted-item capacity, and the developer-mode level-grant bound |
 | `elements.json` | The five Mage elements and their roles |
 | `abilities.json` | What every action costs, how often it may be used, how it is dodged, what it delivers, and what it applies |
-| `effects.json` | Status effects: burn, slow, root, stun, knockback, shield |
+| `effects.json` | Status effects: burn, slow, root, stun, knockback, shield, blind |
 | `weapons.json` | Craftable weapons: class, blueprint, magazine, unlock level, weight class, recoil pattern, spread, optional scope, optional material cost, and the ability they fire or the spell they cast |
 | `ammunition.json` | Crafted special-ammunition recipes: what they cost, what material they produce, and how many rounds a batch yields |
 | `spells.json` | Spells: element, tier, unlock level, and the ability they cast |
@@ -210,5 +221,8 @@ instantly landing round must require a scope, claim `scoped_commit`, and have
 travelling range past its cap; a guard must cover less than a full circle, cost
 mobility, and deal no damage; a withheld category must cost materials and may
 not be in a basic set; and crafted ammunition must be produced by a recipe,
-cost something, and never cost the material it produces. Failures list every problem at once — run
+cost something, and never cost the material it produces. A deployable must name
+a live archetype with no collision geometry, cover ground, expire, reveal inside
+a gap smaller than itself, be delivered by something that travels, deal no
+damage, and hold a cooldown. Failures list every problem at once — run
 `go test ./server/...`.

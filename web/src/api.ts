@@ -80,6 +80,10 @@ export class API {
     return this.request<void>("/api/admin/materials", { method: "POST", body: JSON.stringify({ character_id: characterID, materials }) });
   }
 
+  adminProgress(characterID: string, level: number): Promise<void> {
+    return this.request<void>("/api/admin/progress", { method: "POST", body: JSON.stringify({ character_id: characterID, level }) });
+  }
+
   private async request<T>(path: string, init: RequestInit = {}, authenticated = true): Promise<T> {
     const headers = new Headers(init.headers);
     headers.set("Content-Type", "application/json");

@@ -5,11 +5,21 @@
 // reply confirms it, and only the server may spend a material.
 import { ammunition, components, materials, weapons, type Component, type Weapon } from "../tuning";
 import type { CharacterClass, CraftedItem, LoadoutSet } from "../types";
-import type { Ledger } from "./loadout";
+import { locked, type Ledger, type LockedContent } from "./loadout";
 
 /** The weapon categories a character may build: the rows its ledger owns. */
 export function craftable(characterClass: CharacterClass, ledger: Ledger): string[] {
   return Object.keys(weapons).filter((id) => weapons[id]!.class === characterClass && ledger.has(id)).sort();
+}
+
+/**
+ * The weapon categories the character cannot build yet, with the level that
+ * grants each. The crafting surface lists them disabled beside what is
+ * buildable, so the heavy categories a Gunslinger is working toward are visible
+ * before they are reachable rather than appearing out of nowhere.
+ */
+export function lockedCraftable(characterClass: CharacterClass, ledger: Ledger): LockedContent[] {
+  return locked(characterClass, ledger, "weapon");
 }
 
 /** The special-ammunition recipes a class may build. These are not ledger-gated. */

@@ -38,6 +38,7 @@ type AdminController interface {
 	AdminEdit(string, string, map[string]string) (game.AdminEntityState, error)
 	AdminDelete(string, string) error
 	GrantMaterials(string, map[string]int) error
+	GrantProgress(string, int) error
 }
 
 func New(authService *auth.Service, data store.Store, tables *tuning.Tables, adminTools ...AdminController) *API {
@@ -65,6 +66,7 @@ func (a *API) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/admin/entity/edit", a.withAdmin(a.adminEntityEdit))
 	mux.HandleFunc("POST /api/admin/entity/delete", a.withAdmin(a.adminEntityDelete))
 	mux.HandleFunc("POST /api/admin/materials", a.withAdmin(a.adminMaterials))
+	mux.HandleFunc("POST /api/admin/progress", a.withAdmin(a.adminProgress))
 	mux.HandleFunc("GET /api/characters", a.withAccount(a.characters))
 	mux.HandleFunc("POST /api/characters", a.withAccount(a.createCharacter))
 }
@@ -286,6 +288,35 @@ func (a *API) adminMaterials(w http.ResponseWriter, r *http.Request, principal a
 		return
 	}
 	if err := a.adminTools.GrantMaterials(body.CharacterID, body.Materials); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+type adminProgressRequest struct {
+	CharacterID string `json:"character_id"`
+	Level       int    `json:"level"`
+}
+
+// adminProgress is the developer-mode level source. It exists for the same
+// reason the material one does: a player kill is the only XP trigger until
+// Phase 4.3, so content above the opening kit could otherwise never be reached
+// and therefore never exercised. The world bounds the level against the
+// progression table before granting anything.
+func (a *API) adminProgress(w http.ResponseWriter, r *http.Request, principal auth.Principal, _ string) {
+	var body adminProgressRequest
+	if !decodeJSON(w, r, &body) {
+		return
+	}
+	if !a.adminCharacter(w, r, principal, body.CharacterID) {
+		return
+	}
+	if a.adminTools == nil {
+		writeError(w, http.StatusServiceUnavailable, "Developer tools are not available.")
+		return
+	}
+	if err := a.adminTools.GrantProgress(body.CharacterID, body.Level); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}

@@ -5,5 +5,11 @@
     "stacking": "refresh",
     "duration_ms": 220,
     "speed": 620
+  },
+  "flash-blind": {
+    "name": "Flashed",
+    "kind": "blind",
+    "stacking": "refresh",
+    "duration_ms": 1800
   }
 }

@@ -4,6 +4,7 @@ import (
 	"math"
 	"time"
 
+	"spellfire/server/internal/loadout"
 	"spellfire/server/internal/tuning"
 )
 
@@ -91,16 +92,12 @@ func (w *World) firingDirections(p *Player, ability tuning.Ability, now time.Tim
 		aim = Vec{1, 0}
 	}
 	offset := 0.0
-	// A staff has no pattern to walk and no spread to draw, so it never enters
-	// the recoil path at all rather than advancing an index nothing reads.
-	if hasWeapon && (len(weapon.Recoil.Pattern) > 0 || weapon.Spread.MovingDegrees > 0) {
+	// Gunplay belongs to the weapon slot alone: a staff has no pattern to walk
+	// and no spread to draw, and a gadget is thrown by hand rather than fired
+	// down the barrel, so neither walks the muzzle the gun is holding.
+	if hasWeapon && w.firingWeapon(p) && (len(weapon.Recoil.Pattern) > 0 || weapon.Spread.MovingDegrees > 0) {
 		weight := w.tuning.Tables.WeightOf(weapon)
-		// A pattern only walks while the trigger keeps moving: enough quiet and
-		// the next shot starts the burst over from the first entry.
-		if !p.LastShot.IsZero() && weapon.Recoil.RecoveryMS > 0 && now.Sub(p.LastShot) >= weapon.Recoil.Recovery() {
-			p.Shot = 0
-		}
-		offset = weapon.Recoil.DegreesAt(p.Shot) * weight.RecoilMultiplier
+		offset = w.walkRecoil(p, weapon, weight, now)
 		offset += w.spreadDegrees(p, weapon, weight)
 		p.Shot++
 		p.LastShot = now
@@ -119,6 +116,65 @@ func (w *World) firingDirections(p *Player, ability tuning.Ability, now time.Tim
 		directions = append(directions, rotate(aim, offset-spec.PelletSpreadDegrees/2+float64(index)*step))
 	}
 	return directions
+}
+
+// firingWeapon reports whether the selected slot is the weapon itself, which is
+// the only thing that walks the gun's recoil pattern.
+func (w *World) firingWeapon(p *Player) bool {
+	slot, ok := w.selectedSlot(p)
+	return ok && slot.Kind == loadout.KindWeapon
+}
+
+// walkRecoil advances the equipped weapon's pattern by one shot and reports
+// where the muzzle now sits, in degrees off aim. The offset persists between
+// shots and each pattern entry is a step applied to it, so a burst walks the
+// weapon along a fixed shape rather than teleporting it to one of a few fixed
+// angles — which is what makes the pattern learnable and the drift visible.
+//
+// Enough quiet settles the offset back to aim and returns the pattern to its
+// first entry, so stopping is the only thing that controls a gun.
+func (w *World) walkRecoil(p *Player, weapon tuning.Weapon, weight tuning.WeightClass, now time.Time) float64 {
+	recovery := weapon.Recoil.Recovery()
+	offset := 0.0
+	if !p.LastShot.IsZero() && recovery > 0 {
+		if elapsed := now.Sub(p.LastShot); elapsed >= recovery {
+			p.Shot = 0
+		} else {
+			offset = settledRecoil(p.RecoilPeak, elapsed, recovery)
+		}
+	}
+	offset += weapon.Recoil.DegreesAt(p.Shot) * weight.RecoilMultiplier
+	// A magazine longer than the pattern repeats it, so a pattern whose steps do
+	// not sum to zero would otherwise wander off aim without limit.
+	if limit := weapon.Recoil.MaxDegrees() * weight.RecoilMultiplier; limit > 0 {
+		offset = math.Max(-limit, math.Min(limit, offset))
+	}
+	p.RecoilPeak = offset
+	return offset
+}
+
+// recoilDegrees is where the muzzle is pointing right now relative to aim: what
+// the last shot left, decayed by however much quiet has passed since. It is a
+// pure function of the last shot rather than something integrated per tick, so
+// a rewound resolve and a snapshot always agree on it, and it is what the
+// snapshot carries so every client can see a weapon walk and settle.
+func (w *World) recoilDegrees(p *Player, now time.Time) float64 {
+	if p.LastShot.IsZero() || p.RecoilPeak == 0 {
+		return 0
+	}
+	weapon, ok := w.weapon(p)
+	if !ok {
+		return 0
+	}
+	return settledRecoil(p.RecoilPeak, now.Sub(p.LastShot), weapon.Recoil.Recovery())
+}
+
+// settledRecoil decays an offset linearly to zero over the recovery window.
+func settledRecoil(peak float64, since, recovery time.Duration) float64 {
+	if recovery <= 0 || since >= recovery || since < 0 {
+		return 0
+	}
+	return peak * (1 - float64(since)/float64(recovery))
 }
 
 // spreadDegrees is how far off aim this shot may land because of how the body is

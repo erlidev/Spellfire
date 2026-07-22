@@ -63,7 +63,7 @@ func (t *Tables) validateEntities(r *report) {
 			}
 		}
 	}
-	for _, id := range []string{"player", "projectile", "telegraph", "tree", "wall"} {
+	for _, id := range []string{"player", "projectile", "telegraph", "smoke", "tree", "wall"} {
 		_, ok := t.Entities[id]
 		r.require(ok, "entities: missing required definition %q", id)
 	}
@@ -100,6 +100,8 @@ func (t *Tables) validateEntityAdmin(r *report) {
 	r.require(spawnables > 0, "entities: at least one entity must be admin spawnable")
 	validateAdminFields(r, "materials: admin_grant", []AdminField{t.Materials.AdminGrant})
 	r.require(t.Materials.AdminGrant.Attribute == "inventory.material_count" && t.Materials.AdminGrant.Input == "number", "materials: admin_grant must configure numeric inventory.material_count")
+	validateAdminFields(r, "progression: admin_grant", []AdminField{t.Progression.AdminGrant})
+	r.require(t.Progression.AdminGrant.Attribute == "progression.level" && t.Progression.AdminGrant.Input == "number", "progression: admin_grant must configure numeric progression.level")
 }
 
 func validateAdminFields(r *report, prefix string, fields []AdminField) {
@@ -361,6 +363,12 @@ func (t *Tables) validateProgression(r *report) {
 		"progression: crafted_item_capacity must be positive; a stock build costs nothing, so an unbounded inventory can be minted forever")
 	r.require(p.StarterKit.Unlocks >= t.Loadout.BarSlots(),
 		"progression: starter_kit.unlocks %d cannot fill the %d-slot action bar", p.StarterKit.Unlocks, t.Loadout.BarSlots())
+	// The developer-mode grant is bounded by the curve it drives, so a request
+	// can never name a level the progression table cannot reach.
+	if p.AdminGrant.Minimum != nil && p.AdminGrant.Maximum != nil {
+		r.require(*p.AdminGrant.Minimum == 1 && int(*p.AdminGrant.Maximum) == p.MaxLevel,
+			"progression: admin_grant must span level 1 to max_level %d", p.MaxLevel)
+	}
 }
 
 // validateUnlockIDs keeps the permanent ledger flat. It stores bare IDs, so a
@@ -582,6 +590,7 @@ func (t *Tables) validateAbilities(r *report) {
 		}
 		t.validateGuard(r, id, ability)
 		t.validateBlast(r, id, ability)
+		t.validateDeployable(r, id, ability)
 		if ability.Telegraph != nil {
 			t.validateTelegraph(r, "abilities", id, *ability.Telegraph)
 		}
@@ -590,6 +599,15 @@ func (t *Tables) validateAbilities(r *report) {
 		if !ability.Damaging() {
 			r.require(ability.DodgeVector == "", "abilities: %q deals no damage, so it must not claim a dodge vector", id)
 			r.require(!ability.RequiresScope, "abilities: %q requires a scope but delivers no damage; scoping is a commitment paid for accuracy", id)
+			if ability.Projectile != nil {
+				// A round that deals nothing has to be delivering something else,
+				// or it is a body the world carries and nobody ever feels.
+				r.require(ability.Deployable != nil || ability.Blast != nil,
+					"abilities: %q throws a projectile that deals no damage, leaves nothing behind, and goes off into nothing", id)
+				t.validateProjectileShape(r, "abilities", id, ability.Projectile)
+				r.require(ability.Projectile.HitscanRange == 0 && ability.Projectile.Pellets == 0 && ability.Projectile.FalloffStart == 0,
+					"abilities: %q delivers no damage, so its projectile must not declare hitscan, pellets, or falloff", id)
+			}
 			continue
 		}
 		t.validateDamaging(r, "abilities", id, ability.DamageBand, ability.DodgeVector, ability.Projectile)
@@ -903,11 +921,7 @@ func (t *Tables) validateDamaging(r *report, table, id, band, dodge string, proj
 	if !r.require(projectile != nil, "%s: %q deals damage but declares no projectile", table, id) {
 		return
 	}
-	r.require(projectile.Kind != "", "%s: %q has a projectile with no kind", table, id)
-	r.require(projectile.Speed > 0, "%s: %q has a projectile with no travel speed; instant damage has no dodge vector", table, id)
-	r.require(projectile.LifeSeconds > 0, "%s: %q has a projectile with no lifetime", table, id)
-	r.require(projectile.Radius > 0, "%s: %q has a projectile with no radius", table, id)
-	r.require(projectile.Silhouette != "", "%s: %q has a projectile with no silhouette for the renderer", table, id)
+	t.validateProjectileShape(r, table, id, projectile)
 	r.require(projectile.Pellets >= 0, "%s: %q cannot fire a negative number of pellets", table, id)
 	r.require((projectile.PelletCount() > 1) == (projectile.PelletSpreadDegrees > 0),
 		"%s: %q must declare pellets and pellet_spread_degrees together, or neither: one pellet has no cone and a cone needs pellets to fill it", table, id)
@@ -931,6 +945,41 @@ func (t *Tables) validateDamaging(r *report, table, id, band, dodge string, proj
 // validateProjectileKinds keeps kinds unique across every table, because a
 // snapshot carries only the kind and the renderer resolves the silhouette
 // from it.
+// validateProjectileShape checks what every travelling body owes regardless of
+// what it delivers: an identity the renderer can draw it from, travel the target
+// can react to, and a body large enough to resolve against.
+func (t *Tables) validateProjectileShape(r *report, table, id string, projectile *Projectile) {
+	r.require(projectile.Kind != "", "%s: %q has a projectile with no kind", table, id)
+	r.require(projectile.Speed > 0, "%s: %q has a projectile with no travel speed; instant damage has no dodge vector", table, id)
+	r.require(projectile.LifeSeconds > 0, "%s: %q has a projectile with no lifetime", table, id)
+	r.require(projectile.Radius > 0, "%s: %q has a projectile with no radius", table, id)
+	r.require(projectile.Silhouette != "", "%s: %q has a projectile with no silhouette for the renderer", table, id)
+}
+
+// validateDeployable keeps a persistent field coherent: it materialises as an
+// entity archetype the world knows how to build, it covers ground, it expires,
+// and it leaves a gap close enough in that a body standing in its own cloud can
+// still see what it is touching.
+func (t *Tables) validateDeployable(r *report, id string, ability Ability) {
+	if ability.Deployable == nil {
+		return
+	}
+	field := ability.Deployable
+	if definition, ok := t.Entities[field.Kind]; r.require(ok, "abilities: %q deploys %q, which is not an entity archetype", id, field.Kind) {
+		// A cloud changes what can be seen, never where a body may walk: it is a
+		// field, and a field with geometry would be a wall nobody authored.
+		r.require(len(definition.CollisionObjects) == 0,
+			"abilities: %q deploys %q, which has collision geometry; a deployable field blocks vision, not movement", id, field.Kind)
+	}
+	r.require(field.Radius > 0, "abilities: %q deploys a field with no radius", id)
+	r.require(field.DurationMS > 0, "abilities: %q deploys a field that never expires", id)
+	r.require(field.RevealRadius >= 0 && field.RevealRadius < field.Radius,
+		"abilities: %q reveals at %g inside a %g field; the gap has to be smaller than the cloud", id, field.RevealRadius, field.Radius)
+	r.require(ability.Projectile != nil, "abilities: %q deploys a field but delivers nothing that travels to where it lands", id)
+	r.require(!ability.Damaging(), "abilities: %q both deploys a field and deals damage; a deployable is placed, not landed on someone", id)
+	r.require(ability.CooldownMS > 0, "abilities: %q deploys a field with no cooldown, so one body could cover the world in them", id)
+}
+
 func (t *Tables) validateProjectileKinds(r *report) {
 	owners := map[string]string{}
 	for _, id := range sortedKeys(t.Abilities) {

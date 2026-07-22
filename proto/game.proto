@@ -148,6 +148,13 @@ message Entity {
   // an opponent plays around.
   bool scoped = 34;
   bool guarding = 35;
+  // Where the muzzle currently sits relative to aim, in degrees, and how many
+  // shots the body has fired in total. Both are sent for every visible player:
+  // recoil is only a skill axis if it can be seen walking and settling, and the
+  // shot counter is what lets a client fire off a muzzle flash and a kick the
+  // moment a shot happens rather than inferring one from an ammo count.
+  float recoil_degrees = 36;
+  uint64 shots = 37;
 }
 
 message CollisionObject {

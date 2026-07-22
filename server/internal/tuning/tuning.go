@@ -21,7 +21,7 @@ import (
 // SchemaVersion is the table shape this build understands. Bump it only when a
 // table changes shape, and add the matching forward migration; a plain balance
 // edit bumps Manifest.Version instead and needs no code change.
-const SchemaVersion = 13
+const SchemaVersion = 14
 
 type Manifest struct {
 	// Version is the content revision. Bump it on any balance edit; a change
@@ -312,6 +312,24 @@ type Blast struct {
 	Effects []string `json:"effects"`
 }
 
+// Deployable is what an impact leaves standing in the world instead of
+// resolving and vanishing: a persistent circular field with a lifetime. Smoke is
+// the first, and the field is deliberately not a collider — a cloud changes what
+// can be seen, never where a body may walk.
+type Deployable struct {
+	// Kind names the entities.json archetype the field materialises as, which is
+	// also what the renderer draws it from.
+	Kind       string  `json:"kind"`
+	Radius     float64 `json:"radius"`
+	DurationMS int     `json:"duration_ms"`
+	// RevealRadius is how close two bodies have to be for the cloud to stop
+	// hiding them from each other. Without it a body standing inside its own
+	// smoke would be unable to see an opponent it is touching.
+	RevealRadius float64 `json:"reveal_radius"`
+}
+
+func (d Deployable) Duration() time.Duration { return time.Duration(d.DurationMS) * time.Millisecond }
+
 // Guard is a raised frontal barrier. It blocks bullets and projectiles inside
 // its arc, slows its user, and locks fire while it is up — never ground effects
 // placed behind or beneath it, which is what keeps it an answer to a burst
@@ -344,8 +362,12 @@ type Scope struct {
 
 // Recoil walks the muzzle off aim in a fixed left/right pattern unique to each
 // gun, so a burst is a shape a player learns rather than a random cone. Entries
-// are degrees off the aim vector, indexed by successive shots and wrapping;
-// RecoveryMS of quiet returns the weapon to the first entry.
+// are *steps* in degrees, applied one per shot to a muzzle offset that persists
+// between shots: the pattern is where the weapon travels, not where it points.
+// The first entry is zero on every gun, so a settled first shot is always true.
+// RecoveryMS of quiet settles the offset back to zero and returns the pattern to
+// its first entry, which is what makes burst discipline the way a gun is
+// controlled.
 type Recoil struct {
 	Pattern    []float64 `json:"pattern"`
 	RecoveryMS int       `json:"recovery_ms"`
@@ -353,13 +375,27 @@ type Recoil struct {
 
 func (r Recoil) Recovery() time.Duration { return time.Duration(r.RecoveryMS) * time.Millisecond }
 
-// DegreesAt is the pattern entry for a shot index, wrapping so a magazine longer
+// DegreesAt is the pattern step for a shot index, wrapping so a magazine longer
 // than the pattern repeats it instead of running off the end.
 func (r Recoil) DegreesAt(shot int) float64 {
 	if len(r.Pattern) == 0 {
 		return 0
 	}
 	return r.Pattern[((shot%len(r.Pattern))+len(r.Pattern))%len(r.Pattern)]
+}
+
+// MaxDegrees bounds how far the accumulated offset may wander from aim. Every
+// authored pattern alternates and so stays well inside it; the bound exists
+// because a magazine longer than the pattern repeats it, and a pattern whose
+// steps do not sum to zero would otherwise drift without limit over a long
+// burst. It is derived rather than authored: half of one full walk of the
+// pattern is the furthest a shape a player can learn ever needs to reach.
+func (r Recoil) MaxDegrees() float64 {
+	total := 0.0
+	for _, step := range r.Pattern {
+		total += math.Abs(step)
+	}
+	return total / 2
 }
 
 // Spread is how wide the weapon throws a shot. Standing is the floor a settled
@@ -441,6 +477,10 @@ type Ability struct {
 	// exactly one path for each.
 	Blast *Blast `json:"blast"`
 	Guard *Guard `json:"guard"`
+	// Deployable is the persistent field an impact leaves behind. Like Blast and
+	// Guard it is an alternative shape of the same contract: the projectile is
+	// how it is delivered, and the field is what the world keeps.
+	Deployable *Deployable `json:"deployable"`
 	// Effects are the status effects each hit applies, resolved against the
 	// effects table.
 	Effects []string `json:"effects"`
@@ -453,13 +493,15 @@ func (a Ability) Cooldown() time.Duration { return time.Duration(a.CooldownMS) *
 func (a Ability) Windup() time.Duration   { return time.Duration(a.WindupMS) * time.Millisecond }
 
 // Damaging reports whether the ability deals damage, and therefore owes a
-// damage band and a dodge vector.
-func (a Ability) Damaging() bool { return a.DamageBand != "" || a.Projectile != nil }
+// damage band and a dodge vector. Damage only ever comes from the shared band,
+// so the band alone decides: a projectile that carries a deployable or a
+// utility blast travels without dealing anything.
+func (a Ability) Damaging() bool { return a.DamageBand != "" }
 
 // EffectKinds are the status effects the simulation knows how to run. A row of
 // any other kind would be data the world silently ignores, so the loader
 // rejects it.
-var EffectKinds = []string{"burn", "slow", "root", "stun", "knockback", "shield"}
+var EffectKinds = []string{"burn", "slow", "root", "stun", "knockback", "shield", "blind"}
 
 // Effect stacking rules. "refresh" keeps one instance and restarts its
 // duration; "stack" runs independent instances side by side.
@@ -623,6 +665,11 @@ type Progression struct {
 	// rows forever; it is also the capacity outcome the crafting UI owes.
 	CraftedItemCapacity int        `json:"crafted_item_capacity"`
 	StarterKit          StarterKit `json:"starter_kit"`
+	// AdminGrant bounds the developer-mode level grant, the same way
+	// materials.admin_grant bounds the material one. Progression's only trigger
+	// is a player kill until Phase 4.3, so without it nothing above the opening
+	// kit can be reached — and therefore exercised — on a fresh server.
+	AdminGrant AdminField `json:"admin_grant"`
 }
 
 // XPToNext is what the level costs to leave. It is zero at the cap, which is

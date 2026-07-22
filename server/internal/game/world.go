@@ -111,14 +111,18 @@ type Player struct {
 	PreviousButtons                 uint32
 	NextFire, DashReady, ReloadEnds time.Time
 	Ammo                            int
-	// Shot is the position in the equipped weapon's recoil pattern, and LastShot
-	// when the muzzle last moved: RecoveryMS of quiet returns the pattern to its
-	// first entry, so burst discipline is what controls a gun. Fired is the
-	// body's total shot count and seeds the move-spread draw, which keeps spread
-	// reproducible for a test while staying unpredictable to a player.
-	Shot     int
-	Fired    uint64
-	LastShot time.Time
+	// Shot is the position in the equipped weapon's recoil pattern, RecoilPeak
+	// where the last shot left the muzzle in degrees off aim, and LastShot when
+	// that was: the offset decays back to aim over the weapon's recovery window
+	// and the pattern returns to its first entry, so burst discipline is what
+	// controls a gun. Fired is the body's total shot count; it seeds the
+	// move-spread draw, which keeps spread reproducible for a test while staying
+	// unpredictable to a player, and it reaches the wire so every client can
+	// show a shot the instant it happens.
+	Shot       int
+	Fired      uint64
+	RecoilPeak float64
+	LastShot   time.Time
 	// Scoped and Guarding are the two committed stances. Both are derived from
 	// the held input every tick rather than toggled, and both reach the wire so
 	// an opponent can see the commitment they are being charged for.
@@ -181,6 +185,11 @@ type Projectile struct {
 	// applies. Both are nil on an ordinary round.
 	Blast        *tuning.Blast
 	BlastEffects []string
+	// Deploy is the persistent field this round leaves where it stops, and is
+	// nil on an ordinary round. Deployed marks it placed, so a round that is
+	// resolved and then reaped cannot place two.
+	Deploy   *tuning.Deployable
+	Deployed bool
 }
 
 // hitDamage is what this round is worth where it currently is: the band's
@@ -200,6 +209,10 @@ type World struct {
 	players     map[string]*Player
 	projectiles map[string]*Projectile
 	telegraphs  map[string]*Telegraph
+	// deployables are the persistent fields abilities leave standing — smoke
+	// today — keyed like every other short-lived family so expiry is a sweep
+	// rather than a scan of the world.
+	deployables map[string]*Deployable
 	// worldItems is a dense component-friendly slice for authored fixtures and
 	// procedural terrain. Dead entries remain as inactive slots, avoiding map
 	// iteration and compaction in hot collision paths.
@@ -210,6 +223,7 @@ type World struct {
 	occupants       map[string]string
 	nextProjectile  uint64
 	nextTelegraph   uint64
+	nextDeployable  uint64
 	nextAdminPlayer uint64
 	nextAdminEntity uint64
 	combat          *combatLog
@@ -221,7 +235,8 @@ func NewWorld(t Tuning) *World {
 	}
 	return &World{
 		tuning: t, players: make(map[string]*Player), projectiles: make(map[string]*Projectile), telegraphs: make(map[string]*Telegraph),
-		worldItems: generateWorldItems(t.Tables), history: make(map[string][]historySample),
+		deployables: make(map[string]*Deployable),
+		worldItems:  generateWorldItems(t.Tables), history: make(map[string][]historySample),
 		occupants: make(map[string]string), combat: newCombatLog(combatEventCapacity),
 	}
 }
@@ -688,6 +703,29 @@ func (w *World) GrantMaterials(id string, grants map[string]int) (map[string]int
 }
 
 // CarriedMaterials is a copy of what the body holds, safe for a caller to keep.
+// GrantProgress sets a body's level and grants everything the levels it now
+// holds unlock. It is the developer-mode seam only: a player kill is the one
+// legitimate XP trigger until Phase 4.3, so without this nothing above the
+// opening kit can be reached — and therefore exercised — on a fresh server. The
+// HTTP layer authorizes the caller before this is reached.
+//
+// Lowering a level never confiscates an unlock: the ledger is permanent by
+// design, and a grant is not a loan.
+func (w *World) GrantProgress(id string, level int) (model.Progress, error) {
+	p := w.players[id]
+	if p == nil {
+		return model.Progress{}, errors.New("game: player is not in the world")
+	}
+	bound := w.tuning.Tables.Progression.AdminGrant
+	if bound.Minimum == nil || bound.Maximum == nil || float64(level) < *bound.Minimum || float64(level) > *bound.Maximum {
+		return model.Progress{}, fmt.Errorf("level %d is outside the permitted range", level)
+	}
+	p.Level, p.XP = level, 0
+	p.Unlocks, _ = p.Unlocks.With(w.tuning.Tables.UnlocksThrough(level)...)
+	p.ProgressDirty = true
+	return progression.Progress(p.Level, p.XP, p.Unlocks), nil
+}
+
 func (p *Player) CarriedMaterials() map[string]int {
 	carried := make(map[string]int, len(p.Materials))
 	for material, count := range p.Materials {
@@ -766,6 +804,7 @@ func (w *World) Step(now time.Time) {
 	}
 	w.stepTelegraphs(now)
 	w.stepProjectiles(now, dt)
+	w.stepDeployables(now)
 	w.reapDeleted(now)
 	for _, id := range ids {
 		if p := w.players[id]; p != nil {
@@ -783,6 +822,11 @@ func (w *World) reapDeleted(now time.Time) {
 	for id, telegraph := range w.telegraphs {
 		if telegraph.deleteComplete(now) {
 			delete(w.telegraphs, id)
+		}
+	}
+	for id, deployable := range w.deployables {
+		if deployable.deleteComplete(now) {
+			delete(w.deployables, id)
 		}
 	}
 	for index, item := range w.worldItems {
@@ -904,6 +948,9 @@ func (w *World) stepProjectiles(now time.Time, dt float64) {
 			p.Velocity = Vec{}
 		}
 		if p.Remaining <= 0 || w.advanceProjectile(p, dt, now, false) {
+			// A thrown field lands wherever its round stopped, whether that was
+			// an impact, the rim, or simply running out of throw.
+			w.deployFrom(p, p.Position, now)
 			delete(w.projectiles, id)
 		}
 	}

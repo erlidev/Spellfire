@@ -148,6 +148,8 @@ type Entity struct {
 	DeleteProgress    float32
 	Scoped            bool
 	Guarding          bool
+	RecoilDegrees     float32
+	Shots             uint64
 }
 
 type Collider struct {
@@ -600,6 +602,8 @@ func encodeEntity(e Entity) []byte {
 	if e.Guarding {
 		out = appendVarint(out, 35, 1)
 	}
+	out = appendFloat(out, 36, e.RecoilDegrees)
+	out = appendVarint(out, 37, e.Shots)
 	return out
 }
 

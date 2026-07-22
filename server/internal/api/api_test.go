@@ -25,6 +25,7 @@ type recordingAdminTools struct {
 	spawn      game.AdminSpawn
 	attributes map[string]float64
 	materials  map[string]int
+	level      int
 	state      game.AdminEntityState
 	entityID   string
 }
@@ -57,6 +58,11 @@ func (r *recordingAdminTools) AdminDelete(_, entityID string) error {
 
 func (r *recordingAdminTools) GrantMaterials(_ string, materials map[string]int) error {
 	r.materials = materials
+	return nil
+}
+
+func (r *recordingAdminTools) GrantProgress(_ string, level int) error {
+	r.level = level
 	return nil
 }
 

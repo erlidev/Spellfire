@@ -23,7 +23,7 @@ place until interaction finishes.
 | Activity | Boss rank/contribution and contextual progress | Conditional |
 | Reference | Combat resources, death, loot, danger, controls | Always |
 | Settings | Input, audio, graphics, UI, accessibility, account-safe preferences | Always |
-| Admin | Tuning-driven entity placement, selection/editing, graceful delete mode, and material grants | Configured administrators only |
+| Admin | Tuning-driven entity placement, selection/editing, graceful delete mode, and material and level grants | Configured administrators only |
 
 Marketplace, guild/territory, monetization, and onboarding are deferred. Add them only when their game rules exist, following the [`README`](README.md#extension-contract) extension contract.
 
