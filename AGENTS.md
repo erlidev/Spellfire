@@ -1,7 +1,5 @@
 # Project: SpellFire
 
-See @README.md for a project overview. Use `/docs/architecture.md` for codebase details, `/docs/game/design/` for game design, and `/docs/game/ui/` for the user-facing specification.
-
 ## Project-Specific Instructions
 - Update the `/docs` with the appropriate information every time a feature or refactor is implemented.
 - Use `TODO.md` to keep track of the current progress on game implementation.
@@ -17,3 +15,9 @@ See @README.md for a project overview. Use `/docs/architecture.md` for codebase 
 - Keep new features modular: clear boundaries, minimal coupling, no reaching into internals of other modules.
 - Call out edge cases, missing error handling, and untested assumptions explicitly rather than leaving them implicit in the code.
 - Write complete code: no TODO placeholders or stubbed-out logic. Make sure each new feature and refactor integrates fully into the existing codebase.
+
+@README.md
+
+@docs/architecture.md
+
+Use `/docs/game/design/` for game design, and `/docs/game/ui/` for the user-facing specification
