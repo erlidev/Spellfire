@@ -70,13 +70,12 @@ func TestSmokeDeploysWhereItLandsAndExpires(t *testing.T) {
 	}
 }
 
-// Smoke blocks crossed sightlines and retains the close-range reveal exception.
-// Once the cloud covers the complete silhouette—or stands between viewer and
-// silhouette—the server omits the body.
+// Smoke blocks crossed sightlines. Once inside, its containing circles define
+// the visible pocket; beyond their union the server omits the body.
 func TestSmokeBlocksSightAndKeepsContactReveal(t *testing.T) {
 	w, now := testWorld()
 	field := *w.tuning.Tables.Abilities["smoke-throw"].Deployable
-	viewer := addTestPlayer(w, "viewer", model.Gunslinger, Vec{1200, 0}, now)
+	viewer := addTestPlayer(w, "viewer", model.Gunslinger, Vec{1000, 0}, now)
 	target := addTestPlayer(w, "target", model.Gunslinger, Vec{1350, 0}, now)
 	cloud := Vec{1350, 0}
 
@@ -101,14 +100,19 @@ func TestSmokeBlocksSightAndKeepsContactReveal(t *testing.T) {
 	if visible(w, viewer.ID, target.ID, now) {
 		t.Fatal("a body wholly behind smoke remained visible")
 	}
-	// Inside the reveal gap the cloud stops hiding: a contact fight is not
-	// decided by who threw the canister.
+	// Inside a lobe, everything in that same lobe remains visible; leaving its
+	// boundary is what closes sight.
 	viewer.Position = cloud
-	target.Position = Vec{cloud.X + field.RevealRadius/2, 0}
+	target.Position = Vec{cloud.X + field.Radius*.3, 0}
 	w.recordHistory(viewer, now)
 	w.recordHistory(target, now)
 	if !visible(w, viewer.ID, target.ID, now) {
-		t.Fatal("the cloud hid a body close enough to touch")
+		t.Fatal("the cloud hid a body inside the viewer's own smoke circle")
+	}
+	target.Position = Vec{cloud.X + field.Radius*1.2, 0}
+	w.recordHistory(target, now)
+	if visible(w, viewer.ID, target.ID, now) {
+		t.Fatal("the cloud exposed a body outside every smoke circle containing the viewer")
 	}
 }
 
@@ -169,9 +173,9 @@ func TestThrowingAGadgetDoesNotWalkTheGun(t *testing.T) {
 	}
 }
 
-// Smoke changes visibility, never collision. Projectiles are one of the two
-// entity classes deliberately omitted in shadow, regardless of ownership.
-func TestSmokeHidesProjectilesWithoutStoppingThem(t *testing.T) {
+// Smoke changes visibility, never collision. Inside a lobe its contents remain
+// available; beyond that lobe both friendly and hostile projectiles are hidden.
+func TestSmokePocketVisibilityDoesNotDependOnProjectileOwnership(t *testing.T) {
 	w, now := testWorld()
 	field := *w.tuning.Tables.Abilities["smoke-throw"].Deployable
 	shooter := carrying(t, w, addTestPlayer(w, "shooter", model.Gunslinger, Vec{1200, 0}, now), "starter-rifle")
@@ -193,11 +197,11 @@ func TestSmokeHidesProjectilesWithoutStoppingThem(t *testing.T) {
 	if mine == nil || theirs == nil {
 		t.Fatalf("expected one round from each body, got %d", len(w.projectiles))
 	}
-	if visible(w, shooter.ID, mine.ID, now) {
-		t.Fatal("the cloud exposed the shooter's own round despite projectile shadow rules")
+	if !visible(w, shooter.ID, mine.ID, now) {
+		t.Fatal("the cloud hid the shooter's round inside the same smoke circle")
 	}
-	if visible(w, shooter.ID, theirs.ID, now) {
-		t.Fatal("the cloud failed to hide an opponent's round")
+	if !visible(w, shooter.ID, theirs.ID, now) {
+		t.Fatal("the cloud treated an opponent's round differently inside the visible pocket")
 	}
 	// From inside this cloud, the far rim is still behind its LOS boundary.
 	theirs.Position = Vec{1350 + field.Radius, 0}

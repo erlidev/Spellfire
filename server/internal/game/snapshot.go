@@ -43,18 +43,18 @@ func (w *World) SnapshotFor(playerID string, now time.Time, kind uint64) protoco
 	// Player and projectile bodies are sampled around their silhouette. Smoke
 	// and terrain may therefore omit them only when no sampled edge is visible;
 	// ownership does not bypass a crossed sightline.
-	hidden := func(at Vec, ownerID string, extent float64, visibleInShadow bool) bool {
+	hidden := func(at Vec, extent float64, visibleInShadow bool) bool {
 		if outsideView(at, 0) || blind {
 			return true
 		}
 		if visibleInShadow {
 			return false
 		}
-		return !w.anyPartVisible(viewer.Position, at, extent) || ownerID != playerID && w.concealed(viewer.Position, at, extent)
+		return !w.anyPartVisible(viewer.Position, at, extent)
 	}
 	for _, id := range sortedPlayerIDs(w.players) {
 		p := w.players[id]
-		if id != playerID && hidden(p.Position, p.ID, p.circleRadius(), w.tuning.Tables.Entities["player"].VisibleInShadow) {
+		if id != playerID && hidden(p.Position, p.circleRadius(), w.tuning.Tables.Entities["player"].VisibleInShadow) {
 			continue
 		}
 		resource := p.Mana
@@ -85,7 +85,7 @@ func (w *World) SnapshotFor(playerID string, now time.Time, kind uint64) protoco
 	}
 	for _, id := range sortedProjectileIDs(w.projectiles) {
 		p := w.projectiles[id]
-		if hidden(p.Position, p.OwnerID, p.circleRadius(), w.tuning.Tables.Entities["projectile"].VisibleInShadow) {
+		if hidden(p.Position, p.circleRadius(), w.tuning.Tables.Entities["projectile"].VisibleInShadow) {
 			continue
 		}
 		message.Entities = append(message.Entities, protocol.Entity{
@@ -101,7 +101,7 @@ func (w *World) SnapshotFor(playerID string, now time.Time, kind uint64) protoco
 		// A telegraph is ground geometry rather than a body: it is hidden only
 		// when the point it is anchored at is inside a cloud, since the shape it
 		// warns about reaches well outside its own origin.
-		if hidden(telegraph.Position, telegraph.OwnerID, 0, w.tuning.Tables.Entities["telegraph"].VisibleInShadow) {
+		if hidden(telegraph.Position, 0, w.tuning.Tables.Entities["telegraph"].VisibleInShadow) {
 			continue
 		}
 		message.Entities = append(message.Entities, protocol.Entity{
@@ -119,7 +119,7 @@ func (w *World) SnapshotFor(playerID string, now time.Time, kind uint64) protoco
 	for _, id := range sortedDeployableIDs(w.deployables) {
 		deployable := w.deployables[id]
 		definition := w.tuning.Tables.Entities[deployable.Kind]
-		if hidden(deployable.Position, deployable.OwnerID, deployable.Field.Radius, definition.VisibleInShadow) {
+		if hidden(deployable.Position, deployable.Field.Radius, definition.VisibleInShadow) {
 			continue
 		}
 		message.Entities = append(message.Entities, protocol.Entity{

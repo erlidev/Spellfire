@@ -90,14 +90,14 @@ func TestSmokeBlocksSightlineAndSuppliesShadowCollider(t *testing.T) {
 		t.Fatal("smoke between two bodies did not block the complete target silhouette")
 	}
 	snapshot := w.SnapshotFor(viewer.ID, now, 0)
-	found := false
+	found := 0
 	for _, collider := range snapshot.Colliders {
 		if collider.EntityID == cloud.ID && collider.Kind == "smoke" && collider.Shape == "circle" {
-			found = true
+			found++
 		}
 	}
-	if !found {
-		t.Fatal("standing smoke supplied no circle to the client shadow shader")
+	if found != 1 {
+		t.Fatalf("standing smoke supplied %d collider records, want one compact analytic shape", found)
 	}
 }
 

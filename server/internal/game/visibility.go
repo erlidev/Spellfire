@@ -22,9 +22,9 @@ func (w *World) terrainOccluded(from, to Vec) bool {
 	return false
 }
 
-// visionOccluded extends standing terrain with authored field occluders. A
-// deployable contributes its field circle, which lets smoke participate in the
-// same authoritative LOS rule without pretending it is solid collision.
+// visionOccluded extends standing terrain with authored field occluders. Smoke
+// expands into the same five enterable circles drawn by the client; other field
+// occluders use their authored circle directly.
 func (w *World) visionOccluded(from, to Vec) bool {
 	if w.terrainOccluded(from, to) {
 		return true
@@ -34,14 +34,11 @@ func (w *World) visionOccluded(from, to Vec) bool {
 		if !ok || !definition.OccludesVision || field.Deleting || !field.Alive || field.Field.Radius <= 0 {
 			continue
 		}
-		// The authored reveal gap still permits contact fighting from inside a
-		// cloud. Beyond it, the cloud's exit boundary blocks sight like any
-		// other crossed portion of the field.
-		if from.Sub(field.Position).LengthSq() < field.Field.Radius*field.Field.Radius &&
-			to.Sub(from).LengthSq() <= field.Field.RevealRadius*field.Field.RevealRadius {
-			continue
+		circles := []smokeCircle{{Center: field.Position, Radius: field.Field.Radius}}
+		if field.Field.Conceals {
+			circles = smokeCircles(field.Position, field.Field.Radius)
 		}
-		if segmentIntersectsCircle(from, to, field.Position, field.Field.Radius) {
+		if smokeOccluded(from, to, circles) {
 			return true
 		}
 	}
@@ -85,10 +82,10 @@ func (w *World) anyPartVisible(from, center Vec, extent float64) bool {
 
 // targetVisible is the authoritative visibility rule for automatic targeting.
 // Terrain and authored fields block the sightline, while perimeter sampling
-// preserves any exposed part of the target and concealment preserves smoke's
-// close-range reveal rule. Manual ground placement deliberately does not call
-// this: walls stop sight and aimed projectiles, not area effects placed onto
-// the ground.
+// preserves any exposed part of the target. An enterable field handles its
+// interior pocket in smokeOccluded. Manual ground placement deliberately does
+// not call this: walls stop sight and aimed projectiles, not area effects placed
+// onto the ground.
 func (w *World) targetVisible(from, to Vec, extent float64) bool {
-	return w.anyPartVisible(from, to, extent) && !w.concealed(from, to, extent)
+	return w.anyPartVisible(from, to, extent)
 }
