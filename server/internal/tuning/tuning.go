@@ -21,7 +21,7 @@ import (
 // SchemaVersion is the table shape this build understands. Bump it only when a
 // table changes shape, and add the matching forward migration; a plain balance
 // edit bumps Manifest.Version instead and needs no code change.
-const SchemaVersion = 15
+const SchemaVersion = 16
 
 type Manifest struct {
 	// Version is the content revision. Bump it on any balance edit; a change
@@ -337,7 +337,19 @@ func (d Deployable) Duration() time.Duration { return time.Duration(d.DurationMS
 type Guard struct {
 	ArcDegrees         float64 `json:"arc_degrees"`
 	MovementMultiplier float64 `json:"movement_multiplier"`
+	// Durability is the shield's own health: what it stops is spent from this
+	// pool rather than absorbed for free, and damage past what is left carries
+	// through to the body behind it. At zero the shield is broken and cannot be
+	// raised again until it has recovered in full, so a shield is a resource a
+	// player spends rather than a stance they hold.
+	Durability float64 `json:"durability"`
+	// RegenPerSecond is how fast a lowered shield recovers, and RegenDelayMS the
+	// quiet after the last impact before that starts.
+	RegenPerSecond float64 `json:"regen_per_second"`
+	RegenDelayMS   int     `json:"regen_delay_ms"`
 }
+
+func (g Guard) RegenDelay() time.Duration { return time.Duration(g.RegenDelayMS) * time.Millisecond }
 
 // Blocks reports whether an impact arriving along direction is inside the arc
 // the guard is facing. Both vectors are expected normalized.

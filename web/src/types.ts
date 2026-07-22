@@ -39,6 +39,8 @@ export interface Entity {
   scoped: boolean; guarding: boolean;
   /** Where the muzzle sits relative to aim, and the body's total shot count. */
   recoilDegrees: number; shots: number;
+  /** What is left of the raised shield, and the pool it is spent from. */
+  shield: number; maxShield: number;
 }
 
 export interface Collider {

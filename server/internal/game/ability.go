@@ -185,6 +185,7 @@ func (w *World) spawnRewoundProjectile(p *Player, ability tuning.Ability, direct
 		if w.advanceProjectile(projectile, duration.Seconds(), at.Add(duration), true) {
 			// A round resolved inside the rewind window never becomes an entity,
 			// so anything it was carrying has to be placed here instead.
+			w.resolveBlast(projectile, projectile.Position, now)
 			w.deployFrom(projectile, projectile.Position, now)
 			return
 		}

@@ -18,11 +18,14 @@ interface ActorView {
 interface Puff { graphic: Graphics; distance: number; angle: number; radius: number; drift: number }
 
 // How a shot reads: the weapon is shoved back along its own axis and a flash
-// sits at the muzzle for the same window, and the local camera is knocked with
-// it. The window is short enough to survive the fastest cadence in the tables.
+// sits at the muzzle for the same window. The window is short enough to survive
+// the fastest cadence in the tables.
 const kickMS = 130;
 const kickDistance = 9;
-const shakeDistance = 5;
+// The camera is only knocked by a weapon that fires an explosive, so ordinary
+// gunfire never shakes the view it has to be aimed through.
+const shakeMS = 220;
+const shakeDistance = 6;
 // Smoke is drawn as a handful of overlapping puffs that drift around the centre
 // rather than one flat disc, so a cloud reads as volume the moment it lands.
 const puffCount = 9;
@@ -55,6 +58,8 @@ export class GameView {
   private blindedSince = 0;
   private blindedUntil = 0;
   private shakeUntil = 0;
+  // Whether the selected slot fires something heavy enough to knock the camera.
+  private shakeOnFire = false;
   private actors = new Map<string, ActorView>();
   private samples = new Map<string, Sample[]>();
   private localID = "";
@@ -89,6 +94,12 @@ export class GameView {
     const reach = bonus / 2;
     this.scopeOffset = { x: (aimX / length) * reach, y: (aimY / length) * reach };
   }
+
+  /**
+   * Declares whether the currently selected slot fires an explosive. Only those
+   * shots knock the camera; a rifle or an SMG leaves it still.
+   */
+  setHeavyRecoil(heavy: boolean): void { this.shakeOnFire = heavy; }
 
   apply(message: ServerMessage): void {
     this.localID = message.playerID || this.localID;
@@ -160,14 +171,13 @@ export class GameView {
   }
 
   /**
-   * The knock a shot gives the local camera. It decays over the same window the
-   * weapon's own kick does, and it is an offset rather than a rotation so aiming
-   * stays exactly where the pointer is.
+   * The knock an explosive shot gives the local camera. It is an offset rather
+   * than a rotation so aiming stays exactly where the pointer is.
    */
   private cameraShake(now: number): { x: number; y: number } {
     const left = this.shakeUntil - now;
     if (left <= 0) return { x: 0, y: 0 };
-    const strength = (left / kickMS) * shakeDistance;
+    const strength = (left / shakeMS) * shakeDistance;
     return { x: Math.sin(now / 9) * strength, y: Math.cos(now / 7) * strength };
   }
 
@@ -246,7 +256,7 @@ export class GameView {
   private drawRecoil(view: ActorView, entity: Entity, self: boolean, now: number): void {
     if (entity.shots > view.shots) {
       view.shots = entity.shots; view.firedAt = now;
-      if (self) this.shakeUntil = now + kickMS;
+      if (self && this.shakeOnFire) this.shakeUntil = now + shakeMS;
     }
     const aim = Math.atan2(entity.aimY, entity.aimX);
     view.weapon.rotation = aim + entity.recoilDegrees * Math.PI / 180;
@@ -354,9 +364,15 @@ export class GameView {
     stance.rotation = Math.atan2(entity.aimY, entity.aimX);
     if (entity.guarding) {
       const half = guardArcDegrees * Math.PI / 360;
+      // A shield is a destructible object, so the arc shows what is left of it:
+      // the fill thins as durability drains, and the intact portion of the rim
+      // is drawn over the spent one. An opponent has to be able to see a shield
+      // running out to know when pressing it is worth the ammunition.
+      const left = entity.maxShield > 0 ? Math.max(0, Math.min(1, entity.shield / entity.maxShield)) : 1;
       stance.moveTo(0, 0).arc(0, 0, 34, -half, half).closePath()
-        .fill({ color: colors.shield, alpha: .28 })
-        .stroke({ color: colors.shield, width: 4, alpha: .95 });
+        .fill({ color: colors.shield, alpha: .08 + .2 * left })
+        .stroke({ color: colors.shield, width: 4, alpha: .3 });
+      if (left > 0) stance.arc(0, 0, 34, -half * left, half * left).stroke({ color: colors.shield, width: 4, alpha: .95 });
     }
     if (entity.scoped) {
       stance.moveTo(22, 0).lineTo(74, 0).stroke({ color: colors.scope, width: 2, alpha: .8 });

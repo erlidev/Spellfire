@@ -44,7 +44,7 @@ export interface Projectile { kind: string; speed: number; life_seconds: number;
 export interface Cost { kind: "none" | "ammo" | "mana" | "material"; material?: string; amount: number }
 export interface Telegraph { shape: "circle" | "cone" | "line" | "ring"; radius?: number; length?: number; width?: number; angle_degrees?: number; active_ms: number; resolved_ms: number }
 export interface Blast { radius: number; effects?: string[] }
-export interface Guard { arc_degrees: number; movement_multiplier: number }
+export interface Guard { arc_degrees: number; movement_multiplier: number; durability: number; regen_per_second: number; regen_delay_ms: number }
 export interface Deployable { kind: string; radius: number; duration_ms: number; reveal_radius: number }
 export interface Ability { name: string; cost: Cost; interval_ms: number; cooldown_ms: number; windup_ms?: number; telegraph?: Telegraph; dodge_vector?: string; damage_band?: string; projectile?: Projectile; effects?: string[]; requires_scope?: boolean; blast?: Blast; guard?: Guard; deployable?: Deployable }
 export interface Effect { name: string; kind: string; stacking: string; duration_ms: number; tick_ms?: number; damage_band?: string; damage_fraction?: number; speed_multiplier?: number; speed?: number; absorb_hits?: number }

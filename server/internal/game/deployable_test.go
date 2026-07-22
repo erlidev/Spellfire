@@ -151,3 +151,71 @@ func TestThrowingAGadgetDoesNotWalkTheGun(t *testing.T) {
 		t.Fatalf("a thrown canister moved the muzzle from %.3f/%d to %.3f/%d", walked, index, p.RecoilPeak, p.Shot)
 	}
 }
+
+// Smoke changes what an opponent can see, never where a round may fly. Occluding
+// the thrower's own bullets made the cloud read as a wall it could not shoot
+// through, so a body always reaches its own rounds.
+func TestSmokeDoesNotHideYourOwnRounds(t *testing.T) {
+	w, now := testWorld()
+	field := *w.tuning.Tables.Abilities["smoke-throw"].Deployable
+	shooter := carrying(t, w, addTestPlayer(w, "shooter", model.Gunslinger, Vec{1200, 0}, now), "starter-rifle")
+	other := carrying(t, w, addTestPlayer(w, "other", model.Gunslinger, Vec{1200, 300}, now), "starter-rifle")
+	w.deploy("", field, Vec{1350, 0}, now)
+
+	fire(w, shooter, 1, now)
+	fire(w, other, 1, now)
+	var mine, theirs *Projectile
+	for _, id := range sortedProjectileIDs(w.projectiles) {
+		p := w.projectiles[id]
+		p.Position = Vec{1350, 0} // inside the cloud, on the shooter's sightline
+		if p.OwnerID == shooter.ID {
+			mine = p
+		} else {
+			theirs = p
+		}
+	}
+	if mine == nil || theirs == nil {
+		t.Fatalf("expected one round from each body, got %d", len(w.projectiles))
+	}
+	if !visible(w, shooter.ID, mine.ID, now) {
+		t.Fatal("the cloud swallowed the shooter's own round, which reads as a wall rather than a sightline")
+	}
+	if visible(w, shooter.ID, theirs.ID, now) {
+		t.Fatal("the cloud failed to hide an opponent's round")
+	}
+}
+
+// A canister reaches the ground far more often than it hits a body, so a blast
+// that only resolved on a direct impact would effectively never go off.
+func TestFlashbangDetonatesWhereItLands(t *testing.T) {
+	w, now := testWorld()
+	thrower := carrying(t, w, addTestPlayer(w, "thrower", model.Gunslinger, Vec{1500, 0}, now), "starter-rifle")
+	// Off the throw line and inside the blast where the canister comes to rest:
+	// nothing is hit on the way, so only a landed detonation can reach it.
+	target := addTestPlayer(w, "target", model.Gunslinger, Vec{1900, 120}, now)
+	health := target.Health
+
+	throwing(t, w, thrower, "flashbang", Vec{1, 0}, now)
+	tick := time.Second / time.Duration(w.tuning.TickRate)
+	at := now
+	for step := 0; step < w.tuning.TickRate*2 && !w.blinded(target); step++ {
+		at = at.Add(tick)
+		w.Step(at)
+	}
+	if !w.blinded(target) {
+		t.Fatal("a canister that landed on open ground never went off")
+	}
+	if target.Health != health {
+		t.Fatalf("a flashbang took %g health; it is a control tool, not damage", health-target.Health)
+	}
+	// The area resolves exactly once, however the round was reaped.
+	blinds := 0
+	for _, active := range target.Effects {
+		if active.EffectID == "flash-blind" {
+			blinds++
+		}
+	}
+	if blinds != 1 {
+		t.Fatalf("the canister applied its blindness %d times", blinds)
+	}
+}

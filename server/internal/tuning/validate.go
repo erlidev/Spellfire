@@ -722,6 +722,14 @@ func (t *Tables) validateGuard(r *report, id string, ability Ability) {
 	r.require(ability.Guard.MovementMultiplier > 0 && ability.Guard.MovementMultiplier < 1,
 		"abilities: %q guards at movement_multiplier %g, want a fraction between 0 and 1 exclusive; raising a shield has to cost mobility", id, ability.Guard.MovementMultiplier)
 	r.require(!ability.Damaging(), "abilities: %q both guards and deals damage; a shield locks fire while it is up", id)
+	// A barrier with no durability is invulnerability with an arc drawn on it,
+	// which is the one thing the design does not allow a defensive tool to be.
+	r.require(ability.Guard.Durability > 0,
+		"abilities: %q guards with no durability, so it blocks forever; a shield has to be spendable", id)
+	r.require(ability.Guard.RegenPerSecond > 0,
+		"abilities: %q guards with durability that never recovers, so one fight retires the shield permanently", id)
+	r.require(ability.Guard.RegenDelayMS >= 0,
+		"abilities: %q guards with regen_delay_ms %d, want zero or more", id, ability.Guard.RegenDelayMS)
 }
 
 // validateBlast keeps an area impact attached to something that travels, so the

@@ -50,6 +50,11 @@ Rules, from [`invariants.md`](../../docs/game/design/invariants.md) and
   and a `reveal_radius` inside which it stops hiding anyone. It changes what can
   be seen, never where a body may walk, and it must carry a cooldown so one body
   cannot cover the world in them.
+- **A guard is spent, not held.** A `guard` row carries `durability` — the
+  barrier's own health, which every blocked round is charged to and whose
+  overflow reaches the body behind it — plus `regen_per_second` and
+  `regen_delay_ms`, which repair it only while it is lowered. A shield drained
+  to zero breaks, drops, and returns to service only once it is whole again.
 - **A projectile that deals no damage has to deliver something.** A round with
   no damage band must declare a deployable or a blast, or it is a body the world
   carries and nobody ever feels.
@@ -219,7 +224,8 @@ moving spread wider than its standing one; a weight class may only slow its
 carrier; a scope must cost movement, steady the shot, and see further; an
 instantly landing round must require a scope, claim `scoped_commit`, and have
 travelling range past its cap; a guard must cover less than a full circle, cost
-mobility, and deal no damage; a withheld category must cost materials and may
+mobility, deal no damage, and carry durability that recovers — a barrier with no
+durability is invulnerability with an arc drawn on it; a withheld category must cost materials and may
 not be in a basic set; and crafted ammunition must be produced by a recipe,
 cost something, and never cost the material it produces. A deployable must name
 a live archetype with no collision geometry, cover ground, expire, reveal inside

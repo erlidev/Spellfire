@@ -170,7 +170,7 @@ export function encodeSimple(kind: 3 | 4, clientTimeMS = 0): Uint8Array {
 }
 
 function decodeEntity(bytes: Uint8Array): Entity {
-  const value: Entity = { type: 0, id: "", name: "", className: "", x: 0, y: 0, vx: 0, vy: 0, aimX: 0, aimY: 0, health: 0, maxHealth: 0, mana: 0, acknowledgedInput: 0, alive: false, ownerID: "", element: "", squadID: "", allegiance: 0, telegraphState: 0, invulnerable: false, telegraphShape: "", radius: 0, length: 0, width: 0, angleDegrees: 0, telegraphProgress: 0, abilityID: "", lingering: false, effectIDs: [], mass: 0, deleting: false, deleteProgress: 0, scoped: false, guarding: false, recoilDegrees: 0, shots: 0 };
+  const value: Entity = { type: 0, id: "", name: "", className: "", x: 0, y: 0, vx: 0, vy: 0, aimX: 0, aimY: 0, health: 0, maxHealth: 0, mana: 0, acknowledgedInput: 0, alive: false, ownerID: "", element: "", squadID: "", allegiance: 0, telegraphState: 0, invulnerable: false, telegraphShape: "", radius: 0, length: 0, width: 0, angleDegrees: 0, telegraphProgress: 0, abilityID: "", lingering: false, effectIDs: [], mass: 0, deleting: false, deleteProgress: 0, scoped: false, guarding: false, recoilDegrees: 0, shots: 0, shield: 0, maxShield: 0 };
   const reader = new Reader(bytes);
   while (!reader.done) {
     const tag = reader.varint(), field = tag >>> 3, wire = tag & 7;
@@ -194,6 +194,7 @@ function decodeEntity(bytes: Uint8Array): Entity {
       case 32: value.deleting = reader.varint() !== 0; break; case 33: value.deleteProgress = reader.fixed32(); break;
       case 34: value.scoped = reader.varint() !== 0; break; case 35: value.guarding = reader.varint() !== 0; break;
       case 36: value.recoilDegrees = reader.fixed32(); break; case 37: value.shots = reader.varint(); break;
+      case 38: value.shield = reader.fixed32(); break; case 39: value.maxShield = reader.fixed32(); break;
       default: reader.skip(wire);
     }
   }

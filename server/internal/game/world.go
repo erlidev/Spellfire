@@ -127,7 +127,17 @@ type Player struct {
 	// the held input every tick rather than toggled, and both reach the wire so
 	// an opponent can see the commitment they are being charged for.
 	Scoped, Guarding bool
-	DashDirection    Vec
+	// Shield is the durability left in the raised barrier, ShieldAbility the
+	// guard it belongs to (so selecting another slot and coming back does not
+	// hand the body a fresh shield), ShieldHitAt the last impact it paid for,
+	// and ShieldBroken whether it is spent. A broken shield stays down until it
+	// has recovered in full, so a body cannot flicker it back up at one point of
+	// durability to eat the next round.
+	ShieldAbility string
+	Shield        float64
+	ShieldHitAt   time.Time
+	ShieldBroken  bool
+	DashDirection Vec
 	DashTicksLeft    int
 	// Cooldowns is each ability's own lockout, keyed by ability ID, alongside
 	// the global cadence gate NextFire holds.
@@ -185,6 +195,9 @@ type Projectile struct {
 	// applies. Both are nil on an ordinary round.
 	Blast        *tuning.Blast
 	BlastEffects []string
+	// Detonated marks the area already resolved, so a round that is stopped and
+	// then reaped cannot go off twice.
+	Detonated bool
 	// Deploy is the persistent field this round leaves where it stops, and is
 	// nil on an ordinary round. Deployed marks it placed, so a round that is
 	// resolved and then reaped cannot place two.
@@ -810,8 +823,9 @@ func (w *World) Respawn(id string, now time.Time) bool {
 		p.Ammo = weapon.MagazineSize
 	}
 	// A fresh body carries neither the statuses that killed it nor the
-	// cooldowns it died holding.
+	// cooldowns it died holding, and its shield comes back whole.
 	p.Effects, p.Cooldowns = nil, make(map[string]time.Time)
+	p.ShieldAbility, p.Shield, p.ShieldBroken, p.ShieldHitAt = "", 0, false, time.Time{}
 	p.NextFire, p.ReloadEnds, p.DashReady = now, now, now
 	w.combat.resetTarget(id)
 	w.recordHistory(p, now)
@@ -907,7 +921,11 @@ func (w *World) stepPlayer(p *Player, now time.Time, dt float64) {
 	// The two committed stances are derived from held input every tick, so
 	// nothing can be left raised by a dropped frame. A stun drops both.
 	guard, _ := w.guard(p)
-	p.Guarding = guard != nil && !stunned && p.Input.Buttons&ButtonFire != 0
+	// A broken shield cannot be raised, so a spent barrier leaves the body
+	// holding the fire button over nothing rather than standing behind an
+	// invisible one.
+	p.Guarding = guard != nil && !stunned && p.Input.Buttons&ButtonFire != 0 && w.guardHealth(p) > 0
+	w.stepGuard(p, now, dt)
 	p.Scoped = !stunned && !p.Guarding && p.Input.Buttons&ButtonScope != 0 && w.scope(p) != nil
 	if p.Input.Buttons&ButtonDash != 0 && p.PreviousButtons&ButtonDash == 0 && !now.Before(p.DashReady) && !stunned && !rooted && p.Mass >= 0 {
 		p.DashDirection = move
@@ -971,6 +989,12 @@ func (w *World) stepProjectiles(now time.Time, dt float64) {
 			p.Velocity = Vec{}
 		}
 		if p.Remaining <= 0 || w.advanceProjectile(p, dt, now, false) {
+			// A round that carries an area goes off wherever it stopped, and a
+			// thrown canister reaches the ground far more often than it hits a
+			// body: a grenade that only detonated on a direct impact would
+			// simply never go off. resolveBlast is idempotent, so an impact that
+			// already resolved is not double-counted here.
+			w.resolveBlast(p, p.Position, now)
 			// A thrown field lands wherever its round stopped, whether that was
 			// an impact, the rim, or simply running out of throw.
 			w.deployFrom(p, p.Position, now)
@@ -1005,8 +1029,17 @@ func (w *World) advanceProjectile(projectile *Projectile, dt float64, at time.Ti
 		}
 		// A raised shield stops what flies into its arc without stopping what
 		// goes off around it, so the round is consumed and any blast it carries
-		// still resolves where it was stopped.
+		// still resolves where it was stopped. The shield pays for the stop out
+		// of its own durability, and whatever that pool could not cover reaches
+		// the body behind it.
 		if w.blockedBy(target, from) {
+			if through := w.guardAbsorb(target, projectile.hitDamage(), at); through > 0 {
+				// The status the round carried is not applied: the shield took
+				// the impact, and only the damage it could not pay for arrives.
+				if w.hostileReach(w.players[projectile.OwnerID], position) {
+					w.damage(target, through, projectile.OwnerID, at)
+				}
+			}
 			w.resolveBlast(projectile, from, at)
 			return true
 		}
@@ -1033,9 +1066,11 @@ func (w *World) advanceProjectile(projectile *Projectile, dt float64, at time.Ti
 // resolveBlast detonates an impact that carries an area, and does nothing for
 // an ordinary round.
 func (w *World) resolveBlast(projectile *Projectile, at Vec, when time.Time) {
-	if projectile.Blast != nil {
-		w.detonate(projectile, at, when)
+	if projectile.Blast == nil || projectile.Detonated {
+		return
 	}
+	projectile.Detonated = true
+	w.detonate(projectile, at, when)
 }
 
 // damage is the one path health is lost through: shields absorb first, the

@@ -150,6 +150,10 @@ type Entity struct {
 	Guarding          bool
 	RecoilDegrees     float32
 	Shots             uint64
+	// Shield is what is left of a raised barrier and MaxShield the pool it is
+	// spent from. Both are zero for everything that is not holding one.
+	Shield    float32
+	MaxShield float32
 }
 
 type Collider struct {
@@ -603,6 +607,8 @@ func encodeEntity(e Entity) []byte {
 	}
 	out = appendFloat(out, 36, e.RecoilDegrees)
 	out = appendVarint(out, 37, e.Shots)
+	out = appendFloat(out, 38, e.Shield)
+	out = appendFloat(out, 39, e.MaxShield)
 	return out
 }
 

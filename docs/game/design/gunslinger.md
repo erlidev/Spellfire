@@ -44,7 +44,7 @@ Military equipment covers two needs:
   - Both carry long cooldowns of their own on top of the shared cadence: they are openers and disengages, not a rate of fire.
 - **Burst denial:** the universal dash and a deployable riot shield answer a Mage opener.
 
-The riot shield blocks only a frontal arc, slows its user, and prevents firing while raised. It blocks frontal bullets and projectiles, not ground effects placed behind or beneath it. These costs preserve the cross-class bait-and-punish fight: Mages dodge bullets, Gunslingers dodge telegraphs, and both try to draw out the other's hard stop.
+The riot shield blocks only a frontal arc, slows its user, and prevents firing while raised. It blocks frontal bullets and projectiles, not ground effects placed behind or beneath it. It is also **destructible**: it carries its own durability, every round it stops is spent from that pool, damage past what the pool can pay for reaches the body behind it, and a shield drained to zero breaks and drops. A broken shield repairs itself only while lowered, and comes back only once it is whole — so pressing a shield is a way through it, and the shield is a resource its user spends rather than a stance they hold. These costs preserve the cross-class bait-and-punish fight: Mages dodge bullets, Gunslingers dodge telegraphs, and both try to draw out the other's hard stop.
 
 ## Progression
 

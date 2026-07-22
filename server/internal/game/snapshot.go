@@ -40,12 +40,20 @@ func (w *World) SnapshotFor(playerID string, now time.Time, kind uint64) protoco
 	// Both are enforced here rather than drawn over on the client: what a player
 	// cannot see, a client is never sent.
 	blind := w.blinded(viewer)
-	hidden := func(at Vec) bool {
-		return outsideView(at, 0) || blind || w.occluded(viewer.Position, at)
+	// A cloud never hides what the viewer owns. Occluding a body's own rounds
+	// would make its smoke read as a wall it cannot shoot through: the round
+	// would vanish at the edge of the cloud and reappear past it, which is a
+	// vision rule pretending to be collision. What smoke is bought for is
+	// hiding the *opponent* and the shots they fire.
+	hidden := func(at Vec, ownerID string) bool {
+		if outsideView(at, 0) || blind {
+			return true
+		}
+		return ownerID != playerID && w.occluded(viewer.Position, at)
 	}
 	for _, id := range sortedPlayerIDs(w.players) {
 		p := w.players[id]
-		if id != playerID && hidden(p.Position) {
+		if id != playerID && hidden(p.Position, p.ID) {
 			continue
 		}
 		resource := p.Mana
@@ -68,11 +76,12 @@ func (w *World) SnapshotFor(playerID string, now time.Time, kind uint64) protoco
 			Deleting: p.Deleting, DeleteProgress: float32(p.deleteProgress(now)),
 			Scoped: p.Scoped, Guarding: p.Guarding,
 			RecoilDegrees: float32(w.recoilDegrees(p, now)), Shots: p.Fired,
+			Shield: float32(w.guardHealth(p)), MaxShield: float32(w.guardDurability(p)),
 		})
 	}
 	for _, id := range sortedProjectileIDs(w.projectiles) {
 		p := w.projectiles[id]
-		if hidden(p.Position) {
+		if hidden(p.Position, p.OwnerID) {
 			continue
 		}
 		message.Entities = append(message.Entities, protocol.Entity{
@@ -85,7 +94,7 @@ func (w *World) SnapshotFor(playerID string, now time.Time, kind uint64) protoco
 	}
 	for _, id := range sortedTelegraphIDs(w.telegraphs) {
 		telegraph := w.telegraphs[id]
-		if hidden(telegraph.Position) {
+		if hidden(telegraph.Position, telegraph.OwnerID) {
 			continue
 		}
 		message.Entities = append(message.Entities, protocol.Entity{

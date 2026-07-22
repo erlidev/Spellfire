@@ -59,15 +59,107 @@ func (w *World) handlingScale(p *Player) float64 {
 	return scale
 }
 
+// carriedGuard is the barrier the body is holding durability for, whatever slot
+// it currently has selected. It is nil until a shield has been raised at least
+// once.
+func (w *World) carriedGuard(p *Player) *tuning.Guard {
+	if p.ShieldAbility == "" {
+		return nil
+	}
+	ability, ok := w.tuning.Tables.Abilities[p.ShieldAbility]
+	if !ok {
+		return nil
+	}
+	return ability.Guard
+}
+
+// stepGuard keeps the raised barrier's durability current. A lowered shield
+// recovers after a quiet window; a raised one never repairs itself, so holding
+// it up under fire is what spends it. It returns to service only once it is
+// whole again, which is what stops a broken shield from being flickered back up
+// for a single point of durability.
+func (w *World) stepGuard(p *Player, now time.Time, dt float64) {
+	if selected, ability := w.guard(p); selected != nil && p.ShieldAbility != ability.ID {
+		// A barrier the body was not already carrying is taken up whole.
+		p.ShieldAbility, p.Shield, p.ShieldBroken, p.ShieldHitAt = ability.ID, selected.Durability, false, time.Time{}
+		return
+	}
+	// Recovery is resolved from the shield the body owns rather than the slot it
+	// is looking at, so a spent shield keeps repairing while its owner fights on
+	// with the gun in the next slot.
+	guard := w.carriedGuard(p)
+	if guard == nil || p.Guarding || p.Shield >= guard.Durability {
+		return
+	}
+	if !p.ShieldHitAt.IsZero() && now.Sub(p.ShieldHitAt) < guard.RegenDelay() {
+		return
+	}
+	p.Shield = math.Min(guard.Durability, p.Shield+guard.RegenPerSecond*dt)
+	if p.Shield >= guard.Durability {
+		p.ShieldBroken = false
+	}
+}
+
+// guardHealth is the durability the body's current guard has left, and zero for
+// a slot that is not a shield or a shield that is spent.
+func (w *World) guardHealth(p *Player) float64 {
+	guard, ability := w.guard(p)
+	if guard == nil {
+		return 0
+	}
+	// A shield the body has never raised is whole; stepGuard has not run for it
+	// yet on the tick the slot is first selected.
+	if p.ShieldAbility != ability.ID {
+		return guard.Durability
+	}
+	if p.ShieldBroken {
+		return 0
+	}
+	return p.Shield
+}
+
+// guardDurability is the full pool the body's current guard is spent from, and
+// zero for a slot that is not a shield. The wire carries it beside what is left
+// so a client can draw the bar without a table lookup of its own.
+func (w *World) guardDurability(p *Player) float64 {
+	guard, _ := w.guard(p)
+	if guard == nil {
+		return 0
+	}
+	return guard.Durability
+}
+
+// guardAbsorb spends the raised shield on one impact and reports the damage
+// that carries past it. The shield's durability is its health: it stops exactly
+// what it can pay for, the overflow reaches the body, and a shield drained to
+// zero breaks and drops.
+func (w *World) guardAbsorb(target *Player, amount float64, now time.Time) float64 {
+	guard, ability := w.guard(target)
+	if guard == nil {
+		return amount
+	}
+	if target.ShieldAbility != ability.ID {
+		target.ShieldAbility, target.Shield, target.ShieldBroken = ability.ID, guard.Durability, false
+	}
+	target.ShieldHitAt = now
+	taken := math.Min(target.Shield, amount)
+	target.Shield -= taken
+	if target.Shield <= 0 {
+		target.Shield, target.ShieldBroken, target.Guarding = 0, true, false
+	}
+	return amount - taken
+}
+
 // blockedBy reports whether a raised shield stops an impact arriving from a
 // direction. The arc is measured against where the body is aiming, so covering
-// one angle is always leaving another open.
+// one angle is always leaving another open, and a shield with no durability left
+// stops nothing at all.
 func (w *World) blockedBy(target *Player, from Vec) bool {
 	if !target.Guarding {
 		return false
 	}
 	guard, _ := w.guard(target)
-	if guard == nil {
+	if guard == nil || w.guardHealth(target) <= 0 {
 		return false
 	}
 	toward := from.Sub(target.Position).Normalized()
@@ -263,6 +355,11 @@ func (w *World) hitscan(p *Player, ability tuning.Ability, origin, direction Vec
 		return blocked
 	}
 	if w.blockedBy(struck, origin) {
+		// The shield spends its durability on the round, and only what that
+		// pool could not cover reaches the body.
+		if through := w.guardAbsorb(struck, p.hitscanDamage(w, ability, nearest), at); through > 0 && w.hostileReach(p, struck.Position) {
+			w.damage(struck, through, p.ID, at)
+		}
 		return true
 	}
 	if w.hostileReach(p, struck.Position) {

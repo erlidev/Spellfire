@@ -183,7 +183,7 @@
     "cost": { "kind": "none", "amount": 0 },
     "interval_ms": 200,
     "cooldown_ms": 0,
-    "guard": { "arc_degrees": 140, "movement_multiplier": 0.5 }
+    "guard": { "arc_degrees": 140, "movement_multiplier": 0.5, "durability": 120, "regen_per_second": 20, "regen_delay_ms": 1500 }
   },
   "fire-bolt-cast": {
     "name": "Fire bolt",

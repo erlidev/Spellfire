@@ -399,3 +399,68 @@ func TestSpreadIsReproducibleForTheSameShooterAndShot(t *testing.T) {
 		t.Fatal("a moving SMG shot left exactly on aim, so nothing was drawn at all")
 	}
 }
+
+// The shield's durability is its health. It stops what it can pay for, breaks
+// when that pool is spent, drops the moment it breaks, and recovers once the
+// body has stopped holding it up.
+func TestRiotShieldDurabilityIsSpentBreaksAndRecovers(t *testing.T) {
+	w, now := testWorld()
+	guard := w.tuning.Tables.Abilities["riot-shield-raise"].Guard
+	defender := addTestPlayer(w, "defender", model.Gunslinger, Vec{1400, 0}, now)
+	defender.Unlocks, _ = defender.Unlocks.With("riot-shield")
+	defender.Loadout.Gadgets[0] = "riot-shield"
+	shooter := carrying(t, w, addTestPlayer(w, "shooter", model.Gunslinger, Vec{1200, 0}, now), "starter-rifle")
+
+	tick := time.Second / 60
+	raise := func(step int, at time.Time) {
+		w.ApplyInput(defender.ID, protocol.Input{Sequence: uint32(step) + 1, Buttons: ButtonFire, AimX: -1, SelectedSlot: 1, ClientTimeMS: uint64(at.UnixMilli())})
+		w.ApplyInput(shooter.ID, protocol.Input{Sequence: uint32(step), Buttons: ButtonFire, AimX: 1, ClientTimeMS: uint64(at.UnixMilli())})
+		w.Step(at)
+	}
+
+	step, at := 1, now
+	for ; step <= 60*20 && !defender.ShieldBroken; step++ {
+		at = now.Add(time.Duration(step) * tick)
+		raise(step, at)
+		// Reloading is not what this measures: the magazine is topped up so the
+		// shooter keeps pressing the shield.
+		shooter.Ammo, shooter.ReloadEnds = 10, time.Time{}
+	}
+	if !defender.ShieldBroken {
+		t.Fatalf("%g durability never ran out under sustained fire", guard.Durability)
+	}
+	if defender.Guarding {
+		t.Fatal("a broken shield stayed raised, which is invulnerability with an arc drawn on it")
+	}
+	// It stays down while the button is still held: a shield cannot be flickered
+	// back up on one point of durability.
+	broke := at
+	for ; at.Sub(broke) < guard.RegenDelay(); step++ {
+		at = now.Add(time.Duration(step) * tick)
+		raise(step, at)
+	}
+	if defender.Guarding {
+		t.Fatal("a broken shield came back up before it was whole")
+	}
+	if defender.Health == w.tuning.MaxHealth {
+		t.Fatal("no round reached the body behind a spent shield")
+	}
+	// Lowered and left alone, it repairs and serves again. The body is patched
+	// up first: a dead one neither acts nor repairs, and what is under test here
+	// is the recovery rather than the exchange that spent the shield.
+	w.RemovePlayer(shooter.ID)
+	w.projectiles = map[string]*Projectile{}
+	defender.restoreHealth()
+	for quiet := 0; quiet <= 60*20; quiet++ {
+		step++
+		at = now.Add(time.Duration(step) * tick)
+		w.ApplyInput(defender.ID, protocol.Input{Sequence: uint32(step) + 1, AimX: -1, SelectedSlot: 1, ClientTimeMS: uint64(at.UnixMilli())})
+		w.Step(at)
+		if !defender.ShieldBroken {
+			break
+		}
+	}
+	if defender.ShieldBroken || defender.Shield < guard.Durability {
+		t.Fatalf("a lowered shield recovered to %g of %g at %g per second", defender.Shield, guard.Durability, guard.RegenPerSecond)
+	}
+}

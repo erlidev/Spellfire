@@ -5,7 +5,7 @@ import { Predictor } from "./game/prediction";
 import { joystickVector, movementButtons } from "./game/touch";
 import { GameView } from "./game/view";
 import { GameSocket } from "./net/socket";
-import { abilities, ammunition as ammunitionTable, damageBandFor, dangerBandAt, entityDefinitions, gadgets as gadgetsTable, handlingScale, materials as materialsTable, progression as progressionTable, resourceMax, safeRadius, session, specialAmmunition, weapons, weightOf, world, xpToNext, type AdminField, type EntityDefinition, type Guard } from "./tuning";
+import { abilities, ammunition as ammunitionTable, damageBandFor, dangerBandAt, entityDefinitions, gadgets as gadgetsTable, handlingScale, materials as materialsTable, progression as progressionTable, resourceMax, safeRadius, session, specialAmmunition, weapons, weightOf, world, xpToNext, type AdminField, type EntityDefinition, type Guard, type Weapon } from "./tuning";
 import { Buttons, ServerKind, type Character, type CharacterClass, type CraftedItem, type Entity, type LoadoutSet, type ServerMessage } from "./types";
 
 function element<T extends HTMLElement>(id: string): T {
@@ -344,11 +344,16 @@ class SpellFire {
     const weapon = resolvedWeapon(this.loadout.weapon, this.items);
     const scoped = Boolean(weapon?.scope) && (buttons & Buttons.Scope) !== 0;
     const guard = this.selectedGuard();
-    const guarding = Boolean(guard) && (buttons & Buttons.Fire) !== 0;
+    // A broken shield cannot be raised, so predicting its movement penalty while
+    // the server has already dropped it would rubber-band every step. The
+    // authoritative durability is on the local body's own snapshot.
+    const shielded = !guard || !this.localEntity || this.localEntity.maxShield <= 0 || this.localEntity.shield > 0;
+    const guarding = Boolean(guard) && shielded && (buttons & Buttons.Fire) !== 0;
     if (!scoped) buttons &= ~Buttons.Scope;
     const input = this.predictor.step(buttons, this.aim.x, this.aim.y, this.selectedSlot, performance.now(), handlingScale(weapon, guard, scoped, guarding));
     this.socket?.sendInput(input);
     this.setScopeView(scoped, weapon?.scope?.view_bonus ?? 0);
+    this.view?.setHeavyRecoil(this.firesExplosive(weapon));
     this.trackCooldown(buttons);
     this.previousButtons = buttons;
   }
@@ -368,6 +373,18 @@ class SpellFire {
     const ready = this.cooldowns[slot.id] ?? 0;
     if (Date.now() < ready) return;
     this.cooldowns[slot.id] = Date.now() + ability.cooldown_ms;
+  }
+
+  /**
+   * Whether the selected slot is a weapon that fires an explosive. That is the
+   * only thing that knocks the camera: a launcher's shot moves the view, while
+   * ordinary gunfire is read from the weapon's own kick and its muzzle flash.
+   * A thrown gadget never qualifies — its blast goes off away from the body.
+   */
+  private firesExplosive(weapon: Weapon | undefined): boolean {
+    const slot = bar(this.activeCharacter?.class ?? "gunslinger", this.loadout, this.items)[this.selectedSlot];
+    if (!weapon || slot?.kind !== "weapon") return false;
+    return Boolean(abilities[weapon.ability ?? ""]?.blast);
   }
 
   /** The barrier the selected slot holds, or undefined for any other slot. */
@@ -473,6 +490,18 @@ class SpellFire {
     const { label, max, capped } = resourceMax(resolvedWeapon(this.loadout.weapon, this.items)), resource = entity.mana;
     element("resource-label").innerHTML = `${label} <span>${capped ? `${Math.floor(resource)} / ${max}` : `${Math.floor(resource)} carried`}</span>`;
     element("resource-bar").style.width = `${Math.min(1, Math.max(0, resource / Math.max(1, max))) * 100}%`;
+    // A shield is a spendable object, so its durability is a readout rather than
+    // a hidden number. The row is only present while one is selected: it is the
+    // Gunslinger's gadget, not a universal vital.
+    const shieldLabel = element("shield-label"), shieldTrack = element("shield-track");
+    const carrying = entity.maxShield > 0;
+    shieldLabel.hidden = !carrying; shieldTrack.hidden = !carrying;
+    if (carrying) {
+      const left = Math.max(0, Math.min(1, entity.shield / entity.maxShield));
+      shieldLabel.innerHTML = `Shield <span>${left > 0 ? `${Math.ceil(entity.shield)} / ${Math.ceil(entity.maxShield)}` : "broken"}</span>`;
+      element("shield-bar").style.width = `${left * 100}%`;
+      shieldTrack.classList.toggle("broken", left <= 0);
+    }
     const distance = Math.hypot(entity.x, entity.y), band = dangerBandAt(distance);
     element("danger-text").textContent = `${band.name} · ${band.summary}`; element("danger-shape").textContent = band.shape;
     if (band.name !== this.lastBand && this.lastBand) this.notice(`${band.name}: ${band.summary}`); this.lastBand = band.name;

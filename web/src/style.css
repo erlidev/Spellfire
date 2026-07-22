@@ -51,7 +51,7 @@ fieldset input { width: auto; } fieldset small { display: block; grid-column: 2;
 .latency { top: max(17px, env(safe-area-inset-top)); right: max(68px, calc(env(safe-area-inset-right) + 68px)); padding: 7px 10px; font-size: .75rem; }
 .vital-panel { bottom: max(76px, calc(env(safe-area-inset-bottom) + 76px)); left: max(15px, env(safe-area-inset-left)); width: min(260px, 40vw); padding: 9px 12px; }
 .vital-panel label { display: flex; justify-content: space-between; margin: 3px 0; font-size: .72rem; }
-.bar { height: 11px; overflow: hidden; border: 2px solid #080e19; border-radius: 7px; background: #2a3140; }.bar i { display: block; width: 100%; height: 100%; background: #65d89d; transition: width .12s; }.bar.resource i { background: #5dbde8; }
+.bar { height: 11px; overflow: hidden; border: 2px solid #080e19; border-radius: 7px; background: #2a3140; }.bar i { display: block; width: 100%; height: 100%; background: #65d89d; transition: width .12s; }.bar.resource i { background: #5dbde8; }.bar.shield i { background: #c3ccdb; }.bar.shield.broken i { background: #7a4a4a; }
 .abilities { bottom: max(15px, env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); display: flex; padding: 7px; gap: 5px; }
 .abilities .slot { min-width: 76px; padding: 4px 6px; border: 1px solid transparent; border-radius: 7px; text-align: center; font-size: .65rem; }
 .abilities .slot.cooling { opacity: .55; }
