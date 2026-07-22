@@ -124,6 +124,7 @@ func (w *World) SnapshotFor(playerID string, now time.Time, kind uint64) protoco
 			Type: protocol.EntityDeployable, ID: deployable.ID, ClassName: deployable.Kind, OwnerID: deployable.OwnerID,
 			X: float32(deployable.Position.X), Y: float32(deployable.Position.Y),
 			Radius: float32(deployable.Field.Radius), Alive: deployable.Alive, Mass: float32(deployable.Mass),
+			Element:    deployable.Element,
 			Allegiance: ownerAllegiance(viewer, w.players[deployable.OwnerID]),
 			Deleting:   deployable.Deleting, DeleteProgress: float32(deployable.deleteProgress(now)),
 		})

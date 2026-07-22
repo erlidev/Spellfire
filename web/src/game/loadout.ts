@@ -8,7 +8,10 @@ import { equippableItems, itemLabel } from "./crafting";
 
 export type SlotKind = "weapon" | "gadget" | "spell";
 
-export interface Slot { index: number; kind: SlotKind; id: string; name: string; element: string }
+/** One selectable position, mirroring server/internal/loadout.Slot. `abilityId`
+ * is what the use button performs, so nothing downstream has to know which
+ * table the slot's content came from. */
+export interface Slot { index: number; kind: SlotKind; id: string; name: string; element: string; abilityId: string }
 
 /**
  * Resolves an equipped weapon reference to the row it fights with. The slot
@@ -37,10 +40,10 @@ export function bar(characterClass: CharacterClass, set: LoadoutSet, items: read
   const equipped = equippedWeapon(set.weapon, items);
   const weapon = equipped ? weapons[equipped.row] : undefined;
   if (characterClass === "gunslinger") {
-    const slots: Slot[] = [{ index: 0, kind: "weapon", id: weapon ? set.weapon : "", name: weapon?.name ?? "", element: "" }];
+    const slots: Slot[] = [{ index: 0, kind: "weapon", id: weapon ? set.weapon : "", name: weapon?.name ?? "", element: "", abilityId: weapon?.ability ?? "" }];
     for (let index = 0; index < loadoutTable.gadget_slots; index++) {
       const gadget = gadgets[set.gadgets[index] ?? ""];
-      slots.push({ index: slots.length, kind: "gadget", id: gadget ? set.gadgets[index]! : "", name: gadget?.name ?? "", element: "" });
+      slots.push({ index: slots.length, kind: "gadget", id: gadget ? set.gadgets[index]! : "", name: gadget?.name ?? "", element: "", abilityId: gadget?.ability ?? "" });
     }
     return slots;
   }
@@ -51,7 +54,7 @@ export function bar(characterClass: CharacterClass, set: LoadoutSet, items: read
     // emptied by a content withdrawal can still fight.
     const id = set.spells[index] || (index === 0 ? staff?.spell ?? "" : "");
     const spell = spells[id];
-    slots.push({ index, kind: "spell", id: spell ? id : "", name: spell?.name ?? "", element: spell?.element ?? "" });
+    slots.push({ index, kind: "spell", id: spell ? id : "", name: spell?.name ?? "", element: spell?.element ?? "", abilityId: spell?.ability ?? "" });
   }
   return slots;
 }
@@ -72,7 +75,25 @@ export function defaultLoadout(characterClass: CharacterClass, ledger: Ledger): 
   const kind: SlotKind = characterClass === "gunslinger" ? "gadget" : "spell";
   const target = characterClass === "gunslinger" ? set.gadgets : set.spells;
   equippable(characterClass, ledger, kind).slice(0, target.length).forEach((id, index) => { target[index] = id; });
+  dropIllegal(set.spells);
   return set;
+}
+
+/**
+ * Unequips whatever keeps a set from validating, highest slot first, exactly as
+ * the server's resolve does: packing every owned spell into the bar will often
+ * break affinity, and the deterministic casualty is the last thing equipped
+ * rather than the character's signature.
+ */
+function dropIllegal(spells: string[]): void {
+  for (let pass = 0; pass < spells.length; pass++) {
+    let worst = -1;
+    for (let index = spells.length - 1; index >= 0 && worst < 0; index--) {
+      if (spells[index] && affinityShortfall(spells, index) > 0) worst = index;
+    }
+    if (worst < 0) return;
+    spells[worst] = "";
+  }
 }
 
 /** The flat permanent unlock ledger, as the client holds it. */

@@ -395,7 +395,9 @@ func TestWebSocketLoadoutCommitHonoursTheSafeZoneLock(t *testing.T) {
 	inField, fieldToken, _ := mage(t, ctx, data, authService, "field-kit@example.com", field)
 	inHub, hubToken, hubAccount := mage(t, ctx, data, authService, "hub-kit@example.com", nil)
 
-	request := loadoutEnvelope("starter-staff", []string{"", "fire-bolt"})
+	// Slot six is the one the starter draw leaves empty, so committing into it
+	// is visibly a change rather than a restatement of what is already equipped.
+	request := loadoutEnvelope("starter-staff", []string{"", "", "", "", "", "fire-bolt"})
 	fieldConn, kind, err := dialAndJoin(t, server.URL, fieldToken, inField)
 	if err != nil || kind != protocol.ServerWelcome {
 		t.Fatalf("field join = %d, %v", kind, err)
@@ -411,7 +413,7 @@ func TestWebSocketLoadoutCommitHonoursTheSafeZoneLock(t *testing.T) {
 	if refused.editable {
 		t.Fatal("the field reported the loadout as editable")
 	}
-	if refused.spells[1] == "fire-bolt" {
+	if len(refused.spells) > 5 && refused.spells[5] == "fire-bolt" {
 		t.Fatal("the refusal reported the requested set rather than the one still equipped")
 	}
 
@@ -427,7 +429,7 @@ func TestWebSocketLoadoutCommitHonoursTheSafeZoneLock(t *testing.T) {
 	if accepted.rejection != "" {
 		t.Fatalf("a commit inside the hub was refused: %s", accepted.rejection)
 	}
-	if !accepted.editable || len(accepted.spells) < 2 || accepted.spells[1] != "fire-bolt" {
+	if !accepted.editable || len(accepted.spells) < 6 || accepted.spells[5] != "fire-bolt" {
 		t.Fatalf("reply = %#v", accepted)
 	}
 
@@ -438,7 +440,7 @@ func TestWebSocketLoadoutCommitHonoursTheSafeZoneLock(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(reloaded.State.Loadout.Spells) > 1 && reloaded.State.Loadout.Spells[1] == "fire-bolt" {
+		if len(reloaded.State.Loadout.Spells) > 5 && reloaded.State.Loadout.Spells[5] == "fire-bolt" {
 			return
 		}
 		if time.Now().After(deadline) {

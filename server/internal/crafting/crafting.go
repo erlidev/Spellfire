@@ -290,7 +290,60 @@ func Apply(tables *tuning.Tables, weapon tuning.Weapon, ability tuning.Ability, 
 		projectile.Radius = scale(projectile.Radius, modifiers[tuning.AttrProjectileRadius])
 		ability.Projectile = &projectile
 	}
-	return weapon, ability
+	return weapon, applyArea(ability, modifiers[tuning.AttrAreaRadius])
+}
+
+// applyArea widens what a cast covers: the blast, the field it leaves, and the
+// telegraph that warns about both, together. Widening the area without the
+// figure that draws it would let a crystal grow a danger zone the target never
+// saw, which is the one thing the telegraph contract does not allow.
+//
+// Every one of these is a pointer into the shared table row, so each is copied
+// before it is scaled.
+func applyArea(ability tuning.Ability, modifier float64) tuning.Ability {
+	if modifier == 0 || modifier == 1 {
+		return ability
+	}
+	if ability.Blast != nil {
+		blast := *ability.Blast
+		blast.Radius *= modifier
+		ability.Blast = &blast
+	}
+	if ability.Deployable != nil {
+		field := *ability.Deployable
+		field.Radius *= modifier
+		field.RevealRadius *= modifier
+		ability.Deployable = &field
+	}
+	if ability.Telegraph != nil {
+		telegraph := *ability.Telegraph
+		telegraph.Radius *= modifier
+		telegraph.Length *= modifier
+		telegraph.Width *= modifier
+		ability.Telegraph = &telegraph
+	}
+	return ability
+}
+
+// Bias applies a mana crystal's element specialisation to one cast. It is
+// separate from Apply because only the loadout knows which element the selected
+// slot delivers: a staff's parts are the same whichever spell is cast through
+// them, and the bias is the one modifier that is not.
+func Bias(tables *tuning.Tables, ability tuning.Ability, element string, components map[string]string) tuning.Ability {
+	if element == "" {
+		return ability
+	}
+	for _, slot := range sortedKeys(components) {
+		component := tables.Components.Components[components[slot]]
+		if component.Element != element {
+			continue
+		}
+		if modifier := component.Modifiers[tuning.AttrElementDamage]; modifier != 0 {
+			ability.DamageMultiplier = ability.DamageScale() * modifier
+			ability.HealingMultiplier = ability.HealingScale() * modifier
+		}
+	}
+	return ability
 }
 
 func scaleFromOne(value, modifier float64) float64 {

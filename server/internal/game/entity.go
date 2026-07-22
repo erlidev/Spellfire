@@ -42,6 +42,12 @@ type Entity struct {
 	Deleting           bool
 	DeleteStarted      time.Time
 	DeleteEnds         time.Time
+	// SpawnedAt is when a runtime-authored entity came into being, and is zero
+	// for everything the world started with. Together with DeleteStarted it is
+	// the entity's lifetime, which is what a rewound shot has to be tested
+	// against: a round rewound to before a wall was raised must pass through it,
+	// and one rewound to while it stood must be stopped by it.
+	SpawnedAt time.Time
 }
 
 const (
@@ -104,6 +110,17 @@ func (e *Entity) deleteProgress(now time.Time) float64 {
 
 func (e *Entity) deleteComplete(now time.Time) bool {
 	return e.Deleting && !now.Before(e.DeleteEnds.Add(entityDeleteReapDelay))
+}
+
+// presentAt reports whether the entity's geometry stood in the world at a past
+// moment: raised before it, and neither destroyed nor expired until after. It
+// is what keeps lag compensation honest about player-authored terrain, whose
+// lifetime is shorter than the rewind window is wide.
+func (e *Entity) presentAt(at time.Time) bool {
+	if !e.SpawnedAt.IsZero() && at.Before(e.SpawnedAt) {
+		return false
+	}
+	return !e.Deleting || at.Before(e.DeleteStarted)
 }
 
 func (e *Entity) cancelDelete() {
@@ -223,9 +240,18 @@ func (e *Entity) intersectsCircle(position Vec, radius float64) bool {
 }
 
 func (e *Entity) intersectsSegment(from, to Vec, radius float64) bool {
-	if !e.Alive {
-		return false
-	}
+	return e.Alive && e.overlapsSegment(from, to, radius)
+}
+
+// blockedSegmentAt is intersectsSegment as it stood at a past moment. Lag
+// compensation resolves a shot against the terrain of the claimed time, so a
+// round rewound to before a wall went up passes through it, and one rewound to
+// while a tree still stood is stopped by it even though it has since fallen.
+func (e *Entity) blockedSegmentAt(from, to Vec, radius float64, at time.Time) bool {
+	return e.presentAt(at) && e.overlapsSegment(from, to, radius)
+}
+
+func (e *Entity) overlapsSegment(from, to Vec, radius float64) bool {
 	for _, object := range e.CollisionObjects {
 		center := e.Position.Add(object.Offset)
 		switch object.Type {

@@ -59,9 +59,9 @@ Unlocked outposts round-trip through the world but nothing mutates them yet — 
 - [x] Status-effect layer: burn/DoT, slow, root, stun, knockback, shields ([effects.go](server/internal/game/effects.go), [effects_test.go](server/internal/game/effects_test.go))
 - [x] Reject at load any damaging ability with no declared dodge vector — and any that claims one the simulation does not deliver ([validate.go](server/internal/tuning/validate.go))
 
-`effects.json` carries one shipped row — the knockback a rocket blast applies. The layer runs all six
-kinds, but no design document has settled a magnitude for the other five, so Phase 2.5's element
-secondaries author those rows and the tests exercise the layer against rows they add themselves. Active effect IDs already reach the client in
+`effects.json` now carries a row of every kind the layer runs: Phase 2.4 shipped the rocket's knockback
+and the flashbang's blindness, and Phase 2.5's element secondaries authored the rest, adding `armor` —
+mitigation with no pool behind it — as the one new kind. Active effect IDs already reach the client in
 the expanded entity state. Windups and telegraphs now run through the same ability path; the starter
 Fire bolt exercises them without prematurely authoring Phase 2's element-secondary values.
 
@@ -130,7 +130,7 @@ live row" to "what this character owns" by the Phase 2.2 unlock ledger.
 - [x] `loadout.Equippable`/`Validate`/`Resolve` intersect with the ledger, so unowned content is refused on the mutation path rather than merely hidden by the menu
 - [x] Test: a zero-material character can fill a coherent loadout immediately ([progression_test.go](server/internal/progression/progression_test.go)), plus starter-kit stability/randomness, level grants, ledger-gated validation, and the separate progression save path
 
-Only `player_kill` has a trigger: mob kills, harvesting, and outpost discovery are priced in the table and awarded by Phases 4.3, 4.1, and 3, and Phase 4.4 tunes the curve against the pacing targets. Keystone IDs share the ledger's shape but have no rows until Phase 2.7. Phase 2.4 widened the Gunslinger's basic set to four categories and its gadget pool to the riot shield, smoke, and flashbangs without touching the draw; a developer-mode level grant now reaches the rest of the ledger before mob XP lands; the Mage's is still one staff and one spell until Phase 2.5.
+Only `player_kill` has a trigger: mob kills, harvesting, and outpost discovery are priced in the table and awarded by Phases 4.3, 4.1, and 3, and Phase 4.4 tunes the curve against the pacing targets. Keystone IDs share the ledger's shape but have no rows until Phase 2.7. Phase 2.4 widened the Gunslinger's basic set to four categories and its gadget pool to the riot shield, smoke, and flashbangs without touching the draw; a developer-mode level grant now reaches the rest of the ledger before mob XP lands; Phase 2.5 widened the Mage's draw to the five tier-1 spells, one per element, which is a legal six-slot set on its own because tier 1 needs no same-element company.
 
 ### 2.3 Recipe-blueprint crafting
 - [x] Generic blueprints + independently costed component recipes + authoritative finished-weapon recipes; a complete arrangement resolves the result and ambiguous recipes fail tuning validation ([components.json](data/tuning/components.json), [crafting.go](server/internal/crafting/crafting.go), [progression-and-crafting.md](docs/game/design/progression-and-crafting.md#recipe-blueprint-crafting))
@@ -176,21 +176,30 @@ baseline, because with one band cadence *is* DPS. Rate-of-fire identity — the
 SMG's spray, the sniper's single heavy shot — waits on Phase 2.7's sustained,
 burst, and heavy-burst bands; what separates the nine today is handling.
 Smoke and flashbangs did not wait for 2.6. Smoke carries its own narrow rule —
-a cloud on the segment between two bodies hides them from each other, and both
-are enforced by what the server *sends* rather than by what the client draws —
-which is the case a canister is bought for and nothing more. General line of
-sight through cover and walls is still Phase 2.6's substrate, and the Mage's
-stone wall sequences after it.
+a cloud hides only what it covers completely, enforced by what the server
+*sends* rather than by what the client draws — which is the case a canister is
+bought for and nothing more. General line of sight through cover and walls is
+still Phase 2.6's substrate; the Mage's stone wall shipped with 2.5 as a
+collider and will block sight for free when that lands.
 
 ### 2.5 Mage kit
-- [ ] Author per-spell cooldowns and costs — the second resource axis alongside mana ([mage.md](docs/game/design/mage.md#mana-and-cooldowns)); 1.3 enforces both from `abilities.json`, and every shipped row still declares a zero cooldown
-- [ ] Five elements as data and behaviour: Fire, Frost, Storm, Arcane, Earth ([mage.md](docs/game/design/mage.md#elements))
-- [ ] Element secondaries: burn/DoT, light mitigation, blink-on-hit, shields/dispel/teleport, walls/knockback/armor
-- [ ] Author the settled 5 × 4 spell grid — all twenty rows, every element to tier 4 so affinity's 4 + 2 build is satisfiable ([mage.md](docs/game/design/mage.md#the-spell-grid))
-- [ ] Stone wall: dynamic destructible collider, one per caster, placement rules, and lifetime carried in the rewind history ([mage.md](docs/game/design/mage.md#stone-wall)) — common entity and box-collision substrate exists; sequence behavior after 2.6 so it ships blocking line of sight
-- [ ] Spell tiers 1–4 scaling mana, cooldown, telegraph, payoff, and whiff punishment
-- [ ] Mana crystals add element bias and area-shape behavior beyond projectile geometry; cast speed, mana cost, projectile shape, cooldown, and all-spell damage/healing already run through Phase 2.3's modifiers
-- [ ] Test: no spell delivers instant point-and-click damage
+- [x] Author per-spell cooldowns and costs — the second resource axis alongside mana ([mage.md](docs/game/design/mage.md#mana-and-cooldowns)); every spell spends mana and every tier above one holds its own cooldown, each costing more and locking out longer than the tier below it ([abilities.json](data/tuning/abilities.json), `TestShippedSpellsPriceThemselves`)
+- [x] Five elements as data and behaviour: Fire, Frost, Storm, Arcane, Earth ([mage.md](docs/game/design/mage.md#elements)) — each with four authored spells, its own secondary, and its own tint on bodies, rounds, telegraphs, and placed ground
+- [x] Element secondaries: burn/DoT, light mitigation, blink-on-hit, shields/dispel/teleport, walls/knockback/armor ([effects.json](data/tuning/effects.json), [spell.go](server/internal/game/spell.go)); `armor` is the one new effect kind — mitigation with no pool, taken as the strongest rather than compounded
+- [x] Author the settled 5 × 4 spell grid — all twenty rows, every element to tier 4 so affinity's 4 + 2 build is satisfiable ([spells.json](data/tuning/spells.json), `TestShippedSpellGridIsComplete`)
+- [x] Stone wall: dynamic destructible collider, one per caster, placement rules, and lifetime carried in the rewind history ([wall.go](server/internal/game/wall.go), [mage.md](docs/game/design/mage.md#stone-wall)) — it blocks movement and projectiles today and blocks line of sight for free once 2.6 lands, because its segments are ordinary world items
+- [x] Spell tiers 1–4 scaling mana, cooldown, telegraph, payoff, and whiff punishment — output stays on the shared band, so tier buys a bigger window rather than a bigger number until 2.7's bands land
+- [x] Mana crystals add element bias and area-shape behavior beyond projectile geometry (`area_radius` widens a blast, its field, and the telegraph that warns about both together; `element_damage` lifts one school only — [components.json](data/tuning/components.json), `crafting.Bias`)
+- [x] Test: no spell delivers instant point-and-click damage ([spell_test.go](server/internal/game/spell_test.go)), plus placed fields pulsing, traps springing once, a zone closing in a stun, blinks stopping at cover, chains arcing, homing bounded by its turn rate, dispel stripping both sides, armor mitigating without being spent, and walls standing, blocking, replacing, expiring, and being refused inside safety or on top of an actor
+
+Delivery grew six shapes on the one ability path — placement, pulsing fields, blink, chain, homing, and
+dispel — rather than a branch per spell, so a Phase 4.3 mob that declares the same fields gets the same
+behaviour. Rewind now resolves against the terrain that stood at the claimed moment, which the wall
+needed and which also closed the pre-2.5 gap where a tree felled inside the rewind window disagreed with
+the cover the shooter saw. Damage output still comes from the one `standard` band: what separates a
+tier-1 spam spell from a tier-4 signature today is cost, cooldown, telegraph, and what it does to a
+body, and 2.7's bands are what will separate their numbers. Rift repositions its caster only —
+repositioning a squad waits on Phase 5 — and Bulwark's armor lands on its caster for the same reason.
 
 ### 2.6 Line of sight
 - [ ] Vision/targeting occlusion; trees currently block projectiles only

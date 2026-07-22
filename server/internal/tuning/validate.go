@@ -534,9 +534,19 @@ func (t *Tables) validateModifiers(r *report, id string, component Component) {
 		if contains(HandlingAttributes, attribute) {
 			r.require(handling, "components: %q modifies %q, but no %q weapon has gunplay handling to change", id, attribute, component.Blueprint)
 		}
-		if attribute == AttrSpellDamage || attribute == AttrSpellHealing {
-			r.require(component.Kind == "mana_crystal", "components: %q modifies %q, but only a mana crystal may alter all-spell output", id, attribute)
+		if contains(CrystalAttributes, attribute) {
+			r.require(component.Kind == "mana_crystal", "components: %q modifies %q, but only a mana crystal may alter spell output", id, attribute)
 		}
+	}
+	// An element bias and the element it is biased toward are one choice: a
+	// crystal that names a school without favouring it, or favours one without
+	// naming it, is a modifier nothing can resolve.
+	_, biased := component.Modifiers[AttrElementDamage]
+	r.require(biased == (component.Element != ""),
+		"components: %q must declare an element and an %q modifier together, or neither", id, AttrElementDamage)
+	if component.Element != "" {
+		r.require(component.Kind == "mana_crystal", "components: %q names an element but is a %s; only a mana crystal specialises", id, component.Kind)
+		r.require(t.Elements[component.Element].Name != "", "components: %q names unknown element %q", id, component.Element)
 	}
 }
 
@@ -626,6 +636,14 @@ func (t *Tables) validateEffects(r *report) {
 		// Each kind owns exactly the fields it uses. Anything else set on the
 		// row is a value the world would silently ignore.
 		burn, slow, knockback, shield := effect.Kind == "burn", effect.Kind == "slow", effect.Kind == "knockback", effect.Kind == "shield"
+		armor := effect.Kind == "armor"
+		if armor {
+			// Armor is mitigation with no pool behind it, so a multiplier of zero
+			// would be flat invulnerability for its whole window.
+			r.require(effect.DamageMultiplier > 0 && effect.DamageMultiplier < 1,
+				"effects: armor %q has damage_multiplier %g, want a fraction between 0 and 1 exclusive; immunity is not a status", id, effect.DamageMultiplier)
+		}
+		r.require(armor || effect.DamageMultiplier == 0, "effects: %q is a %s but declares armor's damage_multiplier", id, effect.Kind)
 		if burn {
 			r.require(effect.TickMS > 0, "effects: burn %q must declare a positive tick_ms", id)
 			r.require(effect.DamageFraction > 0, "effects: burn %q must declare a positive damage_fraction of its band", id)
@@ -668,14 +686,29 @@ func (t *Tables) validateAbilities(r *report) {
 		t.validateGuard(r, id, ability)
 		t.validateBlast(r, id, ability)
 		t.validateDeployable(r, id, ability)
+		t.validatePlacement(r, id, ability)
+		t.validateWall(r, id, ability)
+		t.validateBlink(r, id, ability)
+		t.validateChain(r, id, ability)
+		t.validateCleanse(r, id, ability)
+		for _, effect := range ability.SelfEffects {
+			r.require(t.Effects[effect].Name != "", "abilities: %q applies unknown self effect %q", id, effect)
+		}
 		if ability.Telegraph != nil {
 			t.validateTelegraph(r, "abilities", id, *ability.Telegraph)
 		}
 		r.require((ability.WindupMS > 0) == (ability.Telegraph != nil),
 			"abilities: %q must declare a positive windup_ms and a telegraph together, or neither", id)
-		if !ability.Damaging() {
+		// Every ability has to actually do something. A row that costs mana and
+		// puts nothing into the world is a button that plays no part in a fight.
+		r.require(ability.Projectile != nil || ability.Blast != nil || ability.Deployable != nil || ability.Guard != nil ||
+			ability.Wall != nil || ability.Blink != nil || ability.Cleanse != nil || len(ability.SelfEffects) > 0,
+			"abilities: %q delivers nothing at all", id)
+		if !ability.DealsDamage() {
 			r.require(ability.DodgeVector == "", "abilities: %q deals no damage, so it must not claim a dodge vector", id)
 			r.require(!ability.RequiresScope, "abilities: %q requires a scope but delivers no damage; scoping is a commitment paid for accuracy", id)
+			r.require(ability.Chain == nil, "abilities: %q chains a hit that deals no damage", id)
+			r.require(!ability.BlinkOnHit, "abilities: %q blinks on a hit it can never land", id)
 			if ability.Projectile != nil {
 				// A round that deals nothing has to be delivering something else,
 				// or it is a body the world carries and nobody ever feels.
@@ -687,7 +720,7 @@ func (t *Tables) validateAbilities(r *report) {
 			}
 			continue
 		}
-		t.validateDamaging(r, "abilities", id, ability.DamageBand, ability.DodgeVector, ability.Projectile)
+		t.validateDamaging(r, "abilities", id, ability)
 		r.require(contains(honouredDodgeVectors, ability.DodgeVector),
 			"abilities: %q claims dodge vector %q, which the simulation does not deliver; only %v are honoured", id, ability.DodgeVector, honouredDodgeVectors)
 		if ability.DodgeVector == "cast_time" {
@@ -695,6 +728,15 @@ func (t *Tables) validateAbilities(r *report) {
 		}
 		if ability.DodgeVector == "telegraph" || ability.DodgeVector == "ground_indicator" {
 			r.require(ability.Telegraph != nil, "abilities: %q claims %s but declares no telegraph", id, ability.DodgeVector)
+		}
+		// A ground indicator is a danger area drawn away from its caster: the
+		// warning and the ground it covers are the whole counterplay, so an
+		// ability claiming one has to place its delivery somewhere to be avoided.
+		if ability.DodgeVector == "ground_indicator" {
+			r.require(ability.Placement != nil, "abilities: %q claims ground_indicator but lands on the caster rather than on placed ground", id)
+		}
+		if ability.DodgeVector == "projectile_travel" {
+			r.require(ability.Projectile != nil, "abilities: %q claims projectile_travel but nothing travels", id)
 		}
 		// Hitscan is the one delivery with no travel to dodge, so it is legal only
 		// as the sniper's exception: it must be gated on scoping, and it must say
@@ -739,7 +781,11 @@ func (t *Tables) validateBlast(r *report, id string, ability Ability) {
 		return
 	}
 	r.require(ability.Blast.Radius > 0, "abilities: %q declares a blast with no radius", id)
-	r.require(ability.Projectile != nil, "abilities: %q blasts but delivers nothing that travels to the impact", id)
+	// A blast either travels to where it lands or is placed on ground the caster
+	// warned about. Anything else would go off on top of whoever is standing
+	// there with no window to leave it.
+	r.require(ability.Projectile != nil || ability.Placement != nil,
+		"abilities: %q blasts but neither travels to the impact nor places it on warned ground", id)
 	for _, effect := range ability.Blast.Effects {
 		r.require(t.Effects[effect].Name != "", "abilities: %q blast applies unknown effect %q", id, effect)
 	}
@@ -812,7 +858,17 @@ func (t *Tables) validateSpells(r *report) {
 		// A spell is identity — element, tier, unlock — over one ability. Cost,
 		// cadence, cooldown, counterplay, and delivery all live on the ability.
 		r.require(t.Abilities[spell.Ability].Name != "", "spells: %q references unknown ability %q", id, spell.Ability)
+		// A drawn starter kit has to be a legal loadout the moment it is rolled.
+		// Tier 1 is the only tier that needs no same-element company beside it, so
+		// it is the only tier the draw may reach into.
+		r.require(!spell.Starter || spell.Tier == 1,
+			"spells: %q is tier %d and in the starter draw; a drawn kit has to satisfy affinity without the player arranging it", id, spell.Tier)
 	}
+	// Grid completeness — every element authored to tier 4, so affinity's 4 + 2
+	// build is satisfiable — is a claim about the shipped content rather than a
+	// structural rule, and `TestShippedSpellGridIsComplete` holds it. Requiring
+	// it here would make the loader refuse any deployment or fixture that ships
+	// a narrower spell table.
 }
 
 // validateGadgets mirrors validateSpells: a gadget is identity — name, class,
@@ -1000,10 +1056,18 @@ func (t *Tables) validateRetired(r *report) {
 
 // validateDamaging enforces the cross-cutting rule that anything which deals
 // damage draws from a shared band and offers a declared dodge vector.
-func (t *Tables) validateDamaging(r *report, table, id, band, dodge string, projectile *Projectile) {
-	r.require(t.Combat.DamageBands[band].Name != "", "%s: %q references unknown damage band %q", table, id, band)
+func (t *Tables) validateDamaging(r *report, table, id string, ability Ability) {
+	band, dodge, projectile := ability.DamageBand, ability.DodgeVector, ability.Projectile
+	if ability.Damaging() {
+		r.require(t.Combat.DamageBands[band].Name != "", "%s: %q references unknown damage band %q", table, id, band)
+	}
 	r.require(contains(t.Combat.DodgeVectors, dodge), "%s: %q declares dodge vector %q, which is not a recognised counterplay vector", table, id, dodge)
-	if !r.require(projectile != nil, "%s: %q deals damage but declares no projectile", table, id) {
+	if projectile == nil {
+		// Damage that never travels has to be placed and warned about instead:
+		// the telegraph is the whole dodge window, and without one this would be
+		// point-and-click damage — the one thing the invariant refuses.
+		r.require(ability.Telegraph != nil && ability.WindupMS > 0,
+			"%s: %q deals damage without anything travelling to carry it, and shows no telegraph; that is instant point-and-click damage", table, id)
 		return
 	}
 	t.validateProjectileShape(r, table, id, projectile)
@@ -1039,6 +1103,15 @@ func (t *Tables) validateProjectileShape(r *report, table, id string, projectile
 	r.require(projectile.LifeSeconds > 0, "%s: %q has a projectile with no lifetime", table, id)
 	r.require(projectile.Radius > 0, "%s: %q has a projectile with no radius", table, id)
 	r.require(projectile.Silhouette != "", "%s: %q has a projectile with no silhouette for the renderer", table, id)
+	if projectile.Homing != nil {
+		// A round that turns instantly is a lock-on with no dodge left in it: the
+		// turn rate is the whole counterplay, so it has to be bounded.
+		r.require(projectile.Homing.TurnDegreesPerSecond > 0 && projectile.Homing.TurnDegreesPerSecond <= 360,
+			"%s: %q homes at %g degrees per second, want a rate above zero and no more than a full turn; a round that turns freely cannot be dodged",
+			table, id, projectile.Homing.TurnDegreesPerSecond)
+		r.require(projectile.Homing.AcquireRange > 0, "%s: %q homes but looks for nothing", table, id)
+		r.require(projectile.HitscanRange == 0, "%s: %q both lands instantly and steers", table, id)
+	}
 }
 
 // validateDeployable keeps a persistent field coherent: it materialises as an
@@ -1060,9 +1133,93 @@ func (t *Tables) validateDeployable(r *report, id string, ability Ability) {
 	r.require(field.DurationMS > 0, "abilities: %q deploys a field that never expires", id)
 	r.require(field.RevealRadius >= 0 && field.RevealRadius < field.Radius,
 		"abilities: %q reveals at %g inside a %g field; the gap has to be smaller than the cloud", id, field.RevealRadius, field.Radius)
-	r.require(ability.Projectile != nil, "abilities: %q deploys a field but delivers nothing that travels to where it lands", id)
-	r.require(!ability.Damaging(), "abilities: %q both deploys a field and deals damage; a deployable is placed, not landed on someone", id)
+	// A reveal gap only means something to a field that hides anything.
+	r.require(field.Conceals || field.RevealRadius == 0,
+		"abilities: %q deploys a field that hides nothing but declares a reveal radius", id)
+	// A field is either thrown to where it lands or placed on ground the caster
+	// pointed at. Both give the target the same thing: somewhere the field is not.
+	r.require(ability.Projectile != nil || ability.Placement != nil,
+		"abilities: %q deploys a field but neither travels to where it lands nor places it", id)
+	r.require(!ability.Damaging(), "abilities: %q both deploys a field and deals damage on impact; a deployable is placed, not landed on someone", id)
 	r.require(ability.CooldownMS > 0, "abilities: %q deploys a field with no cooldown, so one body could cover the world in them", id)
+	// A pulse is priced against the shared band like every other damage source,
+	// and it needs a cadence to run at.
+	if field.DamageBand != "" || field.DamageFraction > 0 {
+		r.require(t.Combat.DamageBands[field.DamageBand].Name != "", "abilities: %q deploys a field referencing unknown damage band %q", id, field.DamageBand)
+		r.require(field.DamageFraction > 0, "abilities: %q deploys a damaging field with no damage_fraction of its band", id)
+	}
+	r.require((field.TickMS > 0) == (field.DamageBand != "" || len(field.Effects) > 0),
+		"abilities: %q must declare a field tick_ms together with what the pulse does, or neither", id)
+	for _, effect := range append(append([]string(nil), field.Effects...), field.FinalEffects...) {
+		r.require(t.Effects[effect].Name != "", "abilities: %q deploys a field applying unknown effect %q", id, effect)
+	}
+	// A trap that never does anything is furniture, and a closing pulse on a
+	// field that does not pulse has nothing to close.
+	r.require(!field.Trigger || field.Pulses(), "abilities: %q deploys a trap that does nothing when it is triggered", id)
+	r.require(len(field.FinalEffects) == 0 || field.Pulses(), "abilities: %q deploys a field with a closing pulse but no pulse", id)
+	r.require(!field.Trigger || len(field.FinalEffects) == 0, "abilities: %q deploys a trap with a closing pulse; a trap resolves once, on the body that springs it", id)
+}
+
+// validatePlacement keeps a placed cast reachable and warned about. Range zero
+// is legal and means the caster's own feet, which is where a self-centred aura
+// or shockwave lands.
+func (t *Tables) validatePlacement(r *report, id string, ability Ability) {
+	if ability.Placement == nil {
+		return
+	}
+	r.require(ability.Placement.Range >= 0, "abilities: %q places its cast at a negative range", id)
+	r.require(ability.Blast != nil || ability.Deployable != nil || ability.Wall != nil,
+		"abilities: %q places a point in the world but puts nothing there", id)
+}
+
+// validateWall keeps player-authored terrain a spell rather than a fixture: it
+// materialises segments of a real archetype, they are destructible, and they
+// stand for a bounded time.
+func (t *Tables) validateWall(r *report, id string, ability Ability) {
+	if ability.Wall == nil {
+		return
+	}
+	wall := ability.Wall
+	if definition, ok := t.Entities[wall.Kind]; r.require(ok, "abilities: %q raises %q, which is not an entity archetype", id, wall.Kind) {
+		r.require(len(definition.CollisionObjects) > 0, "abilities: %q raises %q, which has no collision geometry; a wall that blocks nothing is not a wall", id, wall.Kind)
+		// An indestructible wall is a permanent safe corner. It has to be
+		// answerable by shooting it, exactly like a tree.
+		r.require(definition.MaxHealth > 0, "abilities: %q raises %q, which cannot be destroyed; a placed wall has to be breakable", id, wall.Kind)
+	}
+	r.require(wall.Segments >= 1, "abilities: %q raises a wall of no segments", id)
+	r.require(wall.Spacing > 0, "abilities: %q raises wall segments with no spacing", id)
+	r.require(wall.DurationMS > 0, "abilities: %q raises a wall that never expires", id)
+	r.require(ability.Placement != nil, "abilities: %q raises a wall but places it nowhere", id)
+	r.require(ability.CooldownMS > 0, "abilities: %q raises a wall with no cooldown", id)
+	r.require(!ability.DealsDamage(), "abilities: %q both raises a wall and deals damage; terrain is cover, not a weapon", id)
+}
+
+func (t *Tables) validateBlink(r *report, id string, ability Ability) {
+	if ability.Blink == nil {
+		return
+	}
+	r.require(ability.Blink.Distance > 0, "abilities: %q blinks nowhere", id)
+	// Mobility this direct is a defining tool, so it is cooldown-gated rather
+	// than mana-gated: spamming it would erase the spacing game entirely.
+	r.require(ability.CooldownMS > 0, "abilities: %q blinks with no cooldown", id)
+}
+
+func (t *Tables) validateChain(r *report, id string, ability Ability) {
+	if ability.Chain == nil {
+		return
+	}
+	r.require(ability.Chain.Jumps >= 1, "abilities: %q chains to nobody", id)
+	r.require(ability.Chain.Range > 0, "abilities: %q chains over no distance", id)
+}
+
+func (t *Tables) validateCleanse(r *report, id string, ability Ability) {
+	if ability.Cleanse == nil {
+		return
+	}
+	r.require(ability.Cleanse.Radius > 0, "abilities: %q strips effects over no area", id)
+	r.require(ability.Cleanse.ManaPerEffect >= 0, "abilities: %q returns negative mana per effect stripped", id)
+	r.require(ability.CooldownMS > 0, "abilities: %q strips effects with no cooldown", id)
+	r.require(!ability.DealsDamage(), "abilities: %q both strips effects and deals damage", id)
 }
 
 func (t *Tables) validateProjectileKinds(r *report) {

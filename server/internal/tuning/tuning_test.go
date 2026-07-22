@@ -709,3 +709,63 @@ func TestStaffComponentsMayNotModifyAMagazine(t *testing.T) {
 		t.Fatalf("a staff component claimed a magazine: %v", err)
 	}
 }
+
+// Affinity requires N−1 same-element spells beside a tier-N spell, so an
+// element authored short of tier 4 could not support the 4 + 2 build its own
+// rule describes. This is a claim about the shipped content rather than a
+// structural rule, which is why it is a test and not a loader check: a fixture
+// or a deployment may legitimately ship a narrower table.
+func TestShippedSpellGridIsComplete(t *testing.T) {
+	tables := MustLoad()
+	for element := range tables.Elements {
+		for tier := 1; tier <= 4; tier++ {
+			found := ""
+			for id, spell := range tables.Spells {
+				if spell.Element == element && spell.Tier == tier {
+					found = id
+				}
+			}
+			if found == "" {
+				t.Fatalf("%s has no tier %d spell, so its own affinity rule cannot be satisfied", element, tier)
+			}
+		}
+	}
+	// And the signature build the rule describes has to fit the bar it shares:
+	// one tier-4 spell plus the company it needs, inside the action bar.
+	needed := 1 + tables.Loadout.RequiredSameElement(4)
+	if slots := tables.Loadout.BarSlots(); needed > slots {
+		t.Fatalf("a tier 4 signature needs %d slots of the %d-slot bar", needed, slots)
+	}
+}
+
+// Every spell owes cost and counterplay on the ability it names: mana to cast,
+// and — for the defining tiers — a cooldown that is the second resource axis.
+func TestShippedSpellsPriceThemselves(t *testing.T) {
+	tables := MustLoad()
+	for id, spell := range tables.Spells {
+		ability := tables.Abilities[spell.Ability]
+		if ability.Cost.Kind != CostMana || ability.Cost.Amount <= 0 {
+			t.Fatalf("%s costs %q %g, want mana", id, ability.Cost.Kind, ability.Cost.Amount)
+		}
+		if spell.Tier > 1 && ability.CooldownMS <= 0 {
+			t.Fatalf("%s is tier %d but holds no cooldown; mana alone cannot gate a defining spell", id, spell.Tier)
+		}
+	}
+	// Tier is a commitment axis: a higher tier costs more and locks out longer.
+	for _, element := range sortedKeys(tables.Elements) {
+		byTier := map[int]Ability{}
+		for _, spell := range tables.Spells {
+			if spell.Element == element {
+				byTier[spell.Tier] = tables.Abilities[spell.Ability]
+			}
+		}
+		for tier := 2; tier <= 4; tier++ {
+			if byTier[tier].Cost.Amount <= byTier[tier-1].Cost.Amount {
+				t.Fatalf("%s tier %d costs %g, no more than tier %d's %g", element, tier, byTier[tier].Cost.Amount, tier-1, byTier[tier-1].Cost.Amount)
+			}
+			if byTier[tier].CooldownMS <= byTier[tier-1].CooldownMS {
+				t.Fatalf("%s tier %d locks out %dms, no longer than tier %d's %dms", element, tier, byTier[tier].CooldownMS, tier-1, byTier[tier-1].CooldownMS)
+			}
+		}
+	}
+}

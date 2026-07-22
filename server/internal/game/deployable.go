@@ -20,10 +20,18 @@ import (
 type Deployable struct {
 	Entity
 	OwnerID string
+	// Element is what cast it, and is empty for a thrown gadget. It travels to
+	// the client, which tints the field by it — a burning patch and a blizzard
+	// are the same shape and must never read as the same thing.
+	Element string
 	// Field is the authored row this was deployed from, carried rather than
 	// looked up so a balance edit retunes a cloud already standing in the world.
 	Field     tuning.Deployable
 	ExpiresAt time.Time
+	// NextTickAt paces the field's pulse, and Spent marks a trap that has
+	// already caught someone.
+	NextTickAt time.Time
+	Spent      bool
 }
 
 // deployFrom materialises the field a spent projectile was carrying, at the
@@ -34,35 +42,99 @@ func (w *World) deployFrom(projectile *Projectile, at Vec, now time.Time) {
 		return
 	}
 	projectile.Deployed = true
-	w.deploy(projectile.OwnerID, *projectile.Deploy, at, now)
+	w.deploy(projectile.OwnerID, *projectile.Deploy, at, projectile.Element, now)
 }
 
 // deploy places one field. It is owner-agnostic: a player's gadget places one
 // today, and a mob or a boss places one through the same entry point.
-func (w *World) deploy(ownerID string, field tuning.Deployable, at Vec, now time.Time) *Deployable {
+func (w *World) deploy(ownerID string, field tuning.Deployable, at Vec, element string, now time.Time) *Deployable {
 	definition, ok := w.tuning.Tables.Entities[field.Kind]
 	if !ok {
 		return nil
 	}
 	deployable := &Deployable{
 		Entity:  newEntity(fmt.Sprintf("d-%d", w.nextDeployable), field.Kind, at, definition, EntityOverrides{}),
-		OwnerID: ownerID, Field: field, ExpiresAt: now.Add(field.Duration()),
+		OwnerID: ownerID, Element: element, Field: field, ExpiresAt: now.Add(field.Duration()),
+	}
+	if field.Pulses() {
+		// A field is not felt the instant it lands: the first pulse is a cadence
+		// away, which is the moment a body caught by the placement has to leave.
+		deployable.NextTickAt = now.Add(field.Tick())
 	}
 	w.nextDeployable++
 	w.deployables[deployable.ID] = deployable
 	return deployable
 }
 
-// stepDeployables retires the fields whose window has closed. Expiry starts the
-// shared graceful removal rather than deleting outright, so a cloud fades from
-// every client instead of blinking out of the world.
+// stepDeployables pulses standing fields and retires the ones whose window has
+// closed. Expiry starts the shared graceful removal rather than deleting
+// outright, so a field fades from every client instead of blinking out.
 func (w *World) stepDeployables(now time.Time) {
 	for _, id := range sortedDeployableIDs(w.deployables) {
 		deployable := w.deployables[id]
-		if !deployable.Deleting && !now.Before(deployable.ExpiresAt) {
-			deployable.Delete(now)
+		if deployable.Deleting {
+			continue
 		}
+		if !now.Before(deployable.ExpiresAt) {
+			// The closing pulse is what lets a stacking slow end in a stun. A trap
+			// that timed out without catching anyone never resolves one.
+			if !deployable.Spent && len(deployable.Field.FinalEffects) > 0 {
+				w.pulse(deployable, deployable.Field.FinalEffects, now)
+			}
+			deployable.Delete(now)
+			continue
+		}
+		w.stepField(deployable, now)
 	}
+}
+
+// stepField runs one standing field's pulse. A trap waits for a body and is
+// spent by the first one that reaches it; every other field pulses on its own
+// cadence for as long as it stands.
+func (w *World) stepField(deployable *Deployable, now time.Time) {
+	field := deployable.Field
+	if !field.Pulses() || deployable.Spent || now.Before(deployable.NextTickAt) {
+		return
+	}
+	// Whole cadences are caught up rather than one per frame, so a field deals
+	// the same total however the tick rate divides its pulse.
+	for !now.Before(deployable.NextTickAt) {
+		deployable.NextTickAt = deployable.NextTickAt.Add(field.Tick())
+	}
+	if w.pulse(deployable, field.Effects, now) && field.Trigger {
+		deployable.Spent = true
+		deployable.ExpiresAt = now
+	}
+}
+
+// pulse applies one of a field's beats to everyone standing in it, and reports
+// whether it reached anybody. Damage is priced against the shared band like
+// every other source, and PvP protection covers a field exactly as it covers a
+// bullet: a patch burning inside safety costs nothing.
+func (w *World) pulse(deployable *Deployable, effects []string, now time.Time) bool {
+	field := deployable.Field
+	owner := w.players[deployable.OwnerID]
+	damage := 0.0
+	if field.DamageBand != "" {
+		damage = w.tuning.Tables.BandDamage(field.DamageBand) * field.DamageFraction
+	}
+	reached := false
+	for _, id := range sortedPlayerIDs(w.players) {
+		target := w.players[id]
+		if id == deployable.OwnerID || !target.Alive {
+			continue
+		}
+		if target.Position.Sub(deployable.Position).LengthSq() > field.Radius*field.Radius {
+			continue
+		}
+		if !w.hazardReach(owner, deployable.OwnerID, target.Position) {
+			continue
+		}
+		reached = true
+		w.damage(target, damage, deployable.OwnerID, now)
+		w.applyEffects(target, effects, deployable.OwnerID, target.Position.Sub(deployable.Position), now)
+	}
+	return reached
 }
 
 // concealed reports whether a cloud has swallowed something whole, hiding it
@@ -82,7 +154,10 @@ func (w *World) concealed(viewer, at Vec, extent float64) bool {
 	// Iterated unordered on purpose: this runs once per candidate entity per
 	// viewer per send, and the answer is a boolean that no ordering can change.
 	for _, cloud := range w.deployables {
-		if cloud.Deleting || cloud.Field.Radius <= 0 {
+		// Only a field authored to conceal takes anything off the wire. A burning
+		// patch is plainly visible ground, and hiding what stands in it would be a
+		// rule no player could read from what is drawn.
+		if cloud.Deleting || !cloud.Field.Conceals || cloud.Field.Radius <= 0 {
 			continue
 		}
 		if math.Sqrt(at.Sub(cloud.Position).LengthSq())+extent > cloud.Field.Radius {

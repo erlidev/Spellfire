@@ -41,7 +41,10 @@ func (w *World) ability(p *Player) (tuning.Ability, bool) {
 		return ability, true
 	}
 	_, ability = crafting.Apply(w.tuning.Tables, weapon, ability, slot.Item.Components)
-	return ability, true
+	// A crystal's element bias is the one modifier that depends on what is being
+	// cast rather than on what is holding it, so it is applied against the slot's
+	// element after everything the staff does to every spell alike.
+	return crafting.Bias(w.tuning.Tables, ability, slot.Element, slot.Item.Components), true
 }
 
 // useAbility charges and delivers one use. It is the only way an action reaches
@@ -62,6 +65,16 @@ func (w *World) useAbility(p *Player, now time.Time) bool {
 	// may not be used from the hip at all: the committed vulnerability is the
 	// counterplay it is sold against.
 	if ability.Guard != nil || (ability.RequiresScope && !p.Scoped) {
+		return false
+	}
+	// A cast that authors terrain is refused before it is charged, so a wall the
+	// placement rules forbid costs nothing and reads as a rule rather than as a
+	// wasted cooldown.
+	aim := p.Aim.Normalized()
+	if aim.LengthSq() == 0 {
+		aim = Vec{1, 0}
+	}
+	if !w.placeable(ability, w.anchor(p.Position, aim, ability), aim) {
 		return false
 	}
 	if !w.spend(p, ability, now) {
@@ -110,14 +123,21 @@ func (w *World) spend(p *Player, ability tuning.Ability, now time.Time) bool {
 	return true
 }
 
-// deliver launches what the ability puts into the world. Every damaging ability
-// validated at load carries a travelling projectile, so this is the one shape
-// today; Phase 2.5's areas and walls extend it rather than bypass it.
+// deliver launches what the ability puts into the world. A windup shows its
+// warning and delivers later through the same resolver; everything else lands
+// now. Nothing here knows what kind of ability it is holding: a round, an area,
+// a field, a wall, a blink, and a dispel are branches of one path.
 func (w *World) deliver(p *Player, ability tuning.Ability, now time.Time) {
+	direction := p.Aim.Normalized()
+	if direction.LengthSq() == 0 {
+		direction = Vec{1, 0}
+	}
+	anchor := w.anchor(p.Position, direction, ability)
 	if ability.Telegraph != nil {
-		w.startTelegraph(p.ID, w.playerElement(p), p.Position, p.Aim, ability, now)
+		w.startTelegraph(p.ID, w.playerElement(p), anchor, direction, ability, now)
 		return
 	}
+	w.resolve(p.ID, anchor, direction, ability, now, w.playerElement(p))
 	if ability.Projectile == nil {
 		return
 	}
@@ -125,6 +145,53 @@ func (w *World) deliver(p *Player, ability tuning.Ability, now time.Time) {
 	// each leaves on its own direction, walked off aim by recoil and spread.
 	for _, direction := range w.firingDirections(p, ability, now) {
 		w.spawnRewoundProjectile(p, ability, direction, now)
+	}
+}
+
+// anchor is where a cast lands. A placed spell reaches a fixed distance along
+// the aim it committed to — the wire carries an aim direction and no cursor
+// distance, so the range is the ability's rather than the player's — and
+// everything else lands on the caster.
+func (w *World) anchor(origin, direction Vec, ability tuning.Ability) Vec {
+	if ability.Placement == nil {
+		return origin
+	}
+	at := origin.Add(direction.Mul(ability.Placement.Range))
+	// A cast placed past the rim lands on it rather than outside the world.
+	if limit := w.tuning.WorldRadius; at.LengthSq() > limit*limit {
+		at = at.Normalized().Mul(limit)
+	}
+	return at
+}
+
+// resolve puts everything an ability delivers besides its rounds into the world
+// at one point. It is owner-agnostic and time-agnostic, so an immediate cast and
+// a completed windup reach it by the same call and a mob will too.
+func (w *World) resolve(ownerID string, at, direction Vec, ability tuning.Ability, now time.Time, element string) {
+	owner := w.players[ownerID]
+	if owner != nil && len(ability.SelfEffects) > 0 {
+		w.applyEffects(owner, ability.SelfEffects, ownerID, direction, now)
+	}
+	if ability.Cleanse != nil {
+		w.cleanse(owner, at, *ability.Cleanse, now)
+	}
+	if ability.Blink != nil && owner != nil {
+		w.blink(owner, direction, ability.Blink.Distance, now)
+	}
+	if ability.Wall != nil {
+		w.raiseWall(ownerID, at, direction, *ability.Wall, now)
+	}
+	// A blast or a field with nothing to carry it was placed rather than thrown,
+	// so it resolves on the ground the telegraph drew. When a projectile carries
+	// it, the impact is what resolves it instead.
+	if ability.Projectile != nil {
+		return
+	}
+	if ability.Blast != nil {
+		w.explode(ownerID, at, ability.Blast.Radius, w.pelletDamage(ability), ability.Blast.Effects, now, ability.BlinkOnHit)
+	}
+	if ability.Deployable != nil {
+		w.deploy(ownerID, *ability.Deployable, at, element, now)
 	}
 }
 
@@ -156,19 +223,7 @@ func (w *World) spawnRewoundProjectile(p *Player, ability tuning.Ability, direct
 			return
 		}
 	}
-	projectile := &Projectile{
-		OwnerID:   p.ID,
-		Element:   w.playerElement(p),
-		Damage:    w.pelletDamage(ability),
-		Remaining: ability.Projectile.LifeSeconds, Effects: ability.Effects,
-		Spec: *ability.Projectile, Blast: ability.Blast, Deploy: ability.Deployable,
-	}
-	if ability.Blast != nil {
-		projectile.BlastEffects = ability.Blast.Effects
-	}
-	projectile.Entity = w.newProjectileEntity(fmt.Sprintf("p-%d", w.nextProjectile), Vec{}, direction.Mul(ability.Projectile.Speed), ability.Projectile.Radius)
-	projectile.Kind = ability.Projectile.Kind
-	w.nextProjectile++
+	projectile := w.newProjectile(p.ID, w.playerElement(p), ability, direction)
 	projectile.Position = muzzle
 	// A round that starts past its instant reach has already covered it, so its
 	// falloff continues from there rather than restarting at the muzzle.
@@ -198,14 +253,32 @@ func (w *World) spawnRewoundProjectile(p *Player, ability tuning.Ability, direct
 // time and has already paid the player-facing latency compensation by being
 // visible for the full declared windup.
 func (w *World) deliverAt(ownerID string, origin, direction Vec, ability tuning.Ability, now time.Time, element string) {
+	w.resolve(ownerID, origin, direction, ability, now, element)
 	if ability.Projectile == nil {
 		return
 	}
+	ownerRadius := w.tuning.PlayerRadius
+	if owner := w.players[ownerID]; owner != nil {
+		ownerRadius = owner.circleRadius()
+	}
+	// A committed cast fans exactly as an immediate one does; what it does not
+	// carry is gunplay, because a staff has no pattern to walk.
+	for _, heading := range coneDirections(direction, ability.Projectile) {
+		projectile := w.newProjectile(ownerID, element, ability, heading)
+		projectile.Position = origin.Add(heading.Mul(ownerRadius + ability.Projectile.Radius + 2))
+		w.projectiles[projectile.ID] = projectile
+	}
+}
+
+// newProjectile builds one round from an ability, carrying everything the
+// resolver needs so nothing has to look back at the shooter's kit.
+func (w *World) newProjectile(ownerID, element string, ability tuning.Ability, direction Vec) *Projectile {
 	projectile := &Projectile{
 		OwnerID: ownerID, Element: element,
 		Damage:    w.pelletDamage(ability),
 		Remaining: ability.Projectile.LifeSeconds, Effects: ability.Effects,
 		Spec: *ability.Projectile, Blast: ability.Blast, Deploy: ability.Deployable,
+		Chain: ability.Chain, BlinkOnHit: ability.BlinkOnHit,
 	}
 	if ability.Blast != nil {
 		projectile.BlastEffects = ability.Blast.Effects
@@ -213,10 +286,20 @@ func (w *World) deliverAt(ownerID string, origin, direction Vec, ability tuning.
 	projectile.Entity = w.newProjectileEntity(fmt.Sprintf("p-%d", w.nextProjectile), Vec{}, direction.Mul(ability.Projectile.Speed), ability.Projectile.Radius)
 	projectile.Kind = ability.Projectile.Kind
 	w.nextProjectile++
-	ownerRadius := w.tuning.PlayerRadius
-	if owner := w.players[ownerID]; owner != nil {
-		ownerRadius = owner.circleRadius()
+	return projectile
+}
+
+// coneDirections lays a multi-body use out over its declared cone, from the
+// centre outward, and answers with the single heading for everything else.
+func coneDirections(aim Vec, spec *tuning.Projectile) []Vec {
+	pellets := spec.PelletCount()
+	if pellets <= 1 {
+		return []Vec{aim}
 	}
-	projectile.Position = origin.Add(direction.Mul(ownerRadius + ability.Projectile.Radius + 2))
-	w.projectiles[projectile.ID] = projectile
+	directions := make([]Vec, 0, pellets)
+	step := spec.PelletSpreadDegrees / float64(pellets-1)
+	for index := 0; index < pellets; index++ {
+		directions = append(directions, rotate(aim, -spec.PelletSpreadDegrees/2+float64(index)*step))
+	}
+	return directions
 }

@@ -35,6 +35,17 @@ describe("loadout slots", () => {
     expect(loadoutProblem("mage", everything, { weapon: "starter-staff", gadgets: [], spells: ["fire-bolt", "fire-bolt"] })).toBeTruthy();
   });
 
+  // The 4 + 2 build the affinity rule describes has to be reachable, and the
+  // menu has to refuse the same signature without its company.
+  it("accepts a tier four signature only with the same-element company it needs", () => {
+    const signature = Object.keys(spells).find((id) => spells[id]!.tier === 4)!;
+    const element = spells[signature]!.element;
+    const company = Object.keys(spells).filter((id) => id !== signature && spells[id]!.element === element).sort();
+    const set = { weapon: "starter-staff", gadgets: [], spells: [signature, ...company.slice(0, requiredSameElement(4))] };
+    expect(loadoutProblem("mage", everything, set)).toBeUndefined();
+    expect(loadoutProblem("mage", everything, { ...set, spells: [signature] })).toBeTruthy();
+  });
+
   it("offers only content of the character's own slot kind", () => {
     expect(equippable("gunslinger", everything, "spell")).toHaveLength(0);
     expect(equippable("mage", everything, "weapon").every((id) => id !== "starter-rifle")).toBe(true);

@@ -138,7 +138,7 @@ type Player struct {
 	ShieldHitAt   time.Time
 	ShieldBroken  bool
 	DashDirection Vec
-	DashTicksLeft    int
+	DashTicksLeft int
 	// Cooldowns is each ability's own lockout, keyed by ability ID, alongside
 	// the global cadence gate NextFire holds.
 	Cooldowns map[string]time.Time
@@ -203,6 +203,12 @@ type Projectile struct {
 	// resolved and then reaped cannot place two.
 	Deploy   *tuning.Deployable
 	Deployed bool
+	// Chain is how a landed hit arcs onward, and BlinkOnHit whether landing it
+	// moves the caster to the impact. Both are carried from the ability for the
+	// same reason everything else here is: the resolver never looks back at the
+	// kit that fired the round.
+	Chain      *tuning.Chain
+	BlinkOnHit bool
 }
 
 // hitDamage is what this round is worth where it currently is: the band's
@@ -217,8 +223,12 @@ type historySample struct {
 }
 
 type World struct {
-	tuning      Tuning
-	tick        uint64
+	tuning Tuning
+	tick   uint64
+	// stepped is the last tick's timestamp. Only lifecycle code that runs
+	// outside the tick loop — removing a player, and the terrain it has to take
+	// with it — reads it, so nothing in the simulation depends on a wall clock.
+	stepped     time.Time
 	players     map[string]*Player
 	projectiles map[string]*Projectile
 	telegraphs  map[string]*Telegraph
@@ -226,6 +236,10 @@ type World struct {
 	// today — keyed like every other short-lived family so expiry is a sweep
 	// rather than a scan of the world.
 	deployables map[string]*Deployable
+	// walls are the player-authored terrain standing in the world, keyed by the
+	// caster that raised it, because one wall per caster is the rule and a map
+	// makes it a lookup rather than a scan.
+	walls map[string]*wallGroup
 	// worldItems is a dense component-friendly slice for authored fixtures and
 	// procedural terrain. Dead entries remain as inactive slots, avoiding map
 	// iteration and compaction in hot collision paths.
@@ -237,6 +251,7 @@ type World struct {
 	nextProjectile  uint64
 	nextTelegraph   uint64
 	nextDeployable  uint64
+	nextWall        uint64
 	nextAdminPlayer uint64
 	nextAdminEntity uint64
 	combat          *combatLog
@@ -248,8 +263,8 @@ func NewWorld(t Tuning) *World {
 	}
 	return &World{
 		tuning: t, players: make(map[string]*Player), projectiles: make(map[string]*Projectile), telegraphs: make(map[string]*Telegraph),
-		deployables: make(map[string]*Deployable),
-		worldItems:  generateWorldItems(t.Tables), history: make(map[string][]historySample),
+		deployables: make(map[string]*Deployable), walls: make(map[string]*wallGroup),
+		worldItems: generateWorldItems(t.Tables), history: make(map[string][]historySample),
 		occupants: make(map[string]string), combat: newCombatLog(combatEventCapacity),
 	}
 }
@@ -790,6 +805,9 @@ func (w *World) RemovePlayer(id string) {
 	}
 	delete(w.players, id)
 	delete(w.history, id)
+	// A wall outlives its caster's death, but not its caster leaving the world:
+	// nothing would ever take it down again.
+	w.dropWall(id, w.stepped)
 	for telegraphID, telegraph := range w.telegraphs {
 		if telegraph.OwnerID == id {
 			delete(w.telegraphs, telegraphID)
@@ -835,6 +853,7 @@ func (w *World) Respawn(id string, now time.Time) bool {
 func (w *World) Step(now time.Time) {
 	dt := 1 / float64(w.tuning.TickRate)
 	w.tick++
+	w.stepped = now
 	ids := sortedPlayerIDs(w.players)
 	for _, id := range ids {
 		w.stepPlayer(w.players[id], now, dt)
@@ -842,6 +861,7 @@ func (w *World) Step(now time.Time) {
 	w.stepTelegraphs(now)
 	w.stepProjectiles(now, dt)
 	w.stepDeployables(now)
+	w.stepWalls(now)
 	w.reapDeleted(now)
 	for _, id := range ids {
 		if p := w.players[id]; p != nil {
@@ -988,6 +1008,7 @@ func (w *World) stepProjectiles(now time.Time, dt float64) {
 		if p.Mass < 0 {
 			p.Velocity = Vec{}
 		}
+		w.steer(p, dt)
 		if p.Remaining <= 0 || w.advanceProjectile(p, dt, now, false) {
 			// A round that carries an area goes off wherever it stopped, and a
 			// thrown canister reaches the ground far more often than it hits a
@@ -1009,8 +1030,22 @@ func (w *World) advanceProjectile(projectile *Projectile, dt float64, at time.Ti
 		if item == nil {
 			continue
 		}
-		if item.intersectsSegment(from, to, projectile.circleRadius()) {
-			item.TakeDamage(projectile.hitDamage())
+		// Rewound resolution tests the terrain that stood at the claimed moment
+		// rather than today's: a player-authored wall's lifetime is shorter than
+		// the rewind window is wide, so a shot fired before one went up passes
+		// through it, and a shot rewound to while a tree still stood is stopped by
+		// it even though it has since fallen.
+		blocked := item.intersectsSegment(from, to, projectile.circleRadius())
+		if historical {
+			blocked = item.blockedSegmentAt(from, to, projectile.circleRadius(), at)
+		}
+		if blocked {
+			// Destruction is recorded rather than merely flagged, so the moment it
+			// happened is part of the terrain's lifetime and a later rewind can be
+			// resolved against it.
+			if _, destroyed := item.TakeDamage(projectile.hitDamage()); destroyed {
+				item.Delete(at)
+			}
 			w.resolveBlast(projectile, from, at)
 			return true
 		}
@@ -1049,6 +1084,12 @@ func (w *World) advanceProjectile(projectile *Projectile, dt float64, at time.Ti
 		if w.hostileReach(w.players[projectile.OwnerID], position) {
 			w.damage(target, projectile.hitDamage(), projectile.OwnerID, at)
 			w.applyEffects(target, projectile.Effects, projectile.OwnerID, to.Sub(from), at)
+			// A hit that arcs onward does so from the body it landed on, and only
+			// after that body has actually been hit.
+			w.chainFrom(projectile, target, at)
+			if projectile.BlinkOnHit {
+				w.teleport(w.players[projectile.OwnerID], from, at)
+			}
 		}
 		w.resolveBlast(projectile, from, at)
 		return true
@@ -1081,6 +1122,9 @@ func (w *World) damage(target *Player, amount float64, sourceID string, at time.
 	if !target.Alive || amount <= 0 {
 		return
 	}
+	// Armor mitigates before a shield absorbs: mitigation is a property of the
+	// body, and a ward should spend its pool on what actually got through.
+	amount *= w.armorScale(target)
 	amount = w.absorb(target, amount)
 	if amount <= 0 {
 		return

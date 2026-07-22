@@ -6,5 +6,142 @@
     "starter": true,
     "unlock_level": 2,
     "ability": "fire-bolt-cast"
+  },
+  "cinder-patch": {
+    "name": "Cinder patch",
+    "element": "fire",
+    "tier": 2,
+    "unlock_level": 6,
+    "ability": "cinder-patch-cast"
+  },
+  "flame-wave": {
+    "name": "Flame wave",
+    "element": "fire",
+    "tier": 3,
+    "unlock_level": 11,
+    "ability": "flame-wave-cast"
+  },
+  "firestorm": {
+    "name": "Firestorm",
+    "element": "fire",
+    "tier": 4,
+    "unlock_level": 17,
+    "ability": "firestorm-cast"
+  },
+  "frost-shard": {
+    "name": "Frost shard",
+    "element": "frost",
+    "tier": 1,
+    "starter": true,
+    "unlock_level": 2,
+    "ability": "frost-shard-cast"
+  },
+  "rime-ward": {
+    "name": "Rime ward",
+    "element": "frost",
+    "tier": 2,
+    "unlock_level": 6,
+    "ability": "rime-ward-cast"
+  },
+  "ice-trap": {
+    "name": "Ice trap",
+    "element": "frost",
+    "tier": 3,
+    "unlock_level": 11,
+    "ability": "ice-trap-cast"
+  },
+  "blizzard": {
+    "name": "Blizzard",
+    "element": "frost",
+    "tier": 4,
+    "unlock_level": 17,
+    "ability": "blizzard-cast"
+  },
+  "spark": {
+    "name": "Spark",
+    "element": "storm",
+    "tier": 1,
+    "starter": true,
+    "unlock_level": 2,
+    "ability": "spark-cast"
+  },
+  "thunderstep": {
+    "name": "Thunderstep",
+    "element": "storm",
+    "tier": 2,
+    "unlock_level": 6,
+    "ability": "thunderstep-cast"
+  },
+  "chain-lightning": {
+    "name": "Chain lightning",
+    "element": "storm",
+    "tier": 3,
+    "unlock_level": 11,
+    "ability": "chain-lightning-cast"
+  },
+  "skyfall": {
+    "name": "Skyfall",
+    "element": "storm",
+    "tier": 4,
+    "unlock_level": 17,
+    "ability": "skyfall-cast"
+  },
+  "arcane-missile": {
+    "name": "Arcane missile",
+    "element": "arcane",
+    "tier": 1,
+    "starter": true,
+    "unlock_level": 2,
+    "ability": "arcane-missile-cast"
+  },
+  "ward": {
+    "name": "Ward",
+    "element": "arcane",
+    "tier": 2,
+    "unlock_level": 6,
+    "ability": "ward-cast"
+  },
+  "nullify": {
+    "name": "Nullify",
+    "element": "arcane",
+    "tier": 3,
+    "unlock_level": 11,
+    "ability": "nullify-cast"
+  },
+  "rift": {
+    "name": "Rift",
+    "element": "arcane",
+    "tier": 4,
+    "unlock_level": 17,
+    "ability": "rift-cast"
+  },
+  "stone-shard": {
+    "name": "Stone shard",
+    "element": "earth",
+    "tier": 1,
+    "starter": true,
+    "unlock_level": 2,
+    "ability": "stone-shard-cast"
+  },
+  "stone-wall": {
+    "name": "Stone wall",
+    "element": "earth",
+    "tier": 2,
+    "unlock_level": 6,
+    "ability": "stone-wall-cast"
+  },
+  "upheaval": {
+    "name": "Upheaval",
+    "element": "earth",
+    "tier": 3,
+    "unlock_level": 11,
+    "ability": "upheaval-cast"
+  },
+  "bulwark": {
+    "name": "Bulwark",
+    "element": "earth",
+    "tier": 4,
+    "unlock_level": 17,
+    "ability": "bulwark-cast"
   }
 }

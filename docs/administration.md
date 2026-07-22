@@ -62,8 +62,12 @@ an explicit attribute adapter registry. Adding a field requires tuning plus a
 registry adapter, and the adapter is the only layer that must change when
 runtime storage moves to ECS components.
 
-Spawn currently supports player, projectile, telegraph, tree, and wall
-archetypes. Selection can inspect and edit any of those families, including a
+Spawn currently supports player, projectile, telegraph, tree, wall, and stone-wall
+archetypes, plus every deployed field: smoke, and the Mage's cinder patch,
+firestorm, chilling aura, ice trap, and blizzard. A field spawned this way has
+no caster, so it still respects PvP protection over whoever it would reach but
+has nobody to credit; its element is chosen on the spawn form, because that is
+what tints it. Selection can inspect and edit any of those families, including a
 connected player. Position is checked against world bounds as a complete pair
 before mutation. Speed and view distance remain temporary in-memory player
 values; view distance changes that player's AOI and can increase snapshot size.

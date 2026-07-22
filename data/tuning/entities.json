@@ -26,7 +26,7 @@
       "name": "Projectile",
       "spawnable": true,
       "fields": [
-        { "attribute": "projectile.ability", "label": "Ability", "input": "select", "scope": "spawn", "default": "rifle-shot", "options": [{ "value": "rifle-shot", "label": "Rifle shot" }, { "value": "pistol-shot", "label": "Pistol shot" }, { "value": "revolver-shot", "label": "Revolver shot" }, { "value": "smg-burst", "label": "SMG burst" }, { "value": "shotgun-blast", "label": "Shotgun blast" }, { "value": "marksman-shot", "label": "Marksman shot" }, { "value": "sniper-shot", "label": "Sniper shot" }, { "value": "lmg-burst", "label": "LMG burst" }, { "value": "launcher-rocket", "label": "Rocket" }, { "value": "fire-bolt-cast", "label": "Fire bolt" }] },
+        { "attribute": "projectile.ability", "label": "Ability", "input": "select", "scope": "spawn", "default": "rifle-shot", "options": [{ "value": "rifle-shot", "label": "Rifle shot" }, { "value": "pistol-shot", "label": "Pistol shot" }, { "value": "revolver-shot", "label": "Revolver shot" }, { "value": "smg-burst", "label": "SMG burst" }, { "value": "shotgun-blast", "label": "Shotgun blast" }, { "value": "marksman-shot", "label": "Marksman shot" }, { "value": "sniper-shot", "label": "Sniper shot" }, { "value": "lmg-burst", "label": "LMG burst" }, { "value": "launcher-rocket", "label": "Rocket" }, { "value": "fire-bolt-cast", "label": "Fire bolt" }, { "value": "frost-shard-cast", "label": "Frost shard" }, { "value": "spark-cast", "label": "Spark" }, { "value": "arcane-missile-cast", "label": "Arcane missile" }, { "value": "stone-shard-cast", "label": "Stone shard" }, { "value": "flame-wave-cast", "label": "Flame wave" }, { "value": "chain-lightning-cast", "label": "Chain lightning" }] },
         { "attribute": "render.element", "label": "Element", "input": "select", "scope": "both", "default": "none", "options": [{ "value": "none", "label": "None" }, { "value": "fire", "label": "Fire" }, { "value": "frost", "label": "Frost" }, { "value": "storm", "label": "Storm" }, { "value": "arcane", "label": "Arcane" }, { "value": "earth", "label": "Earth" }] },
         { "attribute": "transform.heading_degrees", "label": "Heading", "input": "rotation", "scope": "both", "default": "0", "min": -180, "max": 180, "step": 1 },
         { "attribute": "transform.position", "label": "Position", "input": "position", "scope": "edit", "default": "[0,0]", "min": -3000, "max": 3000, "step": 1 },
@@ -43,7 +43,7 @@
       "name": "Telegraph",
       "spawnable": true,
       "fields": [
-        { "attribute": "telegraph.ability", "label": "Ability", "input": "select", "scope": "spawn", "default": "fire-bolt-cast", "options": [{ "value": "fire-bolt-cast", "label": "Fire bolt" }] },
+        { "attribute": "telegraph.ability", "label": "Ability", "input": "select", "scope": "spawn", "default": "fire-bolt-cast", "options": [{ "value": "fire-bolt-cast", "label": "Fire bolt" }, { "value": "flame-wave-cast", "label": "Flame wave" }, { "value": "cinder-patch-cast", "label": "Cinder patch" }, { "value": "firestorm-cast", "label": "Firestorm" }, { "value": "ice-trap-cast", "label": "Ice trap" }, { "value": "blizzard-cast", "label": "Blizzard" }, { "value": "chain-lightning-cast", "label": "Chain lightning" }, { "value": "skyfall-cast", "label": "Skyfall" }, { "value": "upheaval-cast", "label": "Upheaval" }, { "value": "bulwark-cast", "label": "Bulwark" }] },
         { "attribute": "render.element", "label": "Element", "input": "select", "scope": "both", "default": "fire", "options": [{ "value": "fire", "label": "Fire" }, { "value": "frost", "label": "Frost" }, { "value": "storm", "label": "Storm" }, { "value": "arcane", "label": "Arcane" }, { "value": "earth", "label": "Earth" }] },
         { "attribute": "transform.heading_degrees", "label": "Heading", "input": "rotation", "scope": "both", "default": "0", "min": -180, "max": 180, "step": 1 },
         { "attribute": "transform.position", "label": "Position", "input": "position", "scope": "edit", "default": "[0,0]", "min": -3000, "max": 3000, "step": 1 },
@@ -77,6 +77,95 @@
         { "attribute": "deployable.ability", "label": "Ability", "input": "select", "scope": "spawn", "default": "smoke-throw", "options": [{ "value": "smoke-throw", "label": "Smoke canister" }] },
         { "attribute": "transform.position", "label": "Position", "input": "position", "scope": "edit", "default": "[0,0]", "min": -3000, "max": 3000, "step": 1 },
         { "attribute": "deployable.radius", "label": "Radius", "input": "number", "scope": "edit", "default": "190", "min": 20, "max": 800, "step": 10 }
+      ]
+    }
+  },
+  "cinder": {
+    "mass": -1,
+    "max_health": -1,
+    "collision_objects": [],
+    "admin": {
+      "name": "Cinder patch",
+      "spawnable": true,
+      "fields": [
+        { "attribute": "deployable.ability", "label": "Ability", "input": "select", "scope": "spawn", "default": "cinder-patch-cast", "options": [{ "value": "cinder-patch-cast", "label": "Cinder patch" }] },
+        { "attribute": "render.element", "label": "Element", "input": "select", "scope": "spawn", "default": "fire", "options": [{ "value": "fire", "label": "Fire" }, { "value": "frost", "label": "Frost" }, { "value": "storm", "label": "Storm" }, { "value": "arcane", "label": "Arcane" }, { "value": "earth", "label": "Earth" }] },
+        { "attribute": "transform.position", "label": "Position", "input": "position", "scope": "edit", "default": "[0,0]", "min": -3000, "max": 3000, "step": 1 },
+        { "attribute": "deployable.radius", "label": "Radius", "input": "number", "scope": "edit", "default": "130", "min": 20, "max": 800, "step": 10 }
+      ]
+    }
+  },
+  "firestorm": {
+    "mass": -1,
+    "max_health": -1,
+    "collision_objects": [],
+    "admin": {
+      "name": "Firestorm",
+      "spawnable": true,
+      "fields": [
+        { "attribute": "deployable.ability", "label": "Ability", "input": "select", "scope": "spawn", "default": "firestorm-cast", "options": [{ "value": "firestorm-cast", "label": "Firestorm" }] },
+        { "attribute": "render.element", "label": "Element", "input": "select", "scope": "spawn", "default": "fire", "options": [{ "value": "fire", "label": "Fire" }, { "value": "frost", "label": "Frost" }, { "value": "storm", "label": "Storm" }, { "value": "arcane", "label": "Arcane" }, { "value": "earth", "label": "Earth" }] },
+        { "attribute": "transform.position", "label": "Position", "input": "position", "scope": "edit", "default": "[0,0]", "min": -3000, "max": 3000, "step": 1 },
+        { "attribute": "deployable.radius", "label": "Radius", "input": "number", "scope": "edit", "default": "225", "min": 20, "max": 800, "step": 10 }
+      ]
+    }
+  },
+  "rime-aura": {
+    "mass": -1,
+    "max_health": -1,
+    "collision_objects": [],
+    "admin": {
+      "name": "Chilling aura",
+      "spawnable": true,
+      "fields": [
+        { "attribute": "deployable.ability", "label": "Ability", "input": "select", "scope": "spawn", "default": "rime-ward-cast", "options": [{ "value": "rime-ward-cast", "label": "Rime ward" }] },
+        { "attribute": "render.element", "label": "Element", "input": "select", "scope": "spawn", "default": "frost", "options": [{ "value": "fire", "label": "Fire" }, { "value": "frost", "label": "Frost" }, { "value": "storm", "label": "Storm" }, { "value": "arcane", "label": "Arcane" }, { "value": "earth", "label": "Earth" }] },
+        { "attribute": "transform.position", "label": "Position", "input": "position", "scope": "edit", "default": "[0,0]", "min": -3000, "max": 3000, "step": 1 },
+        { "attribute": "deployable.radius", "label": "Radius", "input": "number", "scope": "edit", "default": "160", "min": 20, "max": 800, "step": 10 }
+      ]
+    }
+  },
+  "ice-trap": {
+    "mass": -1,
+    "max_health": -1,
+    "collision_objects": [],
+    "admin": {
+      "name": "Ice trap",
+      "spawnable": true,
+      "fields": [
+        { "attribute": "deployable.ability", "label": "Ability", "input": "select", "scope": "spawn", "default": "ice-trap-cast", "options": [{ "value": "ice-trap-cast", "label": "Ice trap" }] },
+        { "attribute": "render.element", "label": "Element", "input": "select", "scope": "spawn", "default": "frost", "options": [{ "value": "fire", "label": "Fire" }, { "value": "frost", "label": "Frost" }, { "value": "storm", "label": "Storm" }, { "value": "arcane", "label": "Arcane" }, { "value": "earth", "label": "Earth" }] },
+        { "attribute": "transform.position", "label": "Position", "input": "position", "scope": "edit", "default": "[0,0]", "min": -3000, "max": 3000, "step": 1 },
+        { "attribute": "deployable.radius", "label": "Radius", "input": "number", "scope": "edit", "default": "95", "min": 20, "max": 800, "step": 5 }
+      ]
+    }
+  },
+  "blizzard": {
+    "mass": -1,
+    "max_health": -1,
+    "collision_objects": [],
+    "admin": {
+      "name": "Blizzard",
+      "spawnable": true,
+      "fields": [
+        { "attribute": "deployable.ability", "label": "Ability", "input": "select", "scope": "spawn", "default": "blizzard-cast", "options": [{ "value": "blizzard-cast", "label": "Blizzard" }] },
+        { "attribute": "render.element", "label": "Element", "input": "select", "scope": "spawn", "default": "frost", "options": [{ "value": "fire", "label": "Fire" }, { "value": "frost", "label": "Frost" }, { "value": "storm", "label": "Storm" }, { "value": "arcane", "label": "Arcane" }, { "value": "earth", "label": "Earth" }] },
+        { "attribute": "transform.position", "label": "Position", "input": "position", "scope": "edit", "default": "[0,0]", "min": -3000, "max": 3000, "step": 1 },
+        { "attribute": "deployable.radius", "label": "Radius", "input": "number", "scope": "edit", "default": "245", "min": 20, "max": 800, "step": 10 }
+      ]
+    }
+  },
+  "stone-wall": {
+    "mass": -1,
+    "max_health": 260,
+    "collision_objects": [{ "type": "circle", "radius": 28 }],
+    "admin": {
+      "name": "Stone wall segment",
+      "spawnable": true,
+      "fields": [
+        { "attribute": "transform.position", "label": "Position", "input": "position", "scope": "edit", "default": "[0,0]", "min": -3000, "max": 3000, "step": 1 },
+        { "attribute": "vitals.health", "label": "Health", "input": "number", "scope": "edit", "default": "260", "min": -1, "max": 10000, "step": 1 },
+        { "attribute": "vitals.max_health", "label": "Maximum health", "input": "number", "scope": "edit", "default": "260", "min": -1, "max": 10000, "step": 1 }
       ]
     }
   },

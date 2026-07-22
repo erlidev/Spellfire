@@ -11,5 +11,95 @@
     "kind": "blind",
     "stacking": "refresh",
     "duration_ms": 1800
+  },
+  "fire-burn": {
+    "name": "Burning",
+    "kind": "burn",
+    "stacking": "refresh",
+    "duration_ms": 4200,
+    "tick_ms": 700,
+    "damage_band": "standard",
+    "damage_fraction": 0.25
+  },
+  "frost-chill": {
+    "name": "Chilled",
+    "kind": "slow",
+    "stacking": "refresh",
+    "duration_ms": 1800,
+    "speed_multiplier": 0.72
+  },
+  "rime-armor": {
+    "name": "Rime ward",
+    "kind": "armor",
+    "stacking": "refresh",
+    "duration_ms": 6000,
+    "damage_multiplier": 0.85
+  },
+  "ice-root": {
+    "name": "Frozen in place",
+    "kind": "root",
+    "stacking": "refresh",
+    "duration_ms": 1300
+  },
+  "blizzard-chill": {
+    "name": "Blizzard chill",
+    "kind": "slow",
+    "stacking": "refresh",
+    "duration_ms": 1400,
+    "speed_multiplier": 0.6
+  },
+  "blizzard-stun": {
+    "name": "Frozen solid",
+    "kind": "stun",
+    "stacking": "refresh",
+    "duration_ms": 900
+  },
+  "skyfall-shock": {
+    "name": "Concussed",
+    "kind": "stun",
+    "stacking": "refresh",
+    "duration_ms": 600
+  },
+  "arcane-ward": {
+    "name": "Arcane ward",
+    "kind": "shield",
+    "stacking": "refresh",
+    "duration_ms": 8000,
+    "damage_band": "standard",
+    "absorb_hits": 3
+  },
+  "stone-knock": {
+    "name": "Staggered",
+    "kind": "knockback",
+    "stacking": "refresh",
+    "duration_ms": 140,
+    "speed": 420
+  },
+  "upheaval-knock": {
+    "name": "Upended",
+    "kind": "knockback",
+    "stacking": "refresh",
+    "duration_ms": 180,
+    "speed": 520
+  },
+  "upheaval-root": {
+    "name": "Pinned",
+    "kind": "root",
+    "stacking": "refresh",
+    "duration_ms": 900
+  },
+  "bulwark-armor": {
+    "name": "Bulwark",
+    "kind": "armor",
+    "stacking": "refresh",
+    "duration_ms": 7000,
+    "damage_multiplier": 0.7
+  },
+  "bulwark-shock": {
+    "name": "Shockwave",
+    "kind": "knockback",
+    "stacking": "refresh",
+    "duration_ms": 200,
+    "speed": 560
   }
 }

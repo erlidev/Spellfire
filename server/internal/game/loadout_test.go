@@ -8,6 +8,17 @@ import (
 	"spellfire/server/internal/model"
 )
 
+// onlySpell is a set holding exactly one spell, in one slot. A Mage's starter
+// draw fills most of the bar, so a test that wants a particular arrangement has
+// to state the whole thing rather than assume the rest is empty.
+func onlySpell(set model.Loadout, index int, id string) model.Loadout {
+	for slot := range set.Spells {
+		set.Spells[slot] = ""
+	}
+	set.Spells[index] = id
+	return set
+}
+
 func TestJoinResolvesTheSavedLoadout(t *testing.T) {
 	world, now := testWorld()
 	character := model.Character{ID: "m1", Name: "Mage", Class: model.Mage}
@@ -58,13 +69,12 @@ func TestLoadoutIsLockedOutsideTheSafeZone(t *testing.T) {
 	p := world.AddPlayer(model.Character{ID: "m1", Name: "Mage", Class: model.Mage}, now)
 	p.Position = Vec{world.tuning.SafeRadius + 1, 0}
 	before := p.Loadout.Clone()
-	set := p.Loadout.Clone()
-	set.Spells[0], set.Spells[3] = "", "fire-bolt"
+	set := onlySpell(p.Loadout.Clone(), 3, "fire-bolt")
 	returned, err := world.SetLoadout("m1", set, now)
 	if !errors.Is(err, ErrLoadoutLocked) {
 		t.Fatalf("a field respec was allowed: %v", err)
 	}
-	if p.Loadout.Spells[3] != "" {
+	if p.Loadout.Spells[3] != before.Spells[3] {
 		t.Fatal("a refused commit changed the equipped set")
 	}
 	if returned.Spells[3] != before.Spells[3] {
@@ -114,8 +124,7 @@ func TestSelectedSlotChoosesTheAbility(t *testing.T) {
 	world, now := testWorld()
 	p := world.AddPlayer(model.Character{ID: "m1", Name: "Mage", Class: model.Mage}, now)
 	p.Position = Vec{}
-	set := p.Loadout.Clone()
-	set.Spells[0], set.Spells[2] = "", "fire-bolt"
+	set := onlySpell(p.Loadout.Clone(), 2, "fire-bolt")
 	if _, err := world.SetLoadout("m1", set, now); err != nil {
 		t.Fatalf("commit refused: %v", err)
 	}

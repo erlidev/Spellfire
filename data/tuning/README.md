@@ -33,7 +33,11 @@ Rules, from [`invariants.md`](../../docs/game/design/invariants.md) and
   field, and `interval_ms` is rejected outright — fire cadence *is* the DPS axis.
   Multipliers are bounded to `[0.5, 2]`, an exact `1` is rejected as a
   non-change, and every component must declare a material `cost` and a
-  plain-language `effect`.
+  plain-language `effect`. A mana crystal may additionally claim `spell_damage`,
+  `spell_healing`, `area_radius` — which widens a blast, a field, and the
+  telegraph that warns about them together — and `element_damage`, which applies
+  only to the `element` the crystal names. A crystal declares that element and
+  that modifier together or neither.
 - **Every damaging ability declares a dodge vector**, and no projectile may
   have zero travel speed. The loader rejects both, and it also rejects a dodge
   vector the simulation cannot deliver or a cast-time/telegraph claim without
@@ -41,16 +45,34 @@ Rules, from [`invariants.md`](../../docs/game/design/invariants.md) and
 - **One ability contract.** Anything that acts — a gun, a spell, a gadget, and
   later a mob — points at an `abilities.json` row for its cost, cadence,
   cooldown, counterplay, delivery, and effects. Weapons, spells, and gadgets
-  hold identity only. Delivery has four shapes and an ability declares at most
-  the ones that fit: a travelling `projectile`, the `blast` its impact resolves
-  into, the `deployable` field it leaves standing, and the `guard` it raises
-  instead of throwing anything.
+  hold identity only. Delivery is a set of shapes and an ability declares at
+  most the ones that fit: a travelling `projectile`, the `blast` its impact
+  resolves into, the `deployable` field it leaves standing, the `guard` it
+  raises instead of throwing anything, the `wall` it authors, the `blink` that
+  moves its caster, the `cleanse` that strips statuses, the `chain` a landed hit
+  arcs along, and the `self_effects` it leaves on the caster. `placement` moves
+  where all of that lands: a point that far along the committed aim, which is
+  also where the telegraph is anchored. An ability that delivers nothing is
+  rejected.
 - **A deployable is a field, not a wall.** A `deployable` row names an
-  `entities.json` archetype with no collision geometry, a radius, a lifetime,
-  and a `reveal_radius` inside which it stops hiding anyone. It hides only what
-  its radius covers completely, so the rule matches the circle the client draws.
-  It changes what can be seen, never where a body may walk, and it must carry a cooldown so one body
-  cannot cover the world in them.
+  `entities.json` archetype with no collision geometry, a radius, and a
+  lifetime. Only a field that sets `conceals` takes anything off the wire, and
+  only that kind may declare a `reveal_radius` inside which it stops hiding
+  anyone; it hides only what its radius covers completely, so the rule matches
+  the circle the client draws. A field may also pulse: `tick_ms` paces it,
+  `damage_band` and `damage_fraction` price one beat against the shared band,
+  `effects` are what each beat applies, and `final_effects` land once on the
+  beat that closes the field. `trigger` makes it a trap, sprung and spent by the
+  first body to reach it — a trap may not also close with a final pulse. Every
+  field changes what happens where a body stands, never where it may walk, and
+  must carry a cooldown so one body cannot cover the world in them.
+- **A wall is terrain a caster authored.** A `wall` row names a destructible
+  archetype that *does* collide, the number of `segments` laid perpendicular to
+  the cast, their `spacing`, and how long they stand. It must be placed, must
+  hold a cooldown, and may never deal damage: terrain is cover, not a weapon.
+- **Bounded steering, not lock-on.** A projectile's `homing` declares a turn
+  rate and an acquisition range. The rate is capped at one full turn per second,
+  and a homing round may not also land instantly.
 - **A guard is spent, not held.** A `guard` row carries `durability` — the
   barrier's own health, which every blocked round is charged to and whose
   overflow reaches the body behind it — plus `regen_per_second` and
@@ -91,10 +113,10 @@ Rules, from [`invariants.md`](../../docs/game/design/invariants.md) and
 | `progression.json` | XP curve, the XP each source awards, the starter-kit draw size, the crafted-item capacity, and the developer-mode level-grant bound |
 | `elements.json` | The five Mage elements and their roles |
 | `abilities.json` | What every action costs, how often it may be used, how it is dodged, what it delivers, and what it applies |
-| `effects.json` | Status effects: burn, slow, root, stun, knockback, shield, blind |
+| `effects.json` | Status effects: burn, slow, root, stun, knockback, shield, blind, armor |
 | `weapons.json` | Craftable weapons: class, blueprint, magazine, unlock level, weight class, recoil pattern, spread, optional scope, optional material cost, and the ability they fire or the spell they cast |
 | `ammunition.json` | Crafted special-ammunition recipes: what they cost, what material they produce, and how many rounds a batch yields |
-| `spells.json` | Spells: element, tier, unlock level, and the ability they cast |
+| `spells.json` | The 5 × 4 spell grid: element, tier, unlock level, and the ability each spell casts |
 | `gadgets.json` | Gadgets: the Gunslinger's slot content, its unlock level, and the ability each performs |
 | `components.json` | Blueprint slot layouts, and the components that fill them: material cost, behaviour modifiers, and the plain-language effect the crafting UI shows |
 | `materials.json` | Material grades, kinds, rows, and the bounded admin grant input |

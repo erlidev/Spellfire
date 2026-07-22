@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { abilities, abilityFor, combat, damageBandFor, dangerBandAt, damageOf, entityDefinitions, materials, projectileByKind, pvpRadius, resourceMax, safeRadius, simulation, spells, starterWeapon, weapons, world } from "./tuning";
+import { abilities, abilityFor, deployableByKind, combat, damageBandFor, dangerBandAt, damageOf, entityDefinitions, materials, projectileByKind, pvpRadius, resourceMax, safeRadius, simulation, spells, starterWeapon, weapons, world } from "./tuning";
 
 describe("shared tuning tables", () => {
   it("derives the safety radii from the danger band rows rather than literals", () => {
@@ -74,5 +74,24 @@ describe("shared tuning tables", () => {
     }
     expect(entityDefinitions.player!.admin.fields.some((field) => field.attribute === "transform.position" && field.input === "position" && field.scope === "edit")).toBe(true);
     expect(materials.admin_grant.attribute).toBe("inventory.material_count");
+  });
+});
+
+describe("spells", () => {
+  it("resolves a field's identity from the ability that places it", () => {
+    // Only a concealing field takes anything off the wire, and only that one may
+    // be drawn over the bodies inside it.
+    expect(deployableByKind("smoke")?.conceals).toBe(true);
+    expect(deployableByKind("cinder")?.conceals).toBeFalsy();
+    expect(deployableByKind("cinder")?.damage_band).toBeTruthy();
+  });
+
+  it("prices every spell in mana, and every defining spell in cooldown too", () => {
+    for (const [id, spell] of Object.entries(spells)) {
+      const ability = abilities[spell.ability]!;
+      expect(ability.cost.kind, id).toBe("mana");
+      expect(ability.cost.amount, id).toBeGreaterThan(0);
+      if (spell.tier > 1) expect(ability.cooldown_ms, id).toBeGreaterThan(0);
+    }
   });
 });

@@ -78,7 +78,7 @@ func TestDeathCancelsPendingTelegraphWithResolutionFlash(t *testing.T) {
 func TestSnapshotCarriesTelegraphAndExpandedPlayerState(t *testing.T) {
 	w, now := testWorld()
 	viewer := addTestPlayer(w, "viewer", model.Gunslinger, Vec{1200, 0}, now)
-	mage := addTestPlayer(w, "mage", model.Mage, Vec{1250, 0}, now)
+	mage := casting(t, w, addTestPlayer(w, "mage", model.Mage, Vec{1250, 0}, now), "fire-bolt")
 	mage.SquadID = "squad-a"
 	mage.LingerUntil = now.Add(time.Second)
 	mage.Effects = []ActiveEffect{{EffectID: "slow-test", ExpiresAt: now.Add(time.Second)}}

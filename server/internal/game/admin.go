@@ -338,7 +338,7 @@ func (w *World) adminDeployable(position Vec, values map[string]string, now time
 	if ability.Deployable == nil {
 		return fmt.Errorf("ability %q deploys nothing", ability.ID)
 	}
-	deployable := w.deploy("", *ability.Deployable, position, now)
+	deployable := w.deploy("", *ability.Deployable, position, values["render.element"], now)
 	if deployable == nil {
 		return fmt.Errorf("ability %q deploys unknown archetype %q", ability.ID, ability.Deployable.Kind)
 	}

@@ -409,16 +409,36 @@ func (w *World) hostileReach(owner *Player, target Vec) bool {
 	return owner.Position.LengthSq() > limit && target.LengthSq() > limit
 }
 
+// hazardReach is hostileReach for something standing in the world on its own —
+// a developer-placed field with no caster behind it. PvP protection still holds
+// over the body it would reach; what it cannot do is consult an attacker who
+// does not exist.
+func (w *World) hazardReach(owner *Player, ownerID string, target Vec) bool {
+	if ownerID == "" {
+		limit := w.tuning.PvPRadius * w.tuning.PvPRadius
+		return target.LengthSq() > limit
+	}
+	return w.hostileReach(owner, target)
+}
+
 // detonate resolves an impact's area. Everyone inside the radius takes the
 // band's damage and the blast's effects, pushed away from where it landed. A
 // raised shield does not stop it: the shield blocks what flies into its arc,
 // never what goes off around it.
 func (w *World) detonate(projectile *Projectile, at Vec, when time.Time) {
-	owner := w.players[projectile.OwnerID]
-	radius := projectile.Blast.Radius
+	w.explode(projectile.OwnerID, at, projectile.Blast.Radius, projectile.Damage, projectile.BlastEffects, when, projectile.BlinkOnHit)
+}
+
+// explode is the area resolver every blast reaches, whether a round carried it
+// to an impact or a telegraph placed it on the ground. It reports whether it
+// actually reached anybody, which is what a cast that pays out on landing —
+// Skyfall's blink — is conditioned on.
+func (w *World) explode(ownerID string, at Vec, radius, damage float64, effects []string, when time.Time, blinkOnHit bool) bool {
+	owner := w.players[ownerID]
+	struck := false
 	for _, id := range sortedPlayerIDs(w.players) {
 		target := w.players[id]
-		if id == projectile.OwnerID || !target.Alive {
+		if id == ownerID || !target.Alive {
 			continue
 		}
 		if target.Position.Sub(at).LengthSq() > radius*radius {
@@ -427,7 +447,25 @@ func (w *World) detonate(projectile *Projectile, at Vec, when time.Time) {
 		if !w.hostileReach(owner, target.Position) {
 			continue
 		}
-		w.damage(target, projectile.Damage, projectile.OwnerID, when)
-		w.applyEffects(target, projectile.BlastEffects, projectile.OwnerID, target.Position.Sub(at), when)
+		struck = true
+		w.damage(target, damage, ownerID, when)
+		w.applyEffects(target, effects, ownerID, target.Position.Sub(at), when)
 	}
+	// Landing it is what grants the reposition: a blink handed out for a missed
+	// area would be free mobility with a damage roll attached.
+	if struck && blinkOnHit && owner != nil {
+		w.teleport(owner, at, when)
+	}
+	return struck
+}
+
+// teleport places a body exactly where an ability says, when that point is
+// somewhere it could stand. Unlike a blink it does not walk: the destination is
+// a place the world has already resolved something at.
+func (w *World) teleport(p *Player, to Vec, now time.Time) {
+	if !p.Alive || p.Lingering() || p.Mass < 0 || !w.standable(to) {
+		return
+	}
+	p.Position, p.Velocity, p.DashTicksLeft = to, Vec{}, 0
+	w.recordHistory(p, now)
 }

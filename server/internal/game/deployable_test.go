@@ -84,7 +84,7 @@ func TestSmokeHidesOnlyWhatItCoversCompletely(t *testing.T) {
 	if !visible(w, viewer.ID, target.ID, now) {
 		t.Fatal("a body in the open was already invisible")
 	}
-	w.deploy("", field, cloud, now)
+	w.deploy("", field, cloud, "", now)
 	if visible(w, viewer.ID, target.ID, now) {
 		t.Fatal("a cloud covering a body whole hid nothing")
 	}
@@ -178,7 +178,7 @@ func TestSmokeDoesNotHideYourOwnRounds(t *testing.T) {
 	field := *w.tuning.Tables.Abilities["smoke-throw"].Deployable
 	shooter := carrying(t, w, addTestPlayer(w, "shooter", model.Gunslinger, Vec{1200, 0}, now), "starter-rifle")
 	other := carrying(t, w, addTestPlayer(w, "other", model.Gunslinger, Vec{1200, 300}, now), "starter-rifle")
-	w.deploy("", field, Vec{1350, 0}, now)
+	w.deploy("", field, Vec{1350, 0}, "", now)
 
 	fire(w, shooter, 1, now)
 	fire(w, other, 1, now)

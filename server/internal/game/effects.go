@@ -106,6 +106,28 @@ func (w *World) absorb(p *Player, amount float64) float64 {
 	return amount
 }
 
+// armorScale is the fraction of incoming damage that still reaches the body.
+// Armor is mitigation rather than a pool: like slows it takes the strongest
+// rather than compounding, so two wards can never stack into immunity.
+func (w *World) armorScale(p *Player) float64 {
+	scale := 1.0
+	for _, active := range p.Effects {
+		if effect := w.tuning.Tables.Effects[active.EffectID]; effect.Kind == "armor" {
+			scale = math.Min(scale, effect.DamageMultiplier)
+		}
+	}
+	return scale
+}
+
+// stripEffects clears every status running on a body and reports how many were
+// removed. It is what a dispel does: buffs, shields, and debuffs alike, because
+// "strips effects and shields" is one rule and not two.
+func (w *World) stripEffects(p *Player) int {
+	removed := len(p.Effects)
+	p.Effects = nil
+	return removed
+}
+
 // movementScale is the slowest multiplier acting on the body. Slows take the
 // strongest rather than multiplying, so stacking control cannot compound into a
 // root that no dodge answers.

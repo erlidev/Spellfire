@@ -87,6 +87,41 @@ func carrying(t *testing.T, w *World, p *Player, weaponID string) *Player {
 	return p
 }
 
+// casting is carrying's counterpart for a Mage: it puts one named spell in the
+// selected slot and grants the unlock behind it, for the tests that are about
+// one spell rather than about whatever the starter draw handed the character.
+// Affinity is satisfied trivially, because the rest of the bar is emptied.
+func casting(t *testing.T, w *World, p *Player, spellID string) *Player {
+	t.Helper()
+	spell, ok := w.tuning.Tables.Spells[spellID]
+	if !ok {
+		t.Fatalf("%s is not a spell", spellID)
+	}
+	p.Unlocks, _ = p.Unlocks.With(spellID)
+	for index := range p.Loadout.Spells {
+		p.Loadout.Spells[index] = ""
+	}
+	// A tier above one needs same-element company, which a single-spell bar
+	// cannot give it; those tests fill the rest of the bar themselves.
+	p.Loadout.Spells[0], p.Selected = spellID, 0
+	if spell.Tier > 1 {
+		filled := 1
+		for _, id := range sortedKeys(w.tuning.Tables.Spells) {
+			other := w.tuning.Tables.Spells[id]
+			if id == spellID || other.Element != spell.Element || filled >= len(p.Loadout.Spells) {
+				continue
+			}
+			p.Unlocks, _ = p.Unlocks.With(id)
+			p.Loadout.Spells[filled] = id
+			filled++
+		}
+	}
+	if _, ok := w.ability(p); !ok {
+		t.Fatalf("%s did not resolve to an ability", spellID)
+	}
+	return p
+}
+
 func TestMovementNormalizesDiagonalsAndAcknowledgesInput(t *testing.T) {
 	w, now := testWorld()
 	p := addTestPlayer(w, "p", model.Gunslinger, Vec{}, now)

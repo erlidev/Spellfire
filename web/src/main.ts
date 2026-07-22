@@ -5,7 +5,7 @@ import { Predictor } from "./game/prediction";
 import { joystickVector, movementButtons } from "./game/touch";
 import { GameView } from "./game/view";
 import { GameSocket } from "./net/socket";
-import { abilities, ammunition as ammunitionTable, damageBandFor, dangerBandAt, entityDefinitions, gadgets as gadgetsTable, handlingScale, materials as materialsTable, progression as progressionTable, resourceMax, safeRadius, session, specialAmmunition, weapons, weightOf, world, xpToNext, type AdminField, type EntityDefinition, type Guard, type Weapon } from "./tuning";
+import { abilities, ammunition as ammunitionTable, damageBandFor, dangerBandAt, entityDefinitions, handlingScale, materials as materialsTable, progression as progressionTable, resourceMax, safeRadius, session, specialAmmunition, weapons, weightOf, world, xpToNext, type AdminField, type EntityDefinition, type Guard, type Weapon } from "./tuning";
 import { Buttons, ServerKind, type Character, type CharacterClass, type CraftedItem, type Entity, type LoadoutSet, type ServerMessage } from "./types";
 
 function element<T extends HTMLElement>(id: string): T {
@@ -367,8 +367,10 @@ class SpellFire {
   private trackCooldown(buttons: number): void {
     if (!(buttons & Buttons.Fire) || (this.previousButtons & Buttons.Fire)) return;
     const slot = bar(this.activeCharacter?.class ?? "gunslinger", this.loadout, this.items)[this.selectedSlot];
-    if (!slot?.id || slot.kind !== "gadget") return;
-    const ability = abilities[gadgetsTable[slot.id]?.ability ?? ""];
+    if (!slot?.id) return;
+    // Every slot kind can hold a lockout: a gadget's throw and every spell above
+    // tier one are both cooldown-gated, and both owe the same feedback.
+    const ability = abilities[slot.abilityId];
     if (!ability?.cooldown_ms) return;
     const ready = this.cooldowns[slot.id] ?? 0;
     if (Date.now() < ready) return;
@@ -392,8 +394,7 @@ class SpellFire {
     const slots = bar(this.activeCharacter?.class ?? "gunslinger", this.loadout, this.items);
     const slot = slots[this.selectedSlot];
     if (!slot || slot.kind !== "gadget" || !slot.id) return undefined;
-    const ability = gadgetsTable[slot.id]?.ability;
-    return ability ? abilities[ability]?.guard : undefined;
+    return abilities[slot.abilityId]?.guard;
   }
 
   /**

@@ -278,3 +278,49 @@ func starter(t *testing.T, tables *tuning.Tables, class string) tuning.Weapon {
 	}
 	return weapon
 }
+
+// A crystal that widens what a cast covers must widen the figure that warns
+// about it too. An area that grew past its telegraph would be damage the target
+// was never shown.
+func TestAreaCrystalWidensTheFieldAndItsTelegraphTogether(t *testing.T) {
+	tables := shipped(t)
+	staff := tables.Weapons["starter-staff"]
+	ability := tables.Abilities["cinder-patch-cast"]
+	if ability.Deployable == nil || ability.Telegraph == nil {
+		t.Fatal("the placed field row lost its field or its telegraph")
+	}
+	_, widened := crafting.Apply(tables, staff, ability, map[string]string{"crystal": "geomancer-crystal"})
+	if widened.Deployable.Radius <= ability.Deployable.Radius {
+		t.Fatalf("field radius = %g, want more than %g", widened.Deployable.Radius, ability.Deployable.Radius)
+	}
+	if widened.Telegraph.Radius <= ability.Telegraph.Radius {
+		t.Fatalf("telegraph radius = %g, want more than %g", widened.Telegraph.Radius, ability.Telegraph.Radius)
+	}
+	// The rows are pointers into the tables, so widening one build must never
+	// widen the ability for everyone casting it.
+	if tables.Abilities["cinder-patch-cast"].Deployable.Radius != ability.Deployable.Radius {
+		t.Fatal("applying an area crystal edited the shared field row in place")
+	}
+}
+
+// An element bias is the specialisation a rarer crystal has to earn: it lifts
+// one school and nothing else.
+func TestElementBiasAppliesOnlyToItsSchool(t *testing.T) {
+	tables := shipped(t)
+	parts := map[string]string{"crystal": "pyre-heart-crystal", "stave": "oak-stave"}
+	crystal := tables.Components.Components["pyre-heart-crystal"]
+	ability := tables.Abilities["fire-bolt-cast"]
+
+	biased := crafting.Bias(tables, ability, crystal.Element, parts)
+	if biased.DamageScale() <= 1 {
+		t.Fatalf("a fire spell through a fire crystal scales by %g", biased.DamageScale())
+	}
+	other := crafting.Bias(tables, ability, "frost", parts)
+	if other.DamageScale() != ability.DamageScale() {
+		t.Fatalf("a frost spell through a fire crystal scales by %g", other.DamageScale())
+	}
+	// A slot with no element — a gun or a gadget — is never biased.
+	if none := crafting.Bias(tables, ability, "", parts); none.DamageScale() != ability.DamageScale() {
+		t.Fatal("an elementless slot picked up a crystal's bias")
+	}
+}

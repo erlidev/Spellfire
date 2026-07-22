@@ -40,14 +40,28 @@ export interface DamageBand { name: string; damage_per_hit: number; target_ttk_s
 export interface WeightClass { name: string; movement_multiplier: number; recoil_multiplier: number; move_spread_multiplier: number }
 export interface CombatTable { roles: string[]; dodge_vectors: string[]; player: PlayerBody; dash: Dash; weight_classes: Record<string, WeightClass>; damage_bands: Record<string, DamageBand> }
 export interface Element { name: string; primary_role: string; secondary: string; character: string }
-export interface Projectile { kind: string; speed: number; life_seconds: number; radius: number; silhouette: string; pellets?: number; pellet_spread_degrees?: number; hitscan_range?: number; max_range?: number; falloff_start?: number; falloff_min?: number }
+export interface Homing { turn_degrees_per_second: number; acquire_range: number }
+export interface Projectile { kind: string; speed: number; life_seconds: number; radius: number; silhouette: string; pellets?: number; pellet_spread_degrees?: number; hitscan_range?: number; max_range?: number; falloff_start?: number; falloff_min?: number; homing?: Homing }
 export interface Cost { kind: "none" | "ammo" | "mana" | "material"; material?: string; amount: number }
 export interface Telegraph { shape: "circle" | "cone" | "line" | "ring"; radius?: number; length?: number; width?: number; angle_degrees?: number; active_ms: number; resolved_ms: number }
 export interface Blast { radius: number; effects?: string[] }
 export interface Guard { arc_degrees: number; movement_multiplier: number; durability: number; regen_per_second: number; regen_delay_ms: number }
-export interface Deployable { kind: string; radius: number; duration_ms: number; reveal_radius: number }
-export interface Ability { name: string; cost: Cost; interval_ms: number; cooldown_ms: number; windup_ms?: number; telegraph?: Telegraph; dodge_vector?: string; damage_band?: string; projectile?: Projectile; effects?: string[]; requires_scope?: boolean; blast?: Blast; guard?: Guard; deployable?: Deployable }
-export interface Effect { name: string; kind: string; stacking: string; duration_ms: number; tick_ms?: number; damage_band?: string; damage_fraction?: number; speed_multiplier?: number; speed?: number; absorb_hits?: number }
+export interface Deployable {
+  kind: string; radius: number; duration_ms: number; reveal_radius?: number; conceals?: boolean;
+  damage_band?: string; damage_fraction?: number; tick_ms?: number; effects?: string[]; final_effects?: string[]; trigger?: boolean;
+}
+export interface Placement { range: number }
+export interface Blink { distance: number }
+export interface Chain { jumps: number; range: number }
+export interface Cleanse { radius: number; mana_per_effect: number }
+export interface Wall { kind: string; segments: number; spacing: number; duration_ms: number }
+export interface Ability {
+  name: string; cost: Cost; interval_ms: number; cooldown_ms: number; windup_ms?: number; telegraph?: Telegraph;
+  dodge_vector?: string; damage_band?: string; projectile?: Projectile; effects?: string[]; requires_scope?: boolean;
+  blast?: Blast; guard?: Guard; deployable?: Deployable;
+  placement?: Placement; self_effects?: string[]; blink?: Blink; blink_on_hit?: boolean; chain?: Chain; cleanse?: Cleanse; wall?: Wall;
+}
+export interface Effect { name: string; kind: string; stacking: string; duration_ms: number; tick_ms?: number; damage_band?: string; damage_fraction?: number; speed_multiplier?: number; speed?: number; absorb_hits?: number; damage_multiplier?: number }
 export interface Recoil { pattern: number[]; recovery_ms: number }
 export interface Spread { standing_degrees: number; moving_degrees: number }
 export interface Scope { movement_multiplier: number; spread_multiplier: number; view_bonus: number }
@@ -58,7 +72,7 @@ export interface Gadget { name: string; class: CharacterClass; starter?: boolean
 export interface ProgressionTable { max_level: number; base_xp: number; growth: number; sources: Record<string, number>; crafted_item_capacity: number; starter_kit: { unlocks: number }; admin_grant: AdminField }
 export interface LoadoutTable { weapon_slots: number; gadget_slots: number; spell_slots: number; affinity: { same_element_per_tier: number } }
 export interface Blueprint { name: string; summary: string; slots: string[] }
-export interface Component { name: string; blueprint: string; slot: string; kind: "gun_part" | "mana_crystal" | "stave"; tier: number; effect: string; cost: Record<string, number>; modifiers: Record<string, number> }
+export interface Component { name: string; blueprint: string; slot: string; kind: "gun_part" | "mana_crystal" | "stave"; tier: number; element?: string; effect: string; cost: Record<string, number>; modifiers: Record<string, number> }
 export interface CraftRecipe { blueprint: string; summary: string; slots: Record<string, string[]> }
 export interface ComponentsTable { blueprints: Record<string, Blueprint>; components: Record<string, Component>; recipes: Record<string, CraftRecipe> }
 export interface Grade { name: string; tier: number }
@@ -197,4 +211,14 @@ for (const ability of Object.values(abilities)) if (ability.projectile) projecti
 
 export function projectileByKind(kind: string): Projectile | undefined {
   return projectilesByKind.get(kind);
+}
+
+// Deployed fields carry only their archetype on the wire, so what a field is —
+// concealing smoke or plainly visible ground — is resolved from the ability
+// that places it, exactly as a projectile's silhouette is.
+const deployablesByKind = new Map<string, Deployable>();
+for (const ability of Object.values(abilities)) if (ability.deployable) deployablesByKind.set(ability.deployable.kind, ability.deployable);
+
+export function deployableByKind(kind: string): Deployable | undefined {
+  return deployablesByKind.get(kind);
 }

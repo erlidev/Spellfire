@@ -1,7 +1,7 @@
 import { Application, Container, Graphics, Text } from "pixi.js";
 // Install eval-free polyfills so WebGL works under a CSP without 'unsafe-eval'. Side-effect import; must run before the renderer is created.
 import "pixi.js/unsafe-eval";
-import { abilities, effects, projectileByKind, safeRadius, simulation, world } from "../tuning";
+import { abilities, deployableByKind, effects, projectileByKind, safeRadius, simulation, world } from "../tuning";
 import type { Entity, ServerMessage } from "../types";
 import { Allegiance, EntityType } from "../types";
 import type { Predictor } from "./prediction";
@@ -226,7 +226,7 @@ export class GameView {
     if (view && view.type !== entity.type) { this.removeActor(entity.id); view = undefined; }
     if (!view) {
       view = this.createActor(entity, self, now); this.actors.set(entity.id, view);
-      this.layerFor(entity.type).addChild(view.root);
+      this.layerFor(entity).addChild(view.root);
     }
     view.root.position.set(entity.x, entity.y);
     view.root.alpha = entity.deleting ? Math.max(0, 1 - entity.deleteProgress) : entity.alive ? entity.lingering ? .62 : 1 : .32;
@@ -248,9 +248,16 @@ export class GameView {
     }
   }
 
-  private layerFor(type: number): Container {
-    if (type === EntityType.Telegraph) return this.telegraphLayer;
-    return type === EntityType.Deployable ? this.fogLayer : this.entityLayer;
+  /**
+   * Which layer an entity is drawn in. Only a concealing field draws over
+   * bodies — that is exactly what the server has stopped sending behind it.
+   * A burning patch or a blizzard is ground the server still shows everything
+   * inside, so painting over it would hide what the player is entitled to see.
+   */
+  private layerFor(entity: Entity): Container {
+    if (entity.type === EntityType.Telegraph) return this.telegraphLayer;
+    if (entity.type !== EntityType.Deployable) return this.entityLayer;
+    return deployableByKind(entity.className)?.conceals ? this.fogLayer : this.telegraphLayer;
   }
 
   /**
@@ -352,7 +359,9 @@ export class GameView {
         const angle = core
           ? spin * Math.PI * 2
           : ((index - puffCoreCount + (spin - .5) * 1.1) / ring) * Math.PI * 2;
-        puff.circle(0, 0, size).fill({ color: 0xdfe6ef, alpha: 1 });
+        // A field is tinted by what cast it, because a smoke cloud, a burning
+        // patch, and a blizzard are the same shape and must never read alike.
+        puff.circle(0, 0, size).fill({ color: elementColors[entity.element] ?? 0xdfe6ef, alpha: 1 });
         puffs.push({
           graphic: puff, distance: radius * (core ? .38 * spread : .44 + spread * .26),
           angle, radius: size, drift: turn + (spin - .5) * (core ? .3 : .05),
@@ -365,6 +374,13 @@ export class GameView {
       const radius = entity.radius;
       body.rect(-6, 4, 12, radius).fill(colors.trunk).stroke({ color: colors.outline, width: 4 });
       body.circle(-radius * .3, 0, radius * .72).circle(radius * .35, 2, radius * .67).circle(0, -radius * .42, radius * .72).fill(colors.tree).stroke({ color: colors.outline, width: 4 });
+    } else if (entity.type === EntityType.WorldItem && entity.className === "stone-wall") {
+      // A raised segment reads as rock rather than masonry: it is destructible
+      // terrain a caster put there, and its health bar is drawn like a tree's.
+      const radius = entity.radius || 28;
+      body.moveTo(-radius, radius * .5).lineTo(-radius * .7, -radius * .8).lineTo(0, -radius).lineTo(radius * .8, -radius * .6).lineTo(radius, radius * .6).closePath()
+        .fill(elementColors.earth).stroke({ color: colors.outline, width: 4 });
+      body.moveTo(-radius * .4, radius * .4).lineTo(-radius * .1, -radius * .5).stroke({ color: 0x8d7a5e, width: 3, alpha: .8 });
     } else if (entity.type === EntityType.WorldItem && entity.className === "wall") {
       body.rect(-entity.length / 2, -entity.width / 2, entity.length, entity.width).fill(0x68717d).stroke({ color: colors.outline, width: 5 });
       body.moveTo(-entity.length / 2, 0).lineTo(entity.length / 2, 0).moveTo(0, -entity.width / 2).lineTo(0, entity.width / 2).stroke({ color: 0x8d98a6, width: 2 });

@@ -161,7 +161,8 @@
       "kind": "smoke",
       "radius": 190,
       "duration_ms": 9000,
-      "reveal_radius": 70
+      "reveal_radius": 70,
+      "conceals": true
     }
   },
   "flash-throw": {
@@ -200,6 +201,7 @@
     },
     "dodge_vector": "projectile_travel",
     "damage_band": "standard",
+    "effects": ["fire-burn"],
     "projectile": {
       "kind": "fireball",
       "speed": 592.8,
@@ -207,5 +209,284 @@
       "radius": 9,
       "silhouette": "bolt"
     }
+  },
+  "cinder-patch-cast": {
+    "name": "Cinder patch",
+    "cost": { "kind": "mana", "amount": 24 },
+    "interval_ms": 400,
+    "cooldown_ms": 9000,
+    "windup_ms": 500,
+    "telegraph": { "shape": "circle", "radius": 130, "active_ms": 250, "resolved_ms": 200 },
+    "dodge_vector": "ground_indicator",
+    "placement": { "range": 320 },
+    "deployable": {
+      "kind": "cinder",
+      "radius": 130,
+      "duration_ms": 6000,
+      "tick_ms": 700,
+      "damage_band": "standard",
+      "damage_fraction": 0.35,
+      "effects": ["fire-burn"]
+    }
+  },
+  "flame-wave-cast": {
+    "name": "Flame wave",
+    "cost": { "kind": "mana", "amount": 36 },
+    "interval_ms": 500,
+    "cooldown_ms": 13000,
+    "windup_ms": 600,
+    "telegraph": { "shape": "cone", "length": 430, "angle_degrees": 62, "active_ms": 220, "resolved_ms": 200 },
+    "dodge_vector": "telegraph",
+    "damage_band": "standard",
+    "effects": ["fire-burn"],
+    "projectile": {
+      "kind": "flame-wave",
+      "speed": 470,
+      "life_seconds": 1,
+      "radius": 15,
+      "silhouette": "bolt",
+      "pellets": 5,
+      "pellet_spread_degrees": 55
+    }
+  },
+  "firestorm-cast": {
+    "name": "Firestorm",
+    "cost": { "kind": "mana", "amount": 55 },
+    "interval_ms": 600,
+    "cooldown_ms": 30000,
+    "windup_ms": 1000,
+    "telegraph": { "shape": "circle", "radius": 225, "active_ms": 300, "resolved_ms": 250 },
+    "dodge_vector": "ground_indicator",
+    "placement": { "range": 380 },
+    "deployable": {
+      "kind": "firestorm",
+      "radius": 225,
+      "duration_ms": 8000,
+      "tick_ms": 600,
+      "damage_band": "standard",
+      "damage_fraction": 0.4,
+      "effects": ["fire-burn"]
+    }
+  },
+  "frost-shard-cast": {
+    "name": "Frost shard",
+    "cost": { "kind": "mana", "amount": 12 },
+    "interval_ms": 300,
+    "cooldown_ms": 0,
+    "windup_ms": 280,
+    "telegraph": { "shape": "line", "length": 760, "width": 52, "active_ms": 100, "resolved_ms": 150 },
+    "dodge_vector": "projectile_travel",
+    "damage_band": "standard",
+    "effects": ["frost-chill"],
+    "projectile": {
+      "kind": "frost-shard",
+      "speed": 640,
+      "life_seconds": 1.4,
+      "radius": 8,
+      "silhouette": "bolt"
+    }
+  },
+  "rime-ward-cast": {
+    "name": "Rime ward",
+    "cost": { "kind": "mana", "amount": 26 },
+    "interval_ms": 400,
+    "cooldown_ms": 12000,
+    "self_effects": ["rime-armor"],
+    "placement": { "range": 0 },
+    "deployable": {
+      "kind": "rime-aura",
+      "radius": 160,
+      "duration_ms": 6000,
+      "tick_ms": 500,
+      "effects": ["frost-chill"]
+    }
+  },
+  "ice-trap-cast": {
+    "name": "Ice trap",
+    "cost": { "kind": "mana", "amount": 34 },
+    "interval_ms": 500,
+    "cooldown_ms": 16000,
+    "windup_ms": 500,
+    "telegraph": { "shape": "circle", "radius": 95, "active_ms": 200, "resolved_ms": 200 },
+    "placement": { "range": 300 },
+    "deployable": {
+      "kind": "ice-trap",
+      "radius": 95,
+      "duration_ms": 12000,
+      "trigger": true,
+      "tick_ms": 200,
+      "effects": ["ice-root", "frost-chill"]
+    }
+  },
+  "blizzard-cast": {
+    "name": "Blizzard",
+    "cost": { "kind": "mana", "amount": 58 },
+    "interval_ms": 600,
+    "cooldown_ms": 32000,
+    "windup_ms": 900,
+    "telegraph": { "shape": "circle", "radius": 245, "active_ms": 300, "resolved_ms": 250 },
+    "dodge_vector": "ground_indicator",
+    "placement": { "range": 360 },
+    "deployable": {
+      "kind": "blizzard",
+      "radius": 245,
+      "duration_ms": 7000,
+      "tick_ms": 800,
+      "damage_band": "standard",
+      "damage_fraction": 0.2,
+      "effects": ["blizzard-chill"],
+      "final_effects": ["blizzard-stun"]
+    }
+  },
+  "spark-cast": {
+    "name": "Spark",
+    "cost": { "kind": "mana", "amount": 9 },
+    "interval_ms": 300,
+    "cooldown_ms": 0,
+    "windup_ms": 200,
+    "telegraph": { "shape": "line", "length": 700, "width": 44, "active_ms": 100, "resolved_ms": 120 },
+    "dodge_vector": "projectile_travel",
+    "damage_band": "standard",
+    "projectile": {
+      "kind": "spark",
+      "speed": 940,
+      "life_seconds": 1.1,
+      "radius": 6,
+      "silhouette": "bolt"
+    }
+  },
+  "thunderstep-cast": {
+    "name": "Thunderstep",
+    "cost": { "kind": "mana", "amount": 22 },
+    "interval_ms": 400,
+    "cooldown_ms": 8000,
+    "windup_ms": 250,
+    "telegraph": { "shape": "line", "length": 260, "width": 46, "active_ms": 120, "resolved_ms": 150 },
+    "blink": { "distance": 260 }
+  },
+  "chain-lightning-cast": {
+    "name": "Chain lightning",
+    "cost": { "kind": "mana", "amount": 36 },
+    "interval_ms": 500,
+    "cooldown_ms": 12000,
+    "windup_ms": 450,
+    "telegraph": { "shape": "line", "length": 620, "width": 50, "active_ms": 150, "resolved_ms": 180 },
+    "dodge_vector": "cast_time",
+    "damage_band": "standard",
+    "chain": { "jumps": 2, "range": 260 },
+    "projectile": {
+      "kind": "chain-bolt",
+      "speed": 820,
+      "life_seconds": 1.2,
+      "radius": 8,
+      "silhouette": "bolt"
+    }
+  },
+  "skyfall-cast": {
+    "name": "Skyfall",
+    "cost": { "kind": "mana", "amount": 55 },
+    "interval_ms": 600,
+    "cooldown_ms": 28000,
+    "windup_ms": 950,
+    "telegraph": { "shape": "circle", "radius": 155, "active_ms": 250, "resolved_ms": 250 },
+    "dodge_vector": "ground_indicator",
+    "placement": { "range": 400 },
+    "damage_band": "standard",
+    "blast": { "radius": 155, "effects": ["skyfall-shock"] },
+    "blink_on_hit": true
+  },
+  "arcane-missile-cast": {
+    "name": "Arcane missile",
+    "cost": { "kind": "mana", "amount": 12 },
+    "interval_ms": 300,
+    "cooldown_ms": 0,
+    "windup_ms": 260,
+    "telegraph": { "shape": "line", "length": 640, "width": 50, "active_ms": 100, "resolved_ms": 150 },
+    "dodge_vector": "projectile_travel",
+    "damage_band": "standard",
+    "projectile": {
+      "kind": "arcane-missile",
+      "speed": 520,
+      "life_seconds": 1.6,
+      "radius": 8,
+      "silhouette": "bolt",
+      "homing": { "turn_degrees_per_second": 190, "acquire_range": 560 }
+    }
+  },
+  "ward-cast": {
+    "name": "Ward",
+    "cost": { "kind": "mana", "amount": 26 },
+    "interval_ms": 400,
+    "cooldown_ms": 14000,
+    "self_effects": ["arcane-ward"]
+  },
+  "nullify-cast": {
+    "name": "Nullify",
+    "cost": { "kind": "mana", "amount": 30 },
+    "interval_ms": 400,
+    "cooldown_ms": 18000,
+    "cleanse": { "radius": 260, "mana_per_effect": 8 }
+  },
+  "rift-cast": {
+    "name": "Rift",
+    "cost": { "kind": "mana", "amount": 46 },
+    "interval_ms": 500,
+    "cooldown_ms": 26000,
+    "windup_ms": 500,
+    "telegraph": { "shape": "line", "length": 520, "width": 60, "active_ms": 150, "resolved_ms": 200 },
+    "blink": { "distance": 520 }
+  },
+  "stone-shard-cast": {
+    "name": "Stone shard",
+    "cost": { "kind": "mana", "amount": 13 },
+    "interval_ms": 300,
+    "cooldown_ms": 0,
+    "windup_ms": 320,
+    "telegraph": { "shape": "line", "length": 560, "width": 64, "active_ms": 100, "resolved_ms": 150 },
+    "dodge_vector": "projectile_travel",
+    "damage_band": "standard",
+    "effects": ["stone-knock"],
+    "projectile": {
+      "kind": "stone-shard",
+      "speed": 430,
+      "life_seconds": 1.5,
+      "radius": 12,
+      "silhouette": "bolt"
+    }
+  },
+  "stone-wall-cast": {
+    "name": "Stone wall",
+    "cost": { "kind": "mana", "amount": 28 },
+    "interval_ms": 500,
+    "cooldown_ms": 12000,
+    "windup_ms": 400,
+    "telegraph": { "shape": "circle", "radius": 110, "active_ms": 200, "resolved_ms": 200 },
+    "placement": { "range": 220 },
+    "wall": { "kind": "stone-wall", "segments": 5, "spacing": 44, "duration_ms": 9000 }
+  },
+  "upheaval-cast": {
+    "name": "Upheaval",
+    "cost": { "kind": "mana", "amount": 34 },
+    "interval_ms": 500,
+    "cooldown_ms": 15000,
+    "windup_ms": 550,
+    "telegraph": { "shape": "circle", "radius": 145, "active_ms": 220, "resolved_ms": 220 },
+    "dodge_vector": "ground_indicator",
+    "placement": { "range": 300 },
+    "damage_band": "standard",
+    "blast": { "radius": 145, "effects": ["upheaval-knock", "upheaval-root"] }
+  },
+  "bulwark-cast": {
+    "name": "Bulwark",
+    "cost": { "kind": "mana", "amount": 52 },
+    "interval_ms": 600,
+    "cooldown_ms": 30000,
+    "windup_ms": 600,
+    "telegraph": { "shape": "ring", "radius": 205, "width": 42, "active_ms": 200, "resolved_ms": 250 },
+    "dodge_vector": "telegraph",
+    "placement": { "range": 0 },
+    "damage_band": "standard",
+    "blast": { "radius": 205, "effects": ["bulwark-shock"] },
+    "self_effects": ["bulwark-armor"]
   }
 }

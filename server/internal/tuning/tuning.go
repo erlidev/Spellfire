@@ -21,7 +21,7 @@ import (
 // SchemaVersion is the table shape this build understands. Bump it only when a
 // table changes shape, and add the matching forward migration; a plain balance
 // edit bumps Manifest.Version instead and needs no code change.
-const SchemaVersion = 16
+const SchemaVersion = 17
 
 type Manifest struct {
 	// Version is the content revision. Bump it on any balance edit; a change
@@ -276,6 +276,18 @@ type Projectile struct {
 	MaxRange     float64 `json:"max_range"`
 	FalloffStart float64 `json:"falloff_start"`
 	FalloffMin   float64 `json:"falloff_min"`
+	// Homing steers the round toward a target while it flies. It is the Arcane
+	// missile's forgiving aim, and it is bounded rather than absolute: a limited
+	// turn rate is what keeps travel time a dodge vector instead of a delay.
+	Homing *Homing `json:"homing"`
+}
+
+// Homing is a bounded steering rule. TurnDegreesPerSecond caps how fast the
+// round may change heading, so sidestepping late still beats it, and
+// AcquireRange is how far it looks for something to follow.
+type Homing struct {
+	TurnDegreesPerSecond float64 `json:"turn_degrees_per_second"`
+	AcquireRange         float64 `json:"acquire_range"`
 }
 
 // PelletCount is how many bodies one use spawns; an unstated count is one.
@@ -326,7 +338,75 @@ type Deployable struct {
 	// hiding them from each other. Without it a body standing inside its own
 	// smoke would be unable to see an opponent it is touching.
 	RevealRadius float64 `json:"reveal_radius"`
+	// Conceals is what makes a field smoke rather than ground: only a concealing
+	// field is checked by the vision rule. A burning patch is plainly visible, and
+	// hiding what stands in it would be a rule no player could read.
+	Conceals bool `json:"conceals"`
+	// A field may pulse. DamageBand and DamageFraction price one pulse against
+	// the shared band, TickMS is its cadence, and Effects are the statuses each
+	// pulse applies to whoever is standing inside. A field with no band deals
+	// nothing and is pure control.
+	DamageBand     string   `json:"damage_band"`
+	DamageFraction float64  `json:"damage_fraction"`
+	TickMS         int      `json:"tick_ms"`
+	Effects        []string `json:"effects"`
+	// FinalEffects land once, on the pulse that closes the field. It is what lets
+	// a stacking slow end in a stun rather than simply stopping.
+	FinalEffects []string `json:"final_effects"`
+	// Trigger makes the field a trap: it lies inert until the first hostile body
+	// enters it, applies its pulse to that body, and is spent. Its lifetime is
+	// therefore how long it waits, not how long it runs.
+	Trigger bool `json:"trigger"`
 }
+
+func (d Deployable) Tick() time.Duration { return time.Duration(d.TickMS) * time.Millisecond }
+
+// Pulses reports whether the field does anything to a body standing in it.
+func (d Deployable) Pulses() bool {
+	return d.TickMS > 0 && (d.DamageBand != "" || len(d.Effects) > 0)
+}
+
+// Placement is where a cast lands instead of at the caster: a point Range units
+// along the aim the cast committed to. The aim vector is all the client sends —
+// there is no cursor distance on the wire — so a placed spell reaches a fixed,
+// authoritative distance that its telegraph draws exactly.
+type Placement struct {
+	Range float64 `json:"range"`
+}
+
+// Blink is the Storm and Arcane repositioning tool: the caster is moved
+// Distance units along the direction the cast locked in, stopping short of
+// anything solid rather than passing through it.
+type Blink struct {
+	Distance float64 `json:"distance"`
+}
+
+// Chain arcs a landed hit onward. Jumps is how many further bodies it may reach
+// and Range how far each arc may travel, measured from the body it last struck.
+type Chain struct {
+	Jumps int     `json:"jumps"`
+	Range float64 `json:"range"`
+}
+
+// Cleanse is the dispel: it strips running statuses from the caster and from
+// hostile bodies inside Radius, and returns ManaPerEffect for each one removed,
+// which is what makes stripping a full kit worth the cast.
+type Cleanse struct {
+	Radius        float64 `json:"radius"`
+	ManaPerEffect float64 `json:"mana_per_effect"`
+}
+
+// Wall is the one spell that authors terrain. Segments boxes of the named
+// archetype are laid perpendicular to the cast's direction, Spacing apart, and
+// stand for DurationMS unless something destroys them first.
+type Wall struct {
+	Kind       string  `json:"kind"`
+	Segments   int     `json:"segments"`
+	Spacing    float64 `json:"spacing"`
+	DurationMS int     `json:"duration_ms"`
+}
+
+func (w Wall) Duration() time.Duration { return time.Duration(w.DurationMS) * time.Millisecond }
 
 func (d Deployable) Duration() time.Duration { return time.Duration(d.DurationMS) * time.Millisecond }
 
@@ -502,6 +582,22 @@ type Ability struct {
 	// Effects are the status effects each hit applies, resolved against the
 	// effects table.
 	Effects []string `json:"effects"`
+	// The Mage's remaining delivery shapes. Each is an alternative to a
+	// travelling round rather than a modifier on one, and every one of them is
+	// resolved by the same deliver/deliverAt pair a projectile is, so a spell
+	// never gets a path of its own.
+	//
+	// Placement moves where the cast lands; SelfEffects are what it leaves on the
+	// caster; Blink moves the caster; BlinkOnHit moves the caster to the impact,
+	// but only when the impact actually reached someone; Chain arcs a landed hit
+	// onward; Cleanse strips statuses; Wall authors terrain.
+	Placement   *Placement `json:"placement"`
+	SelfEffects []string   `json:"self_effects"`
+	Blink       *Blink     `json:"blink"`
+	BlinkOnHit  bool       `json:"blink_on_hit"`
+	Chain       *Chain     `json:"chain"`
+	Cleanse     *Cleanse   `json:"cleanse"`
+	Wall        *Wall      `json:"wall"`
 }
 
 func (a Ability) DamageScale() float64 {
@@ -530,10 +626,18 @@ func (a Ability) Windup() time.Duration   { return time.Duration(a.WindupMS) * t
 // utility blast travels without dealing anything.
 func (a Ability) Damaging() bool { return a.DamageBand != "" }
 
+// DealsDamage reports whether anything the ability puts into the world costs a
+// body health — the ability's own band, or a field that pulses one. It is what
+// the dodge-vector requirement is measured against, because a burning patch
+// nobody was warned about is exactly the thing the invariant forbids.
+func (a Ability) DealsDamage() bool {
+	return a.Damaging() || (a.Deployable != nil && a.Deployable.DamageBand != "")
+}
+
 // EffectKinds are the status effects the simulation knows how to run. A row of
 // any other kind would be data the world silently ignores, so the loader
 // rejects it.
-var EffectKinds = []string{"burn", "slow", "root", "stun", "knockback", "shield", "blind"}
+var EffectKinds = []string{"burn", "slow", "root", "stun", "knockback", "shield", "blind", "armor"}
 
 // Effect stacking rules. "refresh" keeps one instance and restarts its
 // duration; "stack" runs independent instances side by side.
@@ -566,6 +670,11 @@ type Effect struct {
 	// AbsorbHits belongs to "shield": the pool, in multiples of the band's
 	// damage_per_hit.
 	AbsorbHits float64 `json:"absorb_hits"`
+	// DamageMultiplier belongs to "armor": the fraction of incoming damage that
+	// still reaches the body. It is mitigation rather than absorption — it has no
+	// pool to spend — which is what separates Frost's light mitigation and
+	// Earth's heavy one from an Arcane ward.
+	DamageMultiplier float64 `json:"damage_multiplier"`
 }
 
 func (e Effect) Duration() time.Duration { return time.Duration(e.DurationMS) * time.Millisecond }
@@ -791,6 +900,15 @@ const (
 	// cast through that staff rather than naming an element or spell row.
 	AttrSpellDamage  = "spell_damage"
 	AttrSpellHealing = "spell_healing"
+	// AttrAreaRadius is the area half of "projectile or area shape": it widens
+	// the blast, the field, and the telegraph that warns about them together, so
+	// a crystal can never quietly grow an area past the figure it shows.
+	AttrAreaRadius = "area_radius"
+	// AttrElementDamage is a mana crystal's element bias. It applies only to
+	// spells of the element the crystal names, which is the horizontal half a
+	// rarer crystal has to earn: specialising into one school rather than adding
+	// output to all five.
+	AttrElementDamage = "element_damage"
 )
 
 // ComponentAttributes is the set a modifier may name. Mana crystals scale the
@@ -800,8 +918,13 @@ var ComponentAttributes = []string{
 	AttrMagazineSize, AttrReloadMS, AttrCooldownMS, AttrWindupMS, AttrCostAmount,
 	AttrProjectileSpeed, AttrProjectileLife, AttrProjectileRadius,
 	AttrRecoilDegrees, AttrSpreadDegrees, AttrMoveSpreadDegrees, AttrScopeMovement,
-	AttrSpellDamage, AttrSpellHealing,
+	AttrSpellDamage, AttrSpellHealing, AttrAreaRadius, AttrElementDamage,
 }
+
+// CrystalAttributes are the ones only a mana crystal may claim: the all-spell
+// output scalars and the element bias. A gun part naming any of them would be
+// moving spell output from the wrong blueprint entirely.
+var CrystalAttributes = []string{AttrSpellDamage, AttrSpellHealing, AttrElementDamage}
 
 // MagazineAttributes only mean anything on a weapon that holds a magazine, so a
 // blueprint whose weapons cast spells may not modify them.
@@ -835,9 +958,12 @@ type Component struct {
 	// Kind distinguishes ordinary gun parts from the two staff subassemblies.
 	// Tier is meaningful for mana crystals and staves: the stave must be at
 	// least as strong as the crystal it carries.
-	Kind   string `json:"kind"`
-	Tier   int    `json:"tier"`
-	Effect string `json:"effect"`
+	Kind string `json:"kind"`
+	Tier int    `json:"tier"`
+	// Element is the school a mana crystal is biased toward, and is empty on
+	// every other component. It is what an element_damage modifier applies to.
+	Element string `json:"element"`
+	Effect  string `json:"effect"`
 	// Cost is the material ID → count one of this component consumes. Materials
 	// must be hauled to a safe zone before they can be spent.
 	Cost map[string]int `json:"cost"`
