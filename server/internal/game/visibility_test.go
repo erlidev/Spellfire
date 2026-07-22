@@ -54,6 +54,16 @@ func TestCircleAndBoxTerrainShareTheSightRule(t *testing.T) {
 	}
 }
 
+func TestCollisionDoesNotImplyVisionOcclusion(t *testing.T) {
+	w, _ := testWorld()
+	decoration := testWorldItem(w, "decoration", "wall", Vec{1350, 0}, CollisionObject{Type: CollisionBox, HalfWidth: 20, HalfHeight: 60})
+	decoration.OccludesVision = false
+	w.worldItems = []*Entity{decoration}
+	if w.terrainOccluded(Vec{1200, 0}, Vec{1500, 0}) {
+		t.Fatal("collidable decoration occluded vision without the entity attribute")
+	}
+}
+
 func TestAutomaticTargetingRequiresLineOfSight(t *testing.T) {
 	w, now := testWorld()
 	owner := addTestPlayer(w, "owner", model.Mage, Vec{1200, 0}, now)

@@ -13,7 +13,7 @@ func (w *World) terrainOccluded(from, to Vec) bool {
 		return false
 	}
 	for _, item := range w.worldItems {
-		if item != nil && item.intersectsSegment(from, to, 0) {
+		if item != nil && item.OccludesVision && item.intersectsSegment(from, to, 0) {
 			return true
 		}
 	}

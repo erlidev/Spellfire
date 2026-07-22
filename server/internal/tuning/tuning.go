@@ -21,7 +21,7 @@ import (
 // SchemaVersion is the table shape this build understands. Bump it only when a
 // table changes shape, and add the matching forward migration; a plain balance
 // edit bumps Manifest.Version instead and needs no code change.
-const SchemaVersion = 18
+const SchemaVersion = 19
 
 type Manifest struct {
 	// Version is the content revision. Bump it on any balance edit; a change
@@ -133,6 +133,8 @@ type CollisionObject struct {
 type EntityDefinition struct {
 	Mass             float64           `json:"mass"`
 	MaxHealth        float64           `json:"max_health"`
+	OccludesVision   bool              `json:"occludes_vision"`
+	VisibleInShadow  bool              `json:"visible_in_shadow"`
 	CollisionObjects []CollisionObject `json:"collision_objects"`
 	Admin            EntityAdmin       `json:"admin"`
 }

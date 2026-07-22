@@ -37,6 +37,8 @@ type Entity struct {
 	Mass               float64
 	Health, MaxHealth  float64
 	Alive              bool
+	OccludesVision     bool
+	VisibleInShadow    bool
 	CollisionObjects   []CollisionObject
 	AdminSpawned       bool
 	Deleting           bool
@@ -79,6 +81,7 @@ func newEntity(id, kind string, position Vec, definition tuning.EntityDefinition
 	entity := Entity{
 		ID: id, Kind: kind, DefinitionID: kind, Position: position, Mass: definition.Mass,
 		Health: definition.MaxHealth, MaxHealth: definition.MaxHealth, Alive: true,
+		OccludesVision: definition.OccludesVision, VisibleInShadow: definition.VisibleInShadow,
 		CollisionObjects: collisionObjectsFromTuning(definition.CollisionObjects),
 	}
 	if overrides.MaxHealth != nil && overrides.Health == nil {

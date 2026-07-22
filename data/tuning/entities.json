@@ -2,6 +2,8 @@
   "player": {
     "mass": 1,
     "max_health": 100,
+    "occludes_vision": false,
+    "visible_in_shadow": false,
     "collision_objects": [{ "type": "circle", "radius": 20 }],
     "admin": {
       "name": "Player",
@@ -21,6 +23,8 @@
   "projectile": {
     "mass": 0,
     "max_health": -1,
+    "occludes_vision": false,
+    "visible_in_shadow": false,
     "collision_objects": [{ "type": "circle", "radius": 1 }],
     "admin": {
       "name": "Projectile",
@@ -38,6 +42,8 @@
   "telegraph": {
     "mass": 0,
     "max_health": -1,
+    "occludes_vision": false,
+    "visible_in_shadow": false,
     "collision_objects": [],
     "admin": {
       "name": "Telegraph",
@@ -54,6 +60,8 @@
   "tree": {
     "mass": -1,
     "max_health": 500,
+    "occludes_vision": true,
+    "visible_in_shadow": true,
     "collision_objects": [{ "type": "circle", "radius": 27 }],
     "admin": {
       "name": "Tree",
@@ -69,6 +77,8 @@
   "smoke": {
     "mass": -1,
     "max_health": -1,
+    "occludes_vision": false,
+    "visible_in_shadow": false,
     "collision_objects": [],
     "admin": {
       "name": "Smoke cloud",
@@ -83,6 +93,8 @@
   "cinder": {
     "mass": -1,
     "max_health": -1,
+    "occludes_vision": false,
+    "visible_in_shadow": false,
     "collision_objects": [],
     "admin": {
       "name": "Cinder patch",
@@ -98,6 +110,8 @@
   "firestorm": {
     "mass": -1,
     "max_health": -1,
+    "occludes_vision": false,
+    "visible_in_shadow": false,
     "collision_objects": [],
     "admin": {
       "name": "Firestorm",
@@ -113,6 +127,8 @@
   "rime-aura": {
     "mass": -1,
     "max_health": -1,
+    "occludes_vision": false,
+    "visible_in_shadow": false,
     "collision_objects": [],
     "admin": {
       "name": "Chilling aura",
@@ -128,6 +144,8 @@
   "ice-trap": {
     "mass": -1,
     "max_health": -1,
+    "occludes_vision": false,
+    "visible_in_shadow": false,
     "collision_objects": [],
     "admin": {
       "name": "Ice trap",
@@ -143,6 +161,8 @@
   "blizzard": {
     "mass": -1,
     "max_health": -1,
+    "occludes_vision": false,
+    "visible_in_shadow": false,
     "collision_objects": [],
     "admin": {
       "name": "Blizzard",
@@ -158,6 +178,8 @@
   "stone-wall": {
     "mass": -1,
     "max_health": 260,
+    "occludes_vision": true,
+    "visible_in_shadow": true,
     "collision_objects": [{ "type": "circle", "radius": 28 }],
     "admin": {
       "name": "Stone wall segment",
@@ -172,6 +194,8 @@
   "wall": {
     "mass": -1,
     "max_health": -1,
+    "occludes_vision": true,
+    "visible_in_shadow": true,
     "collision_objects": [{ "type": "box", "width": 96, "height": 96 }],
     "admin": {
       "name": "Wall",

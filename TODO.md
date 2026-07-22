@@ -205,13 +205,16 @@ controlled player ran ahead of the server and was snapped back twenty times a se
 ### 2.6 Line of sight
 - [x] Vision/targeting occlusion: trees, fixed walls, and Mage-created wall segments block snapshot visibility and automatic acquisition through their existing collision geometry ([visibility.go](server/internal/game/visibility.go), [architecture.md](docs/architecture.md#line-of-sight))
 - [x] Shared substrate for smoke and for the Mage/Gunslinger LOS matchup: smoke containment and terrain sightlines feed the same targeting predicate, while manual ground placement remains exempt ([combat.md](docs/game/design/combat.md#time-to-kill))
+- [x] Unobtrusive client shadow wedges derived from snapshot colliders, with `occludes_vision` and `visible_in_shadow` entity attributes separating sight blockers from landmarks/decorations that remain readable beneath cover ([game-view-and-hud.md](docs/game/ui/game-view-and-hud.md#camera))
 
 LOS is authoritative absence rather than a client mask: dynamic entities behind
 solid cover are omitted from the viewer's snapshot, while terrain itself stays
 present for rendering and prediction. Homing and chain acquisition use the same
 rule, cannot select through terrain or a cloud that fully conceals a body, and
 fall through to the nearest visible target. Destroyed or expired terrain stops
-occluding immediately; its graceful fade is feedback only.
+occluding immediately; its graceful fade is feedback only. The client adds a
+slight dark veil over the same hidden wedges, but authoritative absence remains
+the rule—the overlay never decides whether an entity exists or can be targeted.
 
 ### 2.7 Roles, keystones, and band enforcement
 - [x] Cover the seven combat roles across both classes, declared on weapons, spells, gadgets, and keystones and enforced by tuning validation ([combat.md](docs/game/design/combat.md#shared-combat-roles))

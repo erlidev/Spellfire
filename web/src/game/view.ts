@@ -1,11 +1,12 @@
 import { Application, Container, Graphics, Text } from "pixi.js";
 // Install eval-free polyfills so WebGL works under a CSP without 'unsafe-eval'. Side-effect import; must run before the renderer is created.
 import "pixi.js/unsafe-eval";
-import { abilities, deployableByKind, effects, projectileByKind, safeRadius, simulation, world } from "../tuning";
-import type { Entity, ServerMessage } from "../types";
-import { Allegiance, EntityType } from "../types";
+import { abilities, deployableByKind, effects, entityDefinitions, projectileByKind, safeRadius, simulation, world } from "../tuning";
+import type { Collider, Entity, ServerMessage } from "../types";
+import { Allegiance, EntityType, ServerKind } from "../types";
 import type { Predictor } from "./prediction";
 import { telegraphStyle } from "./telegraph";
+import { visibilityPolygon } from "./visibility";
 
 interface Sample { at: number; entity: Entity }
 interface ActorView {
@@ -56,6 +57,10 @@ export class GameView {
   private ground = new Graphics();
   private telegraphLayer = new Container();
   private entityLayer = new Container();
+  // A low-opacity veil covers terrain the local sightline cannot reach. Static
+  // landmarks explicitly marked visible_in_shadow render in the layer above it.
+  private shadow = new Graphics();
+  private shadowVisibleLayer = new Container();
   // Fields draw over bodies: a cloud that players rendered on top of would show
   // exactly what the server just stopped sending.
   private fogLayer = new Container();
@@ -72,6 +77,7 @@ export class GameView {
   private localID = "";
   private predictor?: Predictor;
   private latestEntities = new Map<string, Entity>();
+  private colliders: Collider[] = [];
   private initialized = false;
   // The scope's camera exception: the view is pushed toward where the weapon is
   // pointed, by a fraction of the reach the server widened the snapshot by.
@@ -80,7 +86,7 @@ export class GameView {
   async init(host: HTMLElement): Promise<void> {
     await this.app.init({ resizeTo: window, antialias: true, backgroundColor: colors.ground, resolution: Math.min(2, devicePixelRatio), autoDensity: true });
     host.replaceChildren(this.app.canvas);
-    this.world.addChild(this.ground, this.telegraphLayer, this.entityLayer, this.fogLayer);
+    this.world.addChild(this.ground, this.telegraphLayer, this.entityLayer, this.shadow, this.shadowVisibleLayer, this.fogLayer);
     this.app.stage.addChild(this.world, this.blackout);
     this.app.ticker.add(() => this.renderFrame());
     this.initialized = true;
@@ -110,6 +116,10 @@ export class GameView {
 
   apply(message: ServerMessage): void {
     this.localID = message.playerID || this.localID;
+    // Loadout/progression replies carry no world frame. Retain the last
+    // authoritative collider set until a snapshot (including an empty one)
+    // replaces it, avoiding a one-frame flash of fully revealed ground.
+    if (message.kind === ServerKind.Snapshot || message.kind === ServerKind.Welcome) this.colliders = message.colliders;
     const receivedAt = performance.now();
     const present = new Set<string>();
     for (const entity of message.entities) {
@@ -166,6 +176,7 @@ export class GameView {
     const cameraX = predictor.x + this.scopeOffset.x + shake.x, cameraY = predictor.y + this.scopeOffset.y + shake.y;
     this.world.position.set(width / 2 - cameraX, height / 2 - cameraY);
     this.drawGround(cameraX, cameraY, width, height);
+    this.drawSightShadow(predictor.x, predictor.y, cameraX, cameraY, width, height);
     const local = this.latestEntities.get(this.localID);
     if (local) this.drawEntity({ ...local, x: predictor.x, y: predictor.y, aimX: predictor.aimX, aimY: predictor.aimY }, true, now);
     const renderAt = now - simulation.interpolation_delay_ms;
@@ -221,6 +232,14 @@ export class GameView {
     this.ground.circle(0, 0, world.radius).stroke({ color: colors.rim, width: 8, alpha: .8 });
   }
 
+  private drawSightShadow(viewerX: number, viewerY: number, cameraX: number, cameraY: number, width: number, height: number): void {
+    const bounds = { left: cameraX - width / 2, right: cameraX + width / 2, top: cameraY - height / 2, bottom: cameraY + height / 2 };
+    const occluders = this.colliders.filter((collider) => entityDefinitions[collider.kind]?.occludes_vision);
+    const visible = visibilityPolygon({ x: viewerX, y: viewerY }, bounds, occluders);
+    this.shadow.clear().rect(bounds.left, bounds.top, width, height).fill({ color: 0x07101a, alpha: .18 });
+    if (visible.length >= 3) this.shadow.poly(visible.flatMap((point) => [point.x, point.y])).cut();
+  }
+
   private drawEntity(entity: Entity, self: boolean, now = performance.now()): void {
     let view = this.actors.get(entity.id);
     if (view && view.type !== entity.type) { this.removeActor(entity.id); view = undefined; }
@@ -256,6 +275,7 @@ export class GameView {
    */
   private layerFor(entity: Entity): Container {
     if (entity.type === EntityType.Telegraph) return this.telegraphLayer;
+    if (entityDefinitions[entity.className]?.visible_in_shadow) return this.shadowVisibleLayer;
     if (entity.type !== EntityType.Deployable) return this.entityLayer;
     return deployableByKind(entity.className)?.conceals ? this.fogLayer : this.telegraphLayer;
   }

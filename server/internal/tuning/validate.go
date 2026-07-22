@@ -52,6 +52,7 @@ func (t *Tables) validateEntities(r *report) {
 		prefix := fmt.Sprintf("entities: %s", id)
 		r.require(definition.Mass == -1 || definition.Mass >= 0, "%s mass must be -1 or non-negative", prefix)
 		r.require(definition.MaxHealth == -1 || definition.MaxHealth > 0, "%s max_health must be -1 or positive", prefix)
+		r.require(!definition.OccludesVision || len(definition.CollisionObjects) > 0, "%s occludes vision but has no collision geometry", prefix)
 		for index, object := range definition.CollisionObjects {
 			objectPrefix := fmt.Sprintf("%s collision object %d", prefix, index)
 			switch object.Type {

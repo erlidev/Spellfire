@@ -106,7 +106,7 @@ Rules, from [`invariants.md`](../../docs/game/design/invariants.md) and
 | `admins.json` | Normalized account emails granted administrator authorization |
 | `simulation.json` | Tick/send rates, AOI radius, rewind window, interpolation delay |
 | `session.json` | Logout linger window and saved-position expiry |
-| `entities.json` | Common entity defaults plus spawnability and generic admin-field/input metadata |
+| `entities.json` | Common entity defaults, vision-occlusion/shadow-visibility attributes, spawnability, and generic admin-field/input metadata |
 | `world.json` | World radius, spawn radius, danger bands, procedural tree parameters, fixed fixtures |
 | `combat.json` | Role and dodge-vector vocabularies, player movement/resources, universal dash, weight classes, damage bands |
 | `loadout.json` | Slot counts per kind and the Mage affinity multiplier |
