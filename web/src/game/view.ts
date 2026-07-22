@@ -27,14 +27,15 @@ const kickDistance = 9;
 const shakeMS = 220;
 const shakeDistance = 6;
 // Smoke is drawn as overlapping puffs and nothing else — no disc underneath it,
-// which reads as a hard bubble the moment the puffs move off it. A few large
-// core puffs fill the middle and a jittered ring of smaller ones carries the
-// edge, so the cloud covers its authoritative radius with a soft, ragged rim
-// that may spill a little past it. The spill is deliberate: the server's rule is
+// which reads as a hard bubble the moment the puffs move off it. The puffs are
+// all of a size and their bands overlap heavily: some scattered through the
+// middle, the rest wandering a wide band that reaches both the centre and past
+// the rim. Separating them by size and distance is what made a cloud read as
+// small circles ringing one big one. The spill is deliberate: the server's rule is
 // the exact radius, and a body the fog only laps at is one the server still
 // shows, which is what keeps a half-covered opponent from vanishing.
-const puffCount = 15;
-const puffCoreCount = 4;
+const puffCount = 18;
+const puffCoreCount = 6;
 const puffFadeMS = 320;
 
 const colors = {
@@ -301,7 +302,7 @@ export class GameView {
       const breathe = 1 + Math.sin(age / 620 + puff.angle) * .07;
       puff.graphic.position.set(Math.cos(angle) * puff.distance, Math.sin(angle) * puff.distance);
       puff.graphic.scale.set(breathe);
-      puff.graphic.alpha = .38;
+      puff.graphic.alpha = .32;
     }
   }
 
@@ -339,16 +340,21 @@ export class GameView {
         const spin = fraction(seed + index * 97), spread = fraction(seed + index * 53);
         const core = index < puffCoreCount;
         const puff = new Graphics();
-        // The core is a few fat puffs near the middle; the rim is smaller ones
-        // walked evenly around the circle with enough jitter that the edge never
-        // reads as a polygon, and enough overlap that it never opens a gap.
-        const size = radius * (core ? .42 + fraction(seed + index * 31) * .14 : .28 + fraction(seed + index * 31) * .14);
+        // The two groups are sized alike and their bands deliberately run into
+        // each other — the core scattered out to .38r and the outer ones sitting
+        // anywhere from .44r to .70r — so an outer puff reaches the middle and a
+        // core puff reaches the rim. Keeping them apart is what made a cloud read
+        // as small circles ringing one big one.
+        const size = radius * (core ? .34 + fraction(seed + index * 31) * .18 : .34 + fraction(seed + index * 31) * .16);
+        // Outer puffs walk the circle so no arc is left bare, but each may wander
+        // most of a slot either way, which is enough for neighbours to crowd and
+        // gap unevenly rather than parade around at a fixed spacing.
         const angle = core
           ? spin * Math.PI * 2
-          : ((index - puffCoreCount + (spin - .5) * .35) / ring) * Math.PI * 2;
+          : ((index - puffCoreCount + (spin - .5) * 1.1) / ring) * Math.PI * 2;
         puff.circle(0, 0, size).fill({ color: 0xdfe6ef, alpha: 1 });
         puffs.push({
-          graphic: puff, distance: radius * (core ? .2 * spread : .6 + spread * .14),
+          graphic: puff, distance: radius * (core ? .38 * spread : .44 + spread * .26),
           angle, radius: size, drift: turn + (spin - .5) * (core ? .3 : .05),
         });
         body.addChild(puff);
