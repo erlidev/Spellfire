@@ -60,7 +60,7 @@
   "tree": {
     "mass": -1,
     "max_health": 500,
-    "occludes_vision": true,
+    "occludes_vision": false,
     "visible_in_shadow": true,
     "collision_objects": [{ "type": "circle", "radius": 27 }],
     "admin": {

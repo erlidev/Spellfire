@@ -5,8 +5,8 @@ import { abilities, deployableByKind, effects, entityDefinitions, projectileByKi
 import type { Collider, Entity, ServerMessage } from "../types";
 import { Allegiance, EntityType, ServerKind } from "../types";
 import type { Predictor } from "./prediction";
+import { SightShadowFilter } from "./shadow";
 import { telegraphStyle } from "./telegraph";
-import { visibilityPolygon } from "./visibility";
 
 interface Sample { at: number; entity: Entity }
 interface ActorView {
@@ -54,12 +54,14 @@ const elementColors: Record<string, number> = { fire: 0xff754d, frost: 0x75dbf0,
 export class GameView {
   readonly app = new Application();
   private world = new Container();
+  private overlayWorld = new Container();
   private ground = new Graphics();
   private telegraphLayer = new Container();
   private entityLayer = new Container();
   // A low-opacity veil covers terrain the local sightline cannot reach. Static
   // landmarks explicitly marked visible_in_shadow render in the layer above it.
   private shadow = new Graphics();
+  private shadowFilter = new SightShadowFilter();
   private shadowVisibleLayer = new Container();
   // Fields draw over bodies: a cloud that players rendered on top of would show
   // exactly what the server just stopped sending.
@@ -86,8 +88,10 @@ export class GameView {
   async init(host: HTMLElement): Promise<void> {
     await this.app.init({ resizeTo: window, antialias: true, backgroundColor: colors.ground, resolution: Math.min(2, devicePixelRatio), autoDensity: true });
     host.replaceChildren(this.app.canvas);
-    this.world.addChild(this.ground, this.telegraphLayer, this.entityLayer, this.shadow, this.shadowVisibleLayer, this.fogLayer);
-    this.app.stage.addChild(this.world, this.blackout);
+    this.world.addChild(this.ground, this.telegraphLayer, this.entityLayer);
+    this.overlayWorld.addChild(this.shadowVisibleLayer, this.fogLayer);
+    this.shadow.filters = [this.shadowFilter];
+    this.app.stage.addChild(this.world, this.shadow, this.overlayWorld, this.blackout);
     this.app.ticker.add(() => this.renderFrame());
     this.initialized = true;
   }
@@ -130,7 +134,11 @@ export class GameView {
       while (buffer.length > 8) buffer.shift();
       this.samples.set(entity.id, buffer);
     }
-    for (const [id, samples] of this.samples) if (!present.has(id) && receivedAt - (samples.at(-1)?.at ?? 0) > 500) this.removeActor(id);
+    if (message.kind === ServerKind.Snapshot || message.kind === ServerKind.Welcome) {
+      // Snapshot omission is the authoritative LOS result. Keeping the last
+      // interpolation sample made a fully covered opponent linger for 500 ms.
+      for (const id of this.samples.keys()) if (!present.has(id)) this.removeActor(id);
+    }
   }
 
   pointerWorld(clientX: number, clientY: number): { x: number; y: number } {
@@ -175,6 +183,7 @@ export class GameView {
     const shake = this.cameraShake(now);
     const cameraX = predictor.x + this.scopeOffset.x + shake.x, cameraY = predictor.y + this.scopeOffset.y + shake.y;
     this.world.position.set(width / 2 - cameraX, height / 2 - cameraY);
+    this.overlayWorld.position.copyFrom(this.world.position);
     this.drawGround(cameraX, cameraY, width, height);
     this.drawSightShadow(predictor.x, predictor.y, cameraX, cameraY, width, height);
     const local = this.latestEntities.get(this.localID);
@@ -233,11 +242,14 @@ export class GameView {
   }
 
   private drawSightShadow(viewerX: number, viewerY: number, cameraX: number, cameraY: number, width: number, height: number): void {
-    const bounds = { left: cameraX - width / 2, right: cameraX + width / 2, top: cameraY - height / 2, bottom: cameraY + height / 2 };
-    const occluders = this.colliders.filter((collider) => entityDefinitions[collider.kind]?.occludes_vision);
-    const visible = visibilityPolygon({ x: viewerX, y: viewerY }, bounds, occluders);
-    this.shadow.clear().rect(bounds.left, bounds.top, width, height).fill({ color: 0x07101a, alpha: .18 });
-    if (visible.length >= 3) this.shadow.poly(visible.flatMap((point) => [point.x, point.y])).cut();
+    const toScreen = (x: number, y: number): { x: number; y: number } => ({ x: x - cameraX + width / 2, y: y - cameraY + height / 2 });
+    const occluders = this.colliders
+      .filter((collider) => entityDefinitions[collider.kind]?.occludes_vision)
+      .map((collider) => ({ ...collider, ...toScreen(collider.x, collider.y) }));
+    // If a browser cannot compile either shader backend, the filter is skipped;
+    // this restrained fill is a safe dark fallback rather than a white screen.
+    this.shadow.clear().rect(0, 0, width, height).fill({ color: 0x07101a, alpha: .27 });
+    this.shadowFilter.update(toScreen(viewerX, viewerY), width, height, occluders);
   }
 
   private drawEntity(entity: Entity, self: boolean, now = performance.now()): void {

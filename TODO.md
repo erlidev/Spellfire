@@ -203,9 +203,9 @@ body's snapshot, and a knockback predicts nothing and lets reconciliation carry 
 controlled player ran ahead of the server and was snapped back twenty times a second.
 
 ### 2.6 Line of sight
-- [x] Vision/targeting occlusion: trees, fixed walls, and Mage-created wall segments block snapshot visibility and automatic acquisition through their existing collision geometry ([visibility.go](server/internal/game/visibility.go), [architecture.md](docs/architecture.md#line-of-sight))
+- [x] Vision/targeting occlusion: fixed walls and Mage-created wall segments block snapshot visibility and automatic acquisition when their entity attribute enables it; trees remain non-occluding landmarks ([visibility.go](server/internal/game/visibility.go), [architecture.md](docs/architecture.md#line-of-sight))
 - [x] Shared substrate for smoke and for the Mage/Gunslinger LOS matchup: smoke containment and terrain sightlines feed the same targeting predicate, while manual ground placement remains exempt ([combat.md](docs/game/design/combat.md#time-to-kill))
-- [x] Unobtrusive client shadow wedges derived from snapshot colliders, with `occludes_vision` and `visible_in_shadow` entity attributes separating sight blockers from landmarks/decorations that remain readable beneath cover ([game-view-and-hud.md](docs/game/ui/game-view-and-hud.md#camera))
+- [x] GPU-computed client shadow wedges derived from snapshot colliders, with `occludes_vision` and `visible_in_shadow` entity attributes separating sight blockers from landmarks/decorations that remain readable beneath the 27% veil ([game-view-and-hud.md](docs/game/ui/game-view-and-hud.md#camera))
 
 LOS is authoritative absence rather than a client mask: dynamic entities behind
 solid cover are omitted from the viewer's snapshot, while terrain itself stays

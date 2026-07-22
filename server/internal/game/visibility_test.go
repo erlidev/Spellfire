@@ -10,18 +10,18 @@ import (
 func TestTerrainOccludesSnapshotsUntilItStopsStanding(t *testing.T) {
 	w, now := testWorld()
 	viewer := addTestPlayer(w, "viewer", model.Gunslinger, Vec{1200, 0}, now)
-	behindTree := addTestPlayer(w, "behind-tree", model.Mage, Vec{1500, 0}, now)
-	besideTree := addTestPlayer(w, "beside-tree", model.Mage, Vec{1500, 160}, now)
-	tree := testWorldItem(w, "tree", "tree", Vec{1350, 0}, CollisionObject{Type: CollisionCircle, Radius: 35})
-	w.worldItems = []*Entity{tree}
+	behindCover := addTestPlayer(w, "behind-cover", model.Mage, Vec{1500, 0}, now)
+	besideCover := addTestPlayer(w, "beside-cover", model.Mage, Vec{1500, 160}, now)
+	wall := testWorldItem(w, "wall", "stone-wall", Vec{1350, 0}, CollisionObject{Type: CollisionCircle, Radius: 35})
+	w.worldItems = []*Entity{wall}
 
-	if visible(w, viewer.ID, behindTree.ID, now) {
-		t.Fatal("a tree did not hide the body directly behind it")
+	if visible(w, viewer.ID, behindCover.ID, now) {
+		t.Fatal("a stone wall did not hide the body directly behind it")
 	}
-	if !visible(w, viewer.ID, besideTree.ID, now) {
-		t.Fatal("a tree hid a body whose sightline does not cross it")
+	if !visible(w, viewer.ID, besideCover.ID, now) {
+		t.Fatal("a stone wall hid a body whose sightline does not cross it")
 	}
-	if visible(w, behindTree.ID, viewer.ID, now) {
+	if visible(w, behindCover.ID, viewer.ID, now) {
 		// Visibility must be symmetric around solid cover. If this fails while
 		// the first assertion passes, one side has gained information the other
 		// side cannot receive.
@@ -30,9 +30,9 @@ func TestTerrainOccludesSnapshotsUntilItStopsStanding(t *testing.T) {
 
 	// Destruction removes collision and sight blocking on the same authoritative
 	// transition, even while the shared deletion fade remains in snapshots.
-	tree.TakeDamage(tree.Health)
-	tree.Delete(now.Add(time.Millisecond))
-	if !visible(w, viewer.ID, behindTree.ID, now.Add(2*time.Millisecond)) {
+	wall.TakeDamage(wall.Health)
+	wall.Delete(now.Add(time.Millisecond))
+	if !visible(w, viewer.ID, behindCover.ID, now.Add(2*time.Millisecond)) {
 		t.Fatal("destroyed terrain continued to hide a body")
 	}
 }
@@ -41,7 +41,7 @@ func TestCircleAndBoxTerrainShareTheSightRule(t *testing.T) {
 	w, _ := testWorld()
 	from, to := Vec{1200, 0}, Vec{1500, 0}
 
-	w.worldItems = []*Entity{testWorldItem(w, "tree", "tree", Vec{1350, 0}, CollisionObject{Type: CollisionCircle, Radius: 30})}
+	w.worldItems = []*Entity{testWorldItem(w, "stone-wall", "stone-wall", Vec{1350, 0}, CollisionObject{Type: CollisionCircle, Radius: 30})}
 	if !w.terrainOccluded(from, to) {
 		t.Fatal("circular terrain did not block line of sight")
 	}
@@ -56,11 +56,10 @@ func TestCircleAndBoxTerrainShareTheSightRule(t *testing.T) {
 
 func TestCollisionDoesNotImplyVisionOcclusion(t *testing.T) {
 	w, _ := testWorld()
-	decoration := testWorldItem(w, "decoration", "wall", Vec{1350, 0}, CollisionObject{Type: CollisionBox, HalfWidth: 20, HalfHeight: 60})
-	decoration.OccludesVision = false
-	w.worldItems = []*Entity{decoration}
+	tree := testWorldItem(w, "tree", "tree", Vec{1350, 0}, CollisionObject{Type: CollisionCircle, Radius: 30})
+	w.worldItems = []*Entity{tree}
 	if w.terrainOccluded(Vec{1200, 0}, Vec{1500, 0}) {
-		t.Fatal("collidable decoration occluded vision without the entity attribute")
+		t.Fatal("a collidable tree occluded vision without the entity attribute")
 	}
 }
 

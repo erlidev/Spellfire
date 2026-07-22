@@ -1,9 +1,9 @@
 package game
 
-// terrainOccluded reports whether solid world geometry crosses the direct line
-// between two points. The collision component is the source of truth for both
-// projectile cover and sight, so authored fixtures and player-raised wall
-// segments cannot disagree about what they block.
+// terrainOccluded reports whether vision-blocking world geometry crosses the
+// direct line between two points. The entity attribute opts a collider into
+// sight blocking, so a tree can remain physical without becoming visual cover;
+// opted-in fixtures and player-raised walls reuse their collision geometry.
 //
 // Only standing geometry occludes. Destruction and expiry remove an item from
 // gameplay immediately; its graceful deletion tail is visual feedback, not

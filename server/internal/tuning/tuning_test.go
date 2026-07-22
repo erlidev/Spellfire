@@ -107,11 +107,14 @@ func TestSharedTelegraphGrammarCoversEveryStandardShape(t *testing.T) {
 
 func TestVisionAttributesAreIndependentEntityProperties(t *testing.T) {
 	tables := MustLoad()
-	for _, id := range []string{"tree", "wall", "stone-wall"} {
+	for _, id := range []string{"wall", "stone-wall"} {
 		definition := tables.Entities[id]
 		if !definition.OccludesVision || !definition.VisibleInShadow {
 			t.Errorf("%s vision attributes = occludes:%v visible:%v, want both", id, definition.OccludesVision, definition.VisibleInShadow)
 		}
+	}
+	if tree := tables.Entities["tree"]; tree.OccludesVision || !tree.VisibleInShadow {
+		t.Fatalf("tree vision attributes = occludes:%v visible:%v, want non-occluding landmark", tree.OccludesVision, tree.VisibleInShadow)
 	}
 	if tables.Entities["player"].OccludesVision || tables.Entities["player"].VisibleInShadow {
 		t.Fatal("players must neither cast static terrain shadows nor remain visible through them")
@@ -287,7 +290,7 @@ func TestValidationRejectsBrokenTables(t *testing.T) {
 		{
 			name: "vision occluder without geometry", file: "entities.json", want: "occludes vision but has no collision geometry",
 			mutate: func(document map[string]any) {
-				document["tree"].(map[string]any)["collision_objects"] = []any{}
+				document["wall"].(map[string]any)["collision_objects"] = []any{}
 			},
 		},
 		{
