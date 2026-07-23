@@ -164,20 +164,21 @@ already the split the inventory surface states.
 - [x] Scope mode: peripheral blackout, view pushed toward the aim, server-side scoped state affecting movement, spread, and what the snapshot sends; camera exception in [game-view-and-hud.md](docs/game/ui/game-view-and-hud.md#camera)
 - [x] Riot shield: frontal arc only, slows the user, locks fire, blocks bullets/projectiles, does not block a blast ([gunslinger.md](docs/game/design/gunslinger.md#defense), `World.blockedBy`)
 - [x] Shield durability is the shield's health: every blocked round is charged to `guard.durability`, the overflow reaches the body, a spent shield breaks and drops, and it repairs only while lowered and returns only when whole (`World.guardAbsorb`, `World.stepGuard`, `Entity.shield`/`max_shield` on the wire and in the HUD)
-- [x] Smoke deployable: a thrown canister leaves a standing field that hides anything it covers completely from the snapshot — not from the renderer — while revealing bodies close enough to touch, drawn as drifting particles ([deployable.go](server/internal/game/deployable.go), `World.concealed`, [gadgets.json](data/tuning/gadgets.json))
+- [x] Smoke deployable: a thrown canister leaves a standing field that casts a shadow like terrain (reworked in 2.6 from pure containment) — a body behind it is omitted from the snapshot, a body inside it sees only a small reveal circle — drawn as drifting particles ([deployable.go](server/internal/game/deployable.go), [visibility.go](server/internal/game/visibility.go), [gadgets.json](data/tuning/gadgets.json))
 - [x] Flashbang: a thrown blast that takes vision whole for its window through a `blind` status, dealing no damage; a blinded body is sent nothing but itself and the client paints the blackout ([effects.json](data/tuning/effects.json), `World.blinded`)
 - [x] Developer-mode level grant so content above the opening kit can be reached and exercised before mob XP lands — `POST /api/admin/progress`, bounded by `progression.admin_grant` ([administration.md](docs/administration.md))
 - [x] Locked weapons, gadgets, and spells are listed disabled with the level that grants them, in both the Loadout and Crafting surfaces ([system-interfaces.md](docs/game/ui/system-interfaces.md#safe-zone-loadout-and-crafting))
 - [x] Rare materials gate heavy weapons economically, never statistically: sniper, LMG, and launcher declare `requires_craft` and a material cost, so they have no stock configuration and must be built
-- [x] Test: pattern determinism and recovery, the walked muzzle reaching the snapshot and settling back to aim, spread widening with speed, the pellet cone dividing one band hit, weight moving handling and never damage, the withheld-category gate, scope gating hitscan, falloff and hard range, shield arc and fire lock, shield durability breaking and recovering, finite ammunition, and blast reach ([gunplay_test.go](server/internal/game/gunplay_test.go)); a canister deploying where it lands and expiring, smoke hiding only what it covers completely — never a body on its rim or past it, never one close enough to touch, and never the viewer's own rounds — a flashbang blinding without damaging and detonating exactly once where it lands, and a thrown gadget leaving the gun's pattern alone ([deployable_test.go](server/internal/game/deployable_test.go))
+- [x] Test: pattern determinism and recovery, the walked muzzle reaching the snapshot and settling back to aim, spread widening with speed, the pellet cone dividing one band hit, weight moving handling and never damage, the withheld-category gate, scope gating hitscan, falloff and hard range, shield arc and fire lock, shield durability breaking and recovering, finite ammunition, and blast reach ([gunplay_test.go](server/internal/game/gunplay_test.go)); a canister deploying where it lands and expiring, a concealing cloud casting a shadow — hiding a body behind it, keeping a body half out of its rim, revealing a body inside its reveal circle, letting a rim body peek out, and never shadowing the viewer's own rounds — a flashbang blinding without damaging and detonating exactly once where it lands, and a thrown gadget leaving the gun's pattern alone ([deployable_test.go](server/internal/game/deployable_test.go))
 
 Phase 2.7 assigns every category to sustained, burst, or heavy-burst, with the
 band owning both cadence and damage. The nine categories retain their handling,
 range, magazine, scope, pellet, and blast distinctions within those bands.
-Smoke and flashbangs did not wait for 2.6. Smoke carries its own containment
-rule — a cloud hides only what it covers completely, enforced by what the
-server *sends* rather than by what the client draws — and now participates in
-the shared automatic-target visibility check without pretending to be solid.
+Smoke and flashbangs did not wait for 2.6. Smoke is enforced by what the server
+*sends* rather than by what the client draws, and 2.6 reworked it from its own
+containment rule into a sight-blocker that casts a shadow like terrain — while
+still never shadowing the viewer's own rounds — participating in the shared
+automatic-target visibility check without pretending to be solid.
 
 ### 2.5 Mage kit
 - [x] Author per-spell cooldowns and costs — the second resource axis alongside mana ([mage.md](docs/game/design/mage.md#mana-and-cooldowns)); every spell spends mana and every tier above one holds its own cooldown, each costing more and locking out longer than the tier below it ([abilities.json](data/tuning/abilities.json), `TestShippedSpellsPriceThemselves`)
@@ -204,17 +205,21 @@ controlled player ran ahead of the server and was snapped back twenty times a se
 
 ### 2.6 Line of sight
 - [x] Vision/targeting occlusion: fixed walls and Mage-created wall segments block snapshot visibility and automatic acquisition when their entity attribute enables it; trees remain non-occluding landmarks ([visibility.go](server/internal/game/visibility.go), [architecture.md](docs/architecture.md#line-of-sight))
-- [x] Shared substrate for smoke and for the Mage/Gunslinger LOS matchup: smoke containment and terrain sightlines feed the same targeting predicate, while manual ground placement remains exempt ([combat.md](docs/game/design/combat.md#time-to-kill))
+- [x] Shared substrate for smoke and for the Mage/Gunslinger LOS matchup: smoke and terrain sightlines feed the same targeting predicate, while manual ground placement remains exempt ([combat.md](docs/game/design/combat.md#time-to-kill))
 - [x] GPU-computed client shadow wedges derived from snapshot colliders, with `occludes_vision` and `visible_in_shadow` entity attributes separating sight blockers from landmarks/decorations that remain readable beneath the 27% veil ([game-view-and-hud.md](docs/game/ui/game-view-and-hud.md#camera))
+- [x] Rework: occlusion tests the whole silhouette (any part visible) rather than the centre; smoke casts a shadow like terrain with an inside-cloud reveal circle and rim peek instead of pure containment; area fields (firestorm/blizzard/cinder) and smoke are exempt from occlusion and always sent; the client fades entities in and out of sight instead of blinking them; occluders are collected once per send ([visibility.go](server/internal/game/visibility.go), [shadow.ts](web/src/game/shadow.ts), [view.ts](web/src/game/view.ts))
 
 LOS is authoritative absence rather than a client mask: dynamic entities behind
-solid cover are omitted from the viewer's snapshot, while terrain itself stays
-present for rendering and prediction. Homing and chain acquisition use the same
-rule, cannot select through terrain or a cloud that fully conceals a body, and
-fall through to the nearest visible target. Destroyed or expired terrain stops
-occluding immediately; its graceful fade is feedback only. The client adds a
-slight dark veil over the same hidden wedges, but authoritative absence remains
-the rule—the overlay never decides whether an entity exists or can be targeted.
+solid cover are omitted from the viewer's snapshot, while terrain and every field
+stay present for rendering and prediction. Occlusion is a property of the whole
+body — a shoulder past a wall corner is seen. Smoke is a sight-blocker like
+terrain but never shadows the viewer's own rounds and gives a body inside it only
+a small reveal circle. Homing and chain acquisition use the same predicate, fall
+through to the nearest visible target, and cannot select through cover or smoke.
+Destroyed or expired terrain stops occluding immediately; its graceful fade is
+feedback only. The client veils the hidden wedges and, inside smoke, the ground
+past the reveal radius, and fades an entity out of sight rather than dropping it
+outright — but authoritative absence remains the rule.
 
 ### 2.7 Roles, keystones, and band enforcement
 - [x] Cover the seven combat roles across both classes, declared on weapons, spells, gadgets, and keystones and enforced by tuning validation ([combat.md](docs/game/design/combat.md#shared-combat-roles))

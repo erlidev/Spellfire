@@ -36,25 +36,25 @@ func (w *World) SnapshotFor(playerID string, now time.Time, kind uint64) protoco
 		reach := viewDistance + extent
 		return math.Abs(delta.X) > reach || math.Abs(delta.Y) > reach
 	}
-	// A flashbang takes vision whole, smoke takes whatever it stands over, and
-	// solid terrain blocks the direct sightline. All are enforced here rather
-	// than drawn over on the client: what a player cannot see, a client is never
-	// sent.
+	// A flashbang takes vision whole, smoke and solid terrain both cast shadows,
+	// and a body inside smoke sees only a small circle around itself. All are
+	// enforced here rather than drawn over on the client: what a player cannot
+	// see, a client is never sent. The occluder set is collected once for this
+	// viewer's send rather than rescanning the world per candidate entity.
 	blind := w.blinded(viewer)
-	// A cloud hides only what it covers completely, and never what the viewer
-	// owns. Concealing a body's own rounds would make its smoke read as a wall it
-	// cannot shoot through: the round would vanish at the edge of the cloud and
-	// reappear past it, which is a vision rule pretending to be collision. What
-	// smoke is bought for is hiding the *opponent* and the shots they fire, and
-	// only while the drawn cloud actually covers them.
+	occ := w.collectOccluders()
+	// A target is hidden when no part of its silhouette has a clear line. The
+	// viewer's own entities are the one exemption from smoke: a cloud that hid a
+	// body's own rounds would read as a wall it could not shoot through, so those
+	// are tested against terrain alone.
 	hidden := func(at Vec, ownerID string, extent float64) bool {
 		if outsideView(at, 0) || blind {
 			return true
 		}
-		if w.terrainOccluded(viewer.Position, at) {
-			return true
+		if ownerID == playerID {
+			return !occ.visibleTerrain(viewer.Position, at, extent)
 		}
-		return ownerID != playerID && w.concealed(viewer.Position, at, extent)
+		return !occ.visible(viewer.Position, at, extent)
 	}
 	for _, id := range sortedPlayerIDs(w.players) {
 		p := w.players[id]
@@ -122,10 +122,12 @@ func (w *World) SnapshotFor(playerID string, now time.Time, kind uint64) protoco
 	}
 	for _, id := range sortedDeployableIDs(w.deployables) {
 		deployable := w.deployables[id]
-		// A cloud is never hidden by a cloud: what is standing in the world is
-		// exactly what explains why everything inside it went missing. Solid
-		// terrain still hides the field when it is wholly out of sight.
-		if blind || outsideView(deployable.Position, deployable.Field.Radius) || w.terrainOccluded(viewer.Position, deployable.Position) {
+		// Fields are unaffected by line of sight: a smoke cloud is exactly what
+		// explains why everything behind it went missing, and an area effect —
+		// firestorm, blizzard, a cinder patch — is ground the player is entitled
+		// to see and play around even through cover. Only distance and blindness
+		// take a field off the wire.
+		if blind || outsideView(deployable.Position, deployable.Field.Radius) {
 			continue
 		}
 		message.Entities = append(message.Entities, protocol.Entity{

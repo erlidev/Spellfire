@@ -63,6 +63,47 @@ func TestCollisionDoesNotImplyVisionOcclusion(t *testing.T) {
 	}
 }
 
+// Occlusion is a property of the whole silhouette, not its centre: a body whose
+// centre line is blocked but whose flanks clear the cover is still seen, and one
+// the cover shadows completely is not.
+func TestOcclusionUsesTheWholeSilhouette(t *testing.T) {
+	w, now := testWorld()
+	viewer := addTestPlayer(w, "viewer", model.Gunslinger, Vec{1000, 0}, now)
+	target := addTestPlayer(w, "target", model.Gunslinger, Vec{1250, 0}, now)
+	post := testWorldItem(w, "post", "stone-wall", Vec{1200, 0}, CollisionObject{Type: CollisionCircle, Radius: 6})
+	w.worldItems = []*Entity{post}
+
+	// A post narrower than the body it stands in front of blocks the centre line
+	// but not the flanks: the body stays visible.
+	if !visible(w, viewer.ID, target.ID, now) {
+		t.Fatal("a body wider than the cover between it and the viewer was hidden by its centre alone")
+	}
+	// Widen the cover until it shadows the whole silhouette: now it is hidden.
+	post.CollisionObjects[0].Radius = 45
+	if visible(w, viewer.ID, target.ID, now) {
+		t.Fatal("cover wide enough to shadow the whole body failed to hide it")
+	}
+}
+
+// Area fields and smoke are unaffected by line of sight: both reach a viewer even
+// through solid cover. An area field is ground the player is entitled to play
+// around, and a smoke cloud is exactly what explains a body vanishing behind it.
+func TestFieldsIgnoreLineOfSight(t *testing.T) {
+	w, now := testWorld()
+	viewer := addTestPlayer(w, "viewer", model.Gunslinger, Vec{1000, 0}, now)
+	w.worldItems = []*Entity{testWorldItem(w, "wall", "stone-wall", Vec{1150, 0}, CollisionObject{Type: CollisionCircle, Radius: 40})}
+
+	storm := w.deploy("caster", *w.tuning.Tables.Abilities["firestorm-cast"].Deployable, Vec{1400, 0}, "fire", now)
+	cloud := w.deploy("caster", *w.tuning.Tables.Abilities["smoke-throw"].Deployable, Vec{1400, 0}, "", now)
+
+	if !visible(w, viewer.ID, storm.ID, now) {
+		t.Fatal("an area field behind cover was hidden by line of sight")
+	}
+	if !visible(w, viewer.ID, cloud.ID, now) {
+		t.Fatal("a smoke cloud behind cover was hidden by line of sight")
+	}
+}
+
 func TestAutomaticTargetingRequiresLineOfSight(t *testing.T) {
 	w, now := testWorld()
 	owner := addTestPlayer(w, "owner", model.Mage, Vec{1200, 0}, now)
@@ -78,9 +119,13 @@ func TestAutomaticTargetingRequiresLineOfSight(t *testing.T) {
 		t.Fatalf("automatic target = %s, want the farther visible body", id)
 	}
 
-	// Smoke participates in the same acquisition rule without becoming solid:
-	// it hides only the body it completely covers.
+	// Smoke participates in the same acquisition rule without becoming solid: a
+	// concealing cloud casts a shadow, so a body behind it is passed over for one
+	// in the open, without the cloud swallowing the acquiring body's own view.
 	w.worldItems = nil
+	owner.Position = Vec{1100, 0}
+	blocked.Position = Vec{1400, 0}
+	open.Position = Vec{1300, 300}
 	field := *w.tuning.Tables.Abilities["smoke-throw"].Deployable
 	w.deploy("", field, blocked.Position, "", now)
 	if got := w.nearestPlayer(owner.Position, 500, map[string]bool{owner.ID: true}, owner); got != open {

@@ -70,46 +70,56 @@ func TestSmokeDeploysWhereItLandsAndExpires(t *testing.T) {
 	}
 }
 
-// Smoke hides what it covers, and the rule has to be the one the player can see:
-// a body the drawn cloud swallows whole stops reaching the snapshot, while a
-// body clipping its edge or standing past it does not — that body is visibly
-// half out of the smoke on every client.
-func TestSmokeHidesOnlyWhatItCoversCompletely(t *testing.T) {
+// A concealing cloud casts a shadow: a body behind it is hidden exactly as a
+// wall hides one, a body beside the sightline stays visible, and a body only
+// half-swallowed is still seen because occlusion is a property of the whole
+// silhouette, not its centre. Standing inside the cloud a body sees only a small
+// circle around itself, which is what lets it peek out at the rim.
+func TestSmokeCastsShadowAndRevealsUpClose(t *testing.T) {
 	w, now := testWorld()
 	field := *w.tuning.Tables.Abilities["smoke-throw"].Deployable
-	viewer := addTestPlayer(w, "viewer", model.Gunslinger, Vec{1200, 0}, now)
-	target := addTestPlayer(w, "target", model.Gunslinger, Vec{1350, 0}, now)
+	radius, reveal, pr := field.Radius, field.RevealRadius, w.tuning.PlayerRadius
 	cloud := Vec{1350, 0}
-
-	if !visible(w, viewer.ID, target.ID, now) {
-		t.Fatal("a body in the open was already invisible")
-	}
 	w.deploy("", field, cloud, "", now)
+
+	viewer := addTestPlayer(w, "viewer", model.Gunslinger, Vec{cloud.X - radius - 200, 0}, now)
+	target := addTestPlayer(w, "target", model.Gunslinger, Vec{cloud.X + radius + 100, 0}, now)
+	place := func(p *Player, at Vec) { p.Position = at; w.recordHistory(p, now) }
+
+	// Directly behind the cloud, on the sightline: hidden.
 	if visible(w, viewer.ID, target.ID, now) {
-		t.Fatal("a cloud covering a body whole hid nothing")
+		t.Fatal("a cloud failed to hide the body directly behind it")
 	}
-	// On the rim, half in: the client draws it half out of the smoke, so the
-	// wire has to agree.
-	target.Position = Vec{cloud.X + field.Radius, 0}
-	w.recordHistory(target, now)
+	// Beside the cloud, sightline well clear of it: visible.
+	place(target, Vec{cloud.X, cloud.Y + radius + 4*pr})
 	if !visible(w, viewer.ID, target.ID, now) {
-		t.Fatal("a body clipping the edge of the cloud vanished")
+		t.Fatal("a cloud hid a body whose sightline never crosses it")
 	}
-	// Straight through and out the far side. The cloud is on the sightline and
-	// covers nothing of the body, which is exactly what the renderer shows.
-	target.Position = Vec{cloud.X + field.Radius + 2*w.tuning.PlayerRadius, 0}
-	w.recordHistory(target, now)
+	// Half-swallowed at the near rim: the exposed cap has a clear line, so the
+	// body is still seen. This is the any-part-visible rule the client draws.
+	place(target, Vec{cloud.X - radius + pr/2, 0})
 	if !visible(w, viewer.ID, target.ID, now) {
-		t.Fatal("a body past the cloud was hidden by a sightline rule the client never draws")
+		t.Fatal("a body half out of the cloud vanished; occlusion used its centre alone")
 	}
-	// Inside the reveal gap the cloud stops hiding: a contact fight is not
-	// decided by who threw the canister.
-	viewer.Position = cloud
-	target.Position = Vec{cloud.X + field.RevealRadius/2, 0}
-	w.recordHistory(viewer, now)
-	w.recordHistory(target, now)
+	// Inside the cloud a body sees only its reveal circle: a target inside the
+	// same cloud but past that circle is swallowed.
+	place(viewer, cloud)
+	place(target, Vec{cloud.X + (radius+reveal)/2, 0})
+	if visible(w, viewer.ID, target.ID, now) {
+		t.Fatal("smoke revealed a body past the reveal circle of the viewer standing in it")
+	}
+	// A body inside the reveal circle is seen, so a contact fight is not decided
+	// by who threw the canister.
+	place(target, Vec{cloud.X + reveal/2, 0})
 	if !visible(w, viewer.ID, target.ID, now) {
 		t.Fatal("the cloud hid a body close enough to touch")
+	}
+	// Standing at the rim, the reveal circle reaches past the cloud's edge, so
+	// the viewer peeks out and sees a body just outside the smoke.
+	place(viewer, Vec{cloud.X + radius - reveal/4, 0})
+	place(target, Vec{cloud.X + radius + reveal/4, 0})
+	if !visible(w, viewer.ID, target.ID, now) {
+		t.Fatal("a body at the rim could not peek out of its own smoke")
 	}
 }
 
@@ -170,22 +180,24 @@ func TestThrowingAGadgetDoesNotWalkTheGun(t *testing.T) {
 	}
 }
 
-// Smoke changes what an opponent can see, never where a round may fly. Occluding
-// the thrower's own bullets made the cloud read as a wall it could not shoot
-// through, so a body always reaches its own rounds.
+// Smoke changes what an opponent can see, never where a round may fly. A cloud
+// casts a shadow, but never over the viewer's own rounds: shadowing the
+// thrower's own bullets would make the cloud read as a wall it could not shoot
+// through, the round vanishing at the edge and reappearing past it.
 func TestSmokeDoesNotHideYourOwnRounds(t *testing.T) {
 	w, now := testWorld()
 	field := *w.tuning.Tables.Abilities["smoke-throw"].Deployable
-	shooter := carrying(t, w, addTestPlayer(w, "shooter", model.Gunslinger, Vec{1200, 0}, now), "starter-rifle")
-	other := carrying(t, w, addTestPlayer(w, "other", model.Gunslinger, Vec{1200, 300}, now), "starter-rifle")
-	w.deploy("", field, Vec{1350, 0}, "", now)
+	shooter := carrying(t, w, addTestPlayer(w, "shooter", model.Gunslinger, Vec{1000, 0}, now), "starter-rifle")
+	other := carrying(t, w, addTestPlayer(w, "other", model.Gunslinger, Vec{1000, 300}, now), "starter-rifle")
+	cloud := Vec{1350, 0}
+	w.deploy("", field, cloud, "", now)
 
 	fire(w, shooter, 1, now)
 	fire(w, other, 1, now)
 	var mine, theirs *Projectile
 	for _, id := range sortedProjectileIDs(w.projectiles) {
 		p := w.projectiles[id]
-		p.Position = Vec{1350, 0} // inside the cloud, on the shooter's sightline
+		p.Position = cloud // inside the cloud, on each shooter's sightline
 		if p.OwnerID == shooter.ID {
 			mine = p
 		} else {
@@ -196,16 +208,17 @@ func TestSmokeDoesNotHideYourOwnRounds(t *testing.T) {
 		t.Fatalf("expected one round from each body, got %d", len(w.projectiles))
 	}
 	if !visible(w, shooter.ID, mine.ID, now) {
-		t.Fatal("the cloud swallowed the shooter's own round, which reads as a wall rather than a sightline")
+		t.Fatal("the cloud swallowed the shooter's own round, which reads as a wall rather than a shadow")
 	}
 	if visible(w, shooter.ID, theirs.ID, now) {
-		t.Fatal("the cloud failed to hide an opponent's round")
+		t.Fatal("the cloud failed to hide an opponent's round behind it")
 	}
-	// A round only clipping the cloud is drawn half out of it, so it stays on
-	// the wire: rounds follow the same containment rule bodies do.
-	theirs.Position = Vec{1350 + field.Radius, 0}
+	// An opponent's round half out of the near rim is seen: rounds follow the
+	// same any-part-visible rule bodies do.
+	edge := theirs.circleRadius()
+	theirs.Position = Vec{cloud.X - field.Radius + edge/2, 0}
 	if !visible(w, shooter.ID, theirs.ID, now) {
-		t.Fatal("a round crossing the edge of the cloud vanished instead of flying past it")
+		t.Fatal("a round half out of the cloud vanished instead of flying past it")
 	}
 }
 

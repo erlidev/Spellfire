@@ -26,6 +26,7 @@ uniform vec2 uOrigin;
 uniform vec2 uSize;
 uniform float uOpacity;
 uniform int uCount;
+uniform float uReveal;
 
 bool circleHit(vec2 origin, vec2 delta, vec3 circle) {
   vec2 offset = origin - circle.xy;
@@ -61,13 +62,14 @@ bool boxHit(vec2 origin, vec2 delta, vec4 box) {
 void main(void) {
   vec2 point = vTextureCoord * uSize;
   vec2 delta = point - uOrigin;
-  bool blocked = false;
+  // Inside smoke the viewer sees only a small circle around itself: everything
+  // past the reveal radius is shadowed regardless of what stands there.
+  bool blocked = uReveal > 0.0 && dot(delta, delta) > uReveal * uReveal;
   for (int index = 0; index < ${maxOccluders}; index++) {
-    if (index >= uCount) break;
+    if (blocked || index >= uCount) break;
     vec4 shape = uOccluders[index];
     if ((shape.w < 0.0 && circleHit(uOrigin, delta, shape.xyz)) || (shape.w >= 0.0 && boxHit(uOrigin, delta, shape))) {
       blocked = true;
-      break;
     }
   }
   vec3 color = vec3(0.027, 0.063, 0.102);
@@ -81,7 +83,7 @@ struct GlobalFilterUniforms {
 };
 struct ShadowUniforms {
   uOccluders: array<vec4<f32>, ${maxOccluders}>,
-  uOrigin: vec2<f32>, uSize: vec2<f32>, uOpacity: f32, uCount: i32, uPadding: vec2<f32>,
+  uOrigin: vec2<f32>, uSize: vec2<f32>, uOpacity: f32, uCount: i32, uReveal: f32, uPadding: f32,
 };
 @group(0) @binding(0) var<uniform> gfu: GlobalFilterUniforms;
 @group(0) @binding(1) var uTexture: texture_2d<f32>;
@@ -136,13 +138,13 @@ fn boxHit(origin: vec2<f32>, delta: vec2<f32>, box: vec4<f32>) -> bool {
 @fragment fn mainFragment(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
   let point = uv * shadow.uSize;
   let delta = point - shadow.uOrigin;
-  var blocked = false;
+  // Inside smoke the viewer sees only a small circle around itself.
+  var blocked = shadow.uReveal > 0.0 && dot(delta, delta) > shadow.uReveal * shadow.uReveal;
   for (var index = 0; index < ${maxOccluders}; index++) {
-    if (index >= shadow.uCount) { break; }
+    if (blocked || index >= shadow.uCount) { break; }
     let shape = shadow.uOccluders[index];
     if ((shape.w < 0.0 && circleHit(shadow.uOrigin, delta, shape.xyz)) || (shape.w >= 0.0 && boxHit(shadow.uOrigin, delta, shape))) {
       blocked = true;
-      break;
     }
   }
   let color = vec3<f32>(0.027, 0.063, 0.102);
@@ -177,7 +179,8 @@ export class SightShadowFilter extends Filter {
       uSize: { value: new Float32Array(2), type: "vec2<f32>" },
       uOpacity: { value: 0.27, type: "f32" },
       uCount: { value: 0, type: "i32" },
-      uPadding: { value: new Float32Array(2), type: "vec2<f32>" },
+      uReveal: { value: 0, type: "f32" },
+      uPadding: { value: 0, type: "f32" },
     });
     super({
       glProgram: GlProgram.from({ vertex: glVertex, fragment: glFragment, name: "sight-shadow" }),
@@ -190,11 +193,12 @@ export class SightShadowFilter extends Filter {
     this.shadowUniforms = shadowUniforms;
   }
 
-  update(origin: { x: number; y: number }, width: number, height: number, colliders: Collider[]): void {
+  update(origin: { x: number; y: number }, width: number, height: number, colliders: Collider[], reveal = 0): void {
     const packed = packShadowOccluders(colliders, origin);
     (this.shadowUniforms.uniforms.uOccluders as Float32Array).set(packed.data);
     (this.shadowUniforms.uniforms.uOrigin as Float32Array).set([origin.x, origin.y]);
     (this.shadowUniforms.uniforms.uSize as Float32Array).set([width, height]);
     this.shadowUniforms.uniforms.uCount = packed.count;
+    this.shadowUniforms.uniforms.uReveal = reveal;
   }
 }

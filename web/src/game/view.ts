@@ -15,6 +15,8 @@ interface ActorView {
   shots: number; firedAt: number;
   /** Deterministic puff layout, for a deployable field. Empty for everything else. */
   puffs: Puff[]; bornAt: number;
+  /** Line-of-sight fade, 0..1: ramps up as an entity enters sight and down as it leaves. */
+  los: number;
 }
 interface Puff { graphic: Graphics; distance: number; angle: number; radius: number; drift: number }
 
@@ -38,6 +40,10 @@ const shakeDistance = 6;
 const puffCount = 18;
 const puffCoreCount = 6;
 const puffFadeMS = 320;
+// A body entering or leaving line of sight fades rather than snapping, which is
+// less jarring than a body blinking in and out behind cover. Short enough that a
+// covered opponent does not linger as usable information.
+const losFadeMS = 140;
 
 const colors = {
   ground: 0x16233a, grid: 0x2c405e, safe: 0x7ee1bb, rim: 0x8d5260, self: 0xffffff, hostile: 0xff6f69,
@@ -63,8 +69,12 @@ export class GameView {
   private shadow = new Graphics();
   private shadowFilter = new SightShadowFilter();
   private shadowVisibleLayer = new Container();
-  // Fields draw over bodies: a cloud that players rendered on top of would show
-  // exactly what the server just stopped sending.
+  // Area effects — a firestorm, a blizzard, a cinder patch — draw above the veil
+  // because they are unaffected by line of sight: ground the player is entitled
+  // to see and play around even through cover.
+  private fieldLayer = new Container();
+  // Concealing smoke draws over bodies: a cloud that players rendered on top of
+  // would show exactly what the server just stopped sending behind it.
   private fogLayer = new Container();
   // The blackout a flashbang leaves. It lives on the stage rather than in the
   // world container, because it is the viewer's eyes rather than a place.
@@ -80,6 +90,11 @@ export class GameView {
   private predictor?: Predictor;
   private latestEntities = new Map<string, Entity>();
   private colliders: Collider[] = [];
+  // Ids present in the most recent authoritative snapshot: the target of each
+  // actor's line-of-sight fade. An omitted entity fades out rather than vanishing.
+  private visible = new Set<string>();
+  private frameDt = 0;
+  private lastFrame = 0;
   private initialized = false;
   // The scope's camera exception: the view is pushed toward where the weapon is
   // pointed, by a fraction of the reach the server widened the snapshot by.
@@ -89,7 +104,7 @@ export class GameView {
     await this.app.init({ resizeTo: window, antialias: true, backgroundColor: colors.ground, resolution: Math.min(2, devicePixelRatio), autoDensity: true });
     host.replaceChildren(this.app.canvas);
     this.world.addChild(this.ground, this.telegraphLayer, this.entityLayer);
-    this.overlayWorld.addChild(this.shadowVisibleLayer, this.fogLayer);
+    this.overlayWorld.addChild(this.shadowVisibleLayer, this.fieldLayer, this.fogLayer);
     this.shadow.filters = [this.shadowFilter];
     this.app.stage.addChild(this.world, this.shadow, this.overlayWorld, this.blackout);
     this.app.ticker.add(() => this.renderFrame());
@@ -135,9 +150,11 @@ export class GameView {
       this.samples.set(entity.id, buffer);
     }
     if (message.kind === ServerKind.Snapshot || message.kind === ServerKind.Welcome) {
-      // Snapshot omission is the authoritative LOS result. Keeping the last
-      // interpolation sample made a fully covered opponent linger for 500 ms.
-      for (const id of this.samples.keys()) if (!present.has(id)) this.removeActor(id);
+      // Snapshot omission is the authoritative LOS result. Rather than dropping a
+      // covered entity outright — which blinks it out — the present set drives a
+      // short fade; the actor is collected only once it has faded away, and no new
+      // samples arrive for it in the meantime so it freezes where it was last seen.
+      this.visible = present;
     }
   }
 
@@ -179,6 +196,8 @@ export class GameView {
     const predictor = this.predictor;
     if (!predictor) return;
     const now = performance.now();
+    this.frameDt = this.lastFrame ? now - this.lastFrame : 0;
+    this.lastFrame = now;
     const width = this.app.screen.width, height = this.app.screen.height;
     const shake = this.cameraShake(now);
     const cameraX = predictor.x + this.scopeOffset.x + shake.x, cameraY = predictor.y + this.scopeOffset.y + shake.y;
@@ -193,6 +212,11 @@ export class GameView {
       const entity = interpolate(samples, renderAt);
       if (entity) this.drawEntity(entity, false, now);
       else if (!this.latestEntities.has(id)) this.removeActor(id);
+    }
+    // Collect any actor that has fully faded out of sight. Until then it keeps
+    // being drawn, frozen at its last-seen position.
+    for (const [id, view] of this.actors) {
+      if (id !== this.localID && view.los <= 0.001 && !this.visible.has(id)) this.removeActor(id);
     }
     this.drawBlackout(local, now, width, height);
   }
@@ -243,13 +267,30 @@ export class GameView {
 
   private drawSightShadow(viewerX: number, viewerY: number, cameraX: number, cameraY: number, width: number, height: number): void {
     const toScreen = (x: number, y: number): { x: number; y: number } => ({ x: x - cameraX + width / 2, y: y - cameraY + height / 2 });
-    const occluders = this.colliders
+    const occluders: Collider[] = this.colliders
       .filter((collider) => entityDefinitions[collider.kind]?.occludes_vision)
       .map((collider) => ({ ...collider, ...toScreen(collider.x, collider.y) }));
+    // Concealing smoke now casts a shadow like terrain. A cloud the viewer stands
+    // inside is not added as an occluder — it would shadow every ray from within
+    // it; instead its reveal radius carves a small visible circle around the body,
+    // which is what lets a body at the rim peek just outside the smoke.
+    let reveal = 0;
+    for (const entity of this.latestEntities.values()) {
+      if (entity.type !== EntityType.Deployable || entity.deleting) continue;
+      const field = deployableByKind(entity.className);
+      const radius = entity.radius;
+      if (!field?.conceals || radius <= 0) continue;
+      if ((viewerX - entity.x) ** 2 + (viewerY - entity.y) ** 2 <= radius * radius) {
+        reveal = Math.max(reveal, field.reveal_radius ?? 0);
+        continue;
+      }
+      const screen = toScreen(entity.x, entity.y);
+      occluders.push({ id: entity.id, entityID: entity.id, kind: entity.className, shape: "circle", x: screen.x, y: screen.y, radius, width: 0, height: 0 });
+    }
     // If a browser cannot compile either shader backend, the filter is skipped;
     // this restrained fill is a safe dark fallback rather than a white screen.
     this.shadow.clear().rect(0, 0, width, height).fill({ color: 0x07101a, alpha: .27 });
-    this.shadowFilter.update(toScreen(viewerX, viewerY), width, height, occluders);
+    this.shadowFilter.update(toScreen(viewerX, viewerY), width, height, occluders, reveal);
   }
 
   private drawEntity(entity: Entity, self: boolean, now = performance.now()): void {
@@ -260,7 +301,14 @@ export class GameView {
       this.layerFor(entity).addChild(view.root);
     }
     view.root.position.set(entity.x, entity.y);
-    view.root.alpha = entity.deleting ? Math.max(0, 1 - entity.deleteProgress) : entity.alive ? entity.lingering ? .62 : 1 : .32;
+    // Step the line-of-sight fade toward present (1) or omitted (0). The local
+    // body and area fields are always in sight; everything else fades with the
+    // authoritative snapshot's present set.
+    const inSight = self || this.visible.has(entity.id) || entity.type === EntityType.Deployable;
+    const step = this.frameDt / losFadeMS;
+    view.los = inSight ? Math.min(1, view.los + step) : Math.max(0, view.los - step);
+    const base = entity.deleting ? Math.max(0, 1 - entity.deleteProgress) : entity.alive ? entity.lingering ? .62 : 1 : .32;
+    view.root.alpha = base * view.los;
     if (entity.type === EntityType.Deployable) { this.drawField(view, now); return; }
     if (entity.type === EntityType.Player) {
       this.drawRecoil(view, entity, self, now);
@@ -289,7 +337,9 @@ export class GameView {
     if (entity.type === EntityType.Telegraph) return this.telegraphLayer;
     if (entityDefinitions[entity.className]?.visible_in_shadow) return this.shadowVisibleLayer;
     if (entity.type !== EntityType.Deployable) return this.entityLayer;
-    return deployableByKind(entity.className)?.conceals ? this.fogLayer : this.telegraphLayer;
+    // Concealing smoke draws on top of everything; an area field draws above the
+    // veil but below the smoke, since it is seen through cover but not over it.
+    return deployableByKind(entity.className)?.conceals ? this.fogLayer : this.fieldLayer;
   }
 
   /**
@@ -430,7 +480,9 @@ export class GameView {
     const label = new Text({ text: entity.name, style: { fontFamily: "system-ui", fontSize: 12, fill: 0xffffff, stroke: { color: colors.outline, width: 3 } } }); label.anchor.set(.5); label.position.set(0, -50);
     root.addChild(body, stance, weapon, health, label);
     if (entity.type === EntityType.Deployable) label.visible = false;
-    return { root, body, weapon, health, stance, label, type: entity.type, shots: entity.shots, firedAt: 0, puffs, bornAt: now };
+    // A new actor starts out of sight and fades in, so an entity entering line of
+    // sight arrives as smoothly as one leaving it departs.
+    return { root, body, weapon, health, stance, label, type: entity.type, shots: entity.shots, firedAt: 0, puffs, bornAt: now, los: 0 };
   }
 
   /**

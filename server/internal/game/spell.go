@@ -145,6 +145,9 @@ func (w *World) nearestPlayer(from Vec, radius float64, exclude map[string]bool,
 	}
 	var found *Player
 	nearest := radius * radius
+	// Collect the sight-blockers once, not per candidate: acquisition can scan
+	// every living body in range on a single cast.
+	occ := w.collectOccluders()
 	for _, id := range sortedPlayerIDs(w.players) {
 		candidate := w.players[id]
 		if exclude[id] || !candidate.Alive {
@@ -153,7 +156,7 @@ func (w *World) nearestPlayer(from Vec, radius float64, exclude map[string]bool,
 		if !w.hostileReach(owner, candidate.Position) {
 			continue
 		}
-		if !w.targetVisible(from, candidate.Position, candidate.circleRadius()) {
+		if !occ.visible(from, candidate.Position, candidate.circleRadius()) {
 			continue
 		}
 		if distance := candidate.Position.Sub(from).LengthSq(); distance <= nearest {
