@@ -1,6 +1,9 @@
 package game
 
-import "math"
+import (
+	"math"
+	"sort"
+)
 
 // sightOccluders is the resolved set of sight-blockers for one visibility pass:
 // vision-blocking terrain and smoke clouds. Collecting it once per viewer-send
@@ -16,23 +19,31 @@ type sightOccluders struct {
 	smoke   []*Deployable
 }
 
-// collectOccluders gathers the standing sight-blockers once. Destroyed or
+// collectOccluders gathers the standing sight-blockers once, bounded to what
+// could shadow anything inside reach of the viewer: an occluder further away
+// than the furthest thing being tested cannot stand between them. Destroyed or
 // expired terrain (Alive is cleared on the same transition as its collision) and
 // fading clouds stop occluding immediately: the graceful-removal tail is visual
 // feedback, not cover that can still hide a target.
-func (w *World) collectOccluders() sightOccluders {
+//
+// It draws from the same spatial index collision and snapshot interest do, so
+// visibility remains one answer rather than a second one that can drift.
+func (w *World) collectOccluders(at Vec, reach float64) sightOccluders {
 	occ := sightOccluders{}
-	for _, item := range w.worldItems {
-		if item != nil && item.Alive && item.OccludesVision {
+	w.terrain.near(at, reach, func(item *Entity) bool {
+		if item.Alive && item.OccludesVision {
 			occ.terrain = append(occ.terrain, item)
 		}
-	}
-	for _, id := range sortedDeployableIDs(w.deployables) {
-		cloud := w.deployables[id]
+		return true
+	})
+	sort.Slice(occ.terrain, func(i, j int) bool { return occ.terrain[i].ID < occ.terrain[j].ID })
+	w.fieldGrid.near(at, reach, func(cloud *Deployable) bool {
 		if !cloud.Deleting && cloud.Field.Conceals && cloud.Field.Radius > 0 {
 			occ.smoke = append(occ.smoke, cloud)
 		}
-	}
+		return true
+	})
+	sort.Slice(occ.smoke, func(i, j int) bool { return occ.smoke[i].ID < occ.smoke[j].ID })
 	return occ
 }
 
@@ -146,10 +157,10 @@ func (w *World) terrainOccluded(from, to Vec) bool {
 	if from == to {
 		return false
 	}
-	for _, item := range w.worldItems {
-		if item != nil && item.OccludesVision && item.intersectsSegment(from, to, 0) {
-			return true
-		}
-	}
-	return false
+	blocked := false
+	w.terrain.along(from, to, 0, func(item *Entity) bool {
+		blocked = item.OccludesVision && item.intersectsSegment(from, to, 0)
+		return !blocked
+	})
+	return blocked
 }

@@ -50,6 +50,16 @@ type Entity struct {
 	// against: a round rewound to before a wall was raised must pass through it,
 	// and one rewound to while it stood must be stopped by it.
 	SpawnedAt time.Time
+	// QueryExtent is how far this entity reaches past its position for the
+	// spatial index, for the families whose reach is not collision geometry — a
+	// deployed field is an area rather than a body. Zero means "ask the
+	// collision objects".
+	QueryExtent float64
+	// cell and indexed are the spatial index's bookkeeping: which bucket holds
+	// this entity, and whether it is in the index at all. They are the index's
+	// alone, which is why they are unexported and never copied meaningfully.
+	cell    gridCell
+	indexed bool
 }
 
 const (

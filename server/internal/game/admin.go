@@ -79,7 +79,9 @@ var adminAttributeRegistry = map[string]adminAttributeAdapter{
 			if err != nil || radius <= 0 {
 				return fmt.Errorf("radius %q is not a positive number", value)
 			}
-			t.deployable.Field.Radius = radius
+			// A field's reach is what the spatial index widens queries by, so the
+			// two must move together or a widened cloud stops being found.
+			t.deployable.Field.Radius, t.deployable.QueryExtent = radius, radius
 			return nil
 		},
 	},
@@ -274,7 +276,7 @@ func (w *World) adminSpawn(request AdminSpawn, now time.Time) error {
 		w.nextAdminEntity++
 		entity := newEntity(fmt.Sprintf("admin-%s-%d", request.ID, w.nextAdminEntity), request.ID, request.Position, definition, EntityOverrides{})
 		entity.AdminSpawned = true
-		w.worldItems = append(w.worldItems, &entity)
+		w.addResidentItem(&entity)
 		return nil
 	default:
 		return fmt.Errorf("spawnable %q has no world factory", request.ID)
@@ -316,7 +318,7 @@ func (w *World) adminProjectile(position Vec, values map[string]string) error {
 	projectile.Entity = w.newProjectileEntity(fmt.Sprintf("p-%d", w.nextProjectile), position, direction.Mul(ability.Projectile.Speed), ability.Projectile.Radius)
 	projectile.Kind, projectile.AdminSpawned = ability.Projectile.Kind, true
 	w.nextProjectile++
-	w.projectiles[projectile.ID] = projectile
+	w.addProjectile(projectile)
 	return nil
 }
 
@@ -399,6 +401,11 @@ func (w *World) adminEdit(entityID string, requested map[string]string, now time
 			return AdminEntityState{}, err
 		}
 	}
+	if moved {
+		// A moved entity has to be re-bucketed, or every query would keep finding
+		// it where it used to be.
+		w.reindex(target)
+	}
 	if target.player != nil && moved {
 		w.history[target.player.ID] = nil
 		w.recordHistory(target.player, now)
@@ -418,8 +425,31 @@ func (w *World) adminDelete(entityID string, now time.Time) error {
 			w.cancelTelegraphs(target.player.ID, now)
 		}
 	}
+	// Terrain leaves through the world-item path so the reaper collects it and a
+	// generated site keeps its scar; every other family is reaped by its own map.
+	if target.player == nil && target.projectile == nil && target.telegraph == nil && target.deployable == nil {
+		w.deleteWorldItem(target.entity, now)
+		return nil
+	}
 	target.entity.Delete(now)
 	return nil
+}
+
+// reindex re-buckets an entity whose position was changed from outside the
+// simulation's own movement paths.
+func (w *World) reindex(target adminTarget) {
+	switch {
+	case target.player != nil:
+		w.bodies.update(target.player)
+	case target.projectile != nil:
+		w.shots.update(target.projectile)
+	case target.telegraph != nil:
+		w.warnings.update(target.telegraph)
+	case target.deployable != nil:
+		w.fieldGrid.update(target.deployable)
+	default:
+		w.terrain.update(target.entity)
+	}
 }
 
 // setAdminAttributes preserves the old caller-only seam while routing it
@@ -450,10 +480,8 @@ func (w *World) adminTarget(id string) (adminTarget, bool) {
 	if value := w.deployables[id]; value != nil {
 		return adminTarget{entity: &value.Entity, deployable: value}, true
 	}
-	for _, value := range w.worldItems {
-		if value != nil && value.ID == id {
-			return adminTarget{entity: value}, true
-		}
+	if item, ok := w.terrainItem(id); ok {
+		return adminTarget{entity: item}, true
 	}
 	return adminTarget{}, false
 }

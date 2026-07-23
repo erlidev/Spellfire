@@ -246,7 +246,7 @@ func (w *World) spawnRewoundProjectile(p *Player, ability tuning.Ability, direct
 			return
 		}
 	}
-	w.projectiles[projectile.ID] = projectile
+	w.addProjectile(projectile)
 }
 
 // deliverAt resolves a committed windup from the exact geometry it showed.
@@ -267,7 +267,7 @@ func (w *World) deliverAt(ownerID string, origin, direction Vec, ability tuning.
 	for _, heading := range coneDirections(direction, ability.Projectile) {
 		projectile := w.newProjectile(ownerID, element, ability, heading)
 		projectile.Position = origin.Add(heading.Mul(ownerRadius + ability.Projectile.Radius + 2))
-		w.projectiles[projectile.ID] = projectile
+		w.addProjectile(projectile)
 	}
 }
 

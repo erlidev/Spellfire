@@ -44,7 +44,9 @@ func (w *World) SnapshotFor(playerID string, now time.Time, kind uint64) protoco
 	// see, a client is never sent. The occluder set is collected once for this
 	// viewer's send rather than rescanning the world per candidate entity.
 	blind := w.blinded(viewer)
-	occ := w.collectOccluders()
+	// Occluders are collected over the interest square rather than the world:
+	// nothing outside it can stand between the viewer and something inside it.
+	occ := w.collectOccluders(viewer.Position, viewDistance)
 	// A target is hidden when no part of its silhouette has a clear line. The
 	// viewer's own entities are the one exemption from smoke: a cloud that hid a
 	// body's own rounds would read as a wall it could not shoot through, so those
@@ -58,9 +60,12 @@ func (w *World) SnapshotFor(playerID string, now time.Time, kind uint64) protoco
 		}
 		return !occ.visible(viewer.Position, at, extent)
 	}
-	for _, id := range sortedPlayerIDs(w.players) {
-		p := w.players[id]
-		if id != playerID && hidden(p.Position, p.ID, p.circleRadius()) {
+	// Every family is drawn from the spatial index over the interest square, so
+	// a snapshot costs what is near the viewer rather than what the world holds.
+	// Results are ordered by ID because index buckets are a map and a snapshot's
+	// entity order must not depend on one.
+	for _, p := range interest(w.bodies, viewer.Position, viewDistance) {
+		if p.ID != playerID && hidden(p.Position, p.ID, p.circleRadius()) {
 			continue
 		}
 		resource := p.Mana
@@ -86,8 +91,7 @@ func (w *World) SnapshotFor(playerID string, now time.Time, kind uint64) protoco
 			Shield: float32(w.guardHealth(p)), MaxShield: float32(w.guardDurability(p)),
 		})
 	}
-	for _, id := range sortedProjectileIDs(w.projectiles) {
-		p := w.projectiles[id]
+	for _, p := range interest(w.shots, viewer.Position, viewDistance) {
 		if hidden(p.Position, p.OwnerID, p.circleRadius()) {
 			continue
 		}
@@ -99,8 +103,7 @@ func (w *World) SnapshotFor(playerID string, now time.Time, kind uint64) protoco
 			Deleting: p.Deleting, DeleteProgress: float32(p.deleteProgress(now)),
 		})
 	}
-	for _, id := range sortedTelegraphIDs(w.telegraphs) {
-		telegraph := w.telegraphs[id]
+	for _, telegraph := range interest(w.warnings, viewer.Position, viewDistance) {
 		// A telegraph is ground geometry rather than a body: it is hidden only
 		// when the point it is anchored at is inside a cloud, since the shape it
 		// warns about reaches well outside its own origin.
@@ -119,8 +122,7 @@ func (w *World) SnapshotFor(playerID string, now time.Time, kind uint64) protoco
 			Mass: float32(telegraph.Mass), Deleting: telegraph.Deleting, DeleteProgress: float32(telegraph.deleteProgress(now)),
 		})
 	}
-	for _, id := range sortedDeployableIDs(w.deployables) {
-		deployable := w.deployables[id]
+	for _, deployable := range interest(w.fieldGrid, viewer.Position, viewDistance) {
 		// Fields are unaffected by line of sight: a smoke cloud is exactly what
 		// explains why everything behind it went missing, and an area effect —
 		// firestorm, blizzard, a cinder patch — is ground the player is entitled
@@ -141,8 +143,8 @@ func (w *World) SnapshotFor(playerID string, now time.Time, kind uint64) protoco
 	// Terrain is deliberately outside the concealment rule: static cover blinking
 	// in and out as a cloud drifts would desynchronise the client's own
 	// collision prediction, and the cloud drawn over it already hides it.
-	for _, item := range w.worldItems {
-		if item == nil || (!item.Alive && !item.Deleting) {
+	for _, item := range interest(w.terrain, viewer.Position, viewDistance) {
+		if !item.Alive && !item.Deleting {
 			continue
 		}
 		extent := item.boundingRadius()
@@ -247,21 +249,35 @@ func (w *World) SetPlayerPosition(id string, position Vec, now time.Time) bool {
 		return false
 	}
 	p.Position = position
+	w.bodies.update(p)
 	w.recordHistory(p, now)
 	return true
 }
 
+// WorldItems lists the terrain currently resident, in ID order. It is a tooling
+// and test seam: nothing in the simulation wants every item in the world.
 func (w *World) WorldItems() []Entity {
-	items := make([]Entity, 0, len(w.worldItems))
-	for _, item := range w.worldItems {
-		if item == nil {
-			continue
-		}
+	items := make([]Entity, 0, w.terrain.len())
+	w.terrain.all(func(item *Entity) bool {
 		copy := *item
 		copy.CollisionObjects = append([]CollisionObject(nil), item.CollisionObjects...)
 		items = append(items, copy)
-	}
+		return true
+	})
+	sort.Slice(items, func(i, j int) bool { return items[i].ID < items[j].ID })
 	return items
+}
+
+// interest collects one family's members inside the viewer's square, ordered by
+// ID. The square is the camera's, so a corner never loses state.
+func interest[T gridMember](grid *spatialGrid[T], at Vec, reach float64) []T {
+	found := make([]T, 0, 32)
+	grid.near(at, reach, func(member T) bool {
+		found = append(found, member)
+		return true
+	})
+	sort.Slice(found, func(i, j int) bool { return found[i].indexEntity().ID < found[j].indexEntity().ID })
+	return found
 }
 
 // Contributions returns the current target life's effective-damage ledger,
@@ -280,18 +296,4 @@ func (w *World) LastKill(targetID string) (CombatEvent, bool) {
 // boss systems. Callers retain the last Sequence they processed as their cursor.
 func (w *World) CombatEventsAfter(sequence uint64) []CombatEvent {
 	return w.combat.eventsAfter(sequence)
-}
-
-func sortedProjectileIDs(projectiles map[string]*Projectile) []string {
-	ids := make([]string, 0, len(projectiles))
-	for id := range projectiles {
-		ids = append(ids, id)
-	}
-	// Projectile identifiers are monotonic and lexical ordering is deterministic enough for snapshots.
-	for i := 1; i < len(ids); i++ {
-		for j := i; j > 0 && ids[j] < ids[j-1]; j-- {
-			ids[j], ids[j-1] = ids[j-1], ids[j]
-		}
-	}
-	return ids
 }

@@ -70,14 +70,16 @@ func damageDealt(t *testing.T, tables *tuning.Tables, shooter, target model.Char
 	t.Helper()
 	balance := FromTables(tables)
 	balance.AOIRadius = 500
+	// The compact test arena testWorld() explains: these tests are about
+	// mechanics, not geography.
+	balance.SafeRadius, balance.PvPRadius = 430, 1000
 	world := NewWorld(balance)
-	world.worldItems = nil
+	world.setWorldItems()
 	now := time.Unix(1_700_000_000, 0)
 	attacker := world.AddPlayer(shooter, now)
 	victim := world.AddPlayer(target, now)
-	attacker.Position, victim.Position = Vec{1200, 0}, Vec{1300, 0}
-	world.recordHistory(attacker, now)
-	world.recordHistory(victim, now)
+	world.SetPlayerPosition(attacker.ID, Vec{1200, 0}, now)
+	world.SetPlayerPosition(victim.ID, Vec{1300, 0}, now)
 	world.ApplyInput(attacker.ID, protocol.Input{Sequence: 1, Buttons: ButtonFire, AimX: 1, ClientTimeMS: uint64(now.UnixMilli())})
 	world.Step(now)
 	for i := 1; i <= 60 && victim.Health == balance.MaxHealth; i++ {

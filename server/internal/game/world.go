@@ -240,11 +240,36 @@ type World struct {
 	// caster that raised it, because one wall per caster is the rule and a map
 	// makes it a lookup rather than a scan.
 	walls map[string]*wallGroup
-	// worldItems is a dense component-friendly slice for authored fixtures and
-	// procedural terrain. Dead entries remain as inactive slots, avoiding map
-	// iteration and compaction in hot collision paths.
-	worldItems []*Entity
-	history    map[string][]historySample
+	// The spatial index is the world's one broad-phase answer, and terrain is the
+	// bucket that made it necessary: at radius 45,000 the flat slice this
+	// replaces would hold tens of thousands of colliders and be walked by every
+	// collision test, every projectile step, and every per-viewer snapshot.
+	// Every family gets its own bucket at the same cell size, so no query has to
+	// filter a mixed one by type.
+	terrain   *spatialGrid[*Entity]
+	bodies    *spatialGrid[*Player]
+	shots     *spatialGrid[*Projectile]
+	warnings  *spatialGrid[*Telegraph]
+	fieldGrid *spatialGrid[*Deployable]
+	// chunkSize is one index cell and one generation chunk: the same coordinate
+	// space, so residency and bucketing can never disagree.
+	chunkSize float64
+	// chunks are the materialised cells of generated terrain, resident only
+	// while a body is near. resident holds what a seed cannot reproduce —
+	// authored fixtures, Mage walls, developer spawns — and is never evicted.
+	// scars remember the generated sites players have felled, so an evicted
+	// chunk comes back as the world they left rather than the world the seed
+	// describes.
+	chunks   map[gridCell]*worldChunk
+	resident map[string]*Entity
+	scars    map[string]bool
+	// deleting is the terrain currently in its graceful-removal fade. Sweeping
+	// this costs what was destroyed rather than what is resident.
+	deleting []*Entity
+	// chunksFrozen suspends generation for a world whose terrain was replaced
+	// wholesale. Only tests and tooling do that.
+	chunksFrozen bool
+	history      map[string][]historySample
 	// occupants maps an account to the one character it has a body for, so the
 	// one-body-per-account rule is a lookup rather than a scan of the world.
 	occupants       map[string]string
@@ -261,12 +286,29 @@ func NewWorld(t Tuning) *World {
 	if t.Tables == nil || t.TickRate <= 0 {
 		t = DefaultTuning()
 	}
-	return &World{
+	chunkSize := t.Tables.World.ChunkSize
+	if chunkSize <= 0 {
+		chunkSize = t.AOIRadius
+	}
+	w := &World{
 		tuning: t, players: make(map[string]*Player), projectiles: make(map[string]*Projectile), telegraphs: make(map[string]*Telegraph),
 		deployables: make(map[string]*Deployable), walls: make(map[string]*wallGroup),
-		worldItems: generateWorldItems(t.Tables), history: make(map[string][]historySample),
+		history:   make(map[string][]historySample),
 		occupants: make(map[string]string), combat: newCombatLog(combatEventCapacity),
+		chunkSize: chunkSize,
+		terrain:   newSpatialGrid[*Entity](chunkSize),
+		bodies:    newSpatialGrid[*Player](chunkSize),
+		shots:     newSpatialGrid[*Projectile](chunkSize),
+		warnings:  newSpatialGrid[*Telegraph](chunkSize),
+		fieldGrid: newSpatialGrid[*Deployable](chunkSize),
+		chunks:    make(map[gridCell]*worldChunk),
+		resident:  make(map[string]*Entity),
+		scars:     make(map[string]bool),
 	}
+	// Authored geography exists from the start; generated terrain materialises
+	// around bodies, so an empty world holds nothing but its fixtures.
+	w.placeFixtures()
+	return w
 }
 
 // Occupant reports which character of an account has a body in the world,
@@ -337,7 +379,11 @@ func (w *World) AddPlayer(character model.Character, now time.Time) *Player {
 	if weapon, ok := w.weapon(p); ok {
 		p.Ammo = weapon.MagazineSize
 	}
+	// The ground under a body is materialised as it enters rather than on the
+	// next tick, so its first snapshot is not a world without terrain in it.
+	w.loadChunksAround(p.Position)
 	w.players[p.ID] = p
+	w.bodies.insert(p)
 	if p.AccountID != "" {
 		w.occupants[p.AccountID] = p.ID
 	}
@@ -357,6 +403,9 @@ func (w *World) entryPosition(character model.Character, now time.Time) Vec {
 	if math.IsNaN(position.X) || math.IsNaN(position.Y) {
 		return w.hubSpawn(character.ID)
 	}
+	// The ground has to exist before it can be asked whether it is standable:
+	// a saved position may be anywhere in a world that is never fully resident.
+	w.loadChunksAround(position)
 	if !w.positionExpired(character.State.LastSeen, now) && w.standable(position) {
 		return position
 	}
@@ -379,8 +428,8 @@ func (w *World) standable(position Vec) bool {
 
 // recallDestination picks the safe fixture nearest to where the character left
 // off: any outpost it has unlocked, or the central hub. Outposts have no
-// geography until Phase 3 fills the table, so today this always resolves to the
-// hub — the fallback the design already guarantees exists.
+// geography until Phase 3.3 fills the table, so today this always resolves to
+// the hub — the fallback the design already guarantees exists.
 func (w *World) recallDestination(character model.Character, from Vec) Vec {
 	best := w.hubSpawn(character.ID)
 	nearest := best.Sub(from).LengthSq()
@@ -579,7 +628,7 @@ var ErrLoadoutLocked = errors.New("Your loadout is locked outside a safe zone. R
 var ErrLoadoutUnavailable = errors.New("You cannot change your loadout right now.")
 
 // InSafety reports whether the body stands where loadout and crafting services
-// are available. Phase 3 replaces radius-from-origin with per-outpost radii.
+// are available. Phase 3.3 replaces radius-from-origin with per-outpost radii.
 func (w *World) InSafety(p *Player) bool {
 	return p.Position.LengthSq() <= w.tuning.SafeRadius*w.tuning.SafeRadius
 }
@@ -803,6 +852,9 @@ func (w *World) RemovePlayer(id string) {
 	if p := w.players[id]; p != nil && w.occupants[p.AccountID] == id {
 		delete(w.occupants, p.AccountID)
 	}
+	if p := w.players[id]; p != nil {
+		w.bodies.remove(p)
+	}
 	delete(w.players, id)
 	delete(w.history, id)
 	// A wall outlives its caster's death, but not its caster leaving the world:
@@ -810,7 +862,7 @@ func (w *World) RemovePlayer(id string) {
 	w.dropWall(id, w.stepped)
 	for telegraphID, telegraph := range w.telegraphs {
 		if telegraph.OwnerID == id {
-			delete(w.telegraphs, telegraphID)
+			w.removeTelegraph(telegraphID)
 		}
 	}
 	w.combat.resetTarget(id)
@@ -834,6 +886,8 @@ func (w *World) Respawn(id string, now time.Time) bool {
 		return false
 	}
 	p.Position, p.Velocity, p.DashDirection, p.DashTicksLeft = Vec{}, Vec{}, Vec{}, 0
+	w.bodies.update(p)
+	w.loadChunksAround(p.Position)
 	p.cancelDelete()
 	p.restoreHealth()
 	p.Mana = w.tuning.MaxMana
@@ -857,12 +911,16 @@ func (w *World) Step(now time.Time) {
 	ids := sortedPlayerIDs(w.players)
 	for _, id := range ids {
 		w.stepPlayer(w.players[id], now, dt)
+		w.bodies.update(w.players[id])
 	}
 	w.stepTelegraphs(now)
 	w.stepProjectiles(now, dt)
 	w.stepDeployables(now)
 	w.stepWalls(now)
 	w.reapDeleted(now)
+	// Residency follows the bodies once they have moved, so the ground a player
+	// is about to see is materialised a chunk before they can see it.
+	w.updateResidency()
 	for _, id := range ids {
 		if p := w.players[id]; p != nil {
 			w.recordHistory(p, now)
@@ -873,24 +931,20 @@ func (w *World) Step(now time.Time) {
 func (w *World) reapDeleted(now time.Time) {
 	for id, projectile := range w.projectiles {
 		if projectile.deleteComplete(now) {
-			delete(w.projectiles, id)
+			w.removeProjectile(id)
 		}
 	}
 	for id, telegraph := range w.telegraphs {
 		if telegraph.deleteComplete(now) {
-			delete(w.telegraphs, id)
+			w.removeTelegraph(id)
 		}
 	}
 	for id, deployable := range w.deployables {
 		if deployable.deleteComplete(now) {
-			delete(w.deployables, id)
+			w.removeDeployable(id)
 		}
 	}
-	for index, item := range w.worldItems {
-		if item != nil && item.deleteComplete(now) {
-			w.worldItems[index] = nil
-		}
-	}
+	w.reapWorldItems(now)
 	for id, player := range w.players {
 		// Connected characters remain as ordinary dead bodies until respawn.
 		if player.AdminSpawned && player.deleteComplete(now) {
@@ -1019,39 +1073,53 @@ func (w *World) stepProjectiles(now time.Time, dt float64) {
 			// A thrown field lands wherever its round stopped, whether that was
 			// an impact, the rim, or simply running out of throw.
 			w.deployFrom(p, p.Position, now)
-			delete(w.projectiles, id)
+			w.removeProjectile(id)
 		}
 	}
 }
 
 func (w *World) advanceProjectile(projectile *Projectile, dt float64, at time.Time, historical bool) bool {
 	from, to := projectile.Position, projectile.Position.Add(projectile.Velocity.Mul(dt))
-	for _, item := range w.worldItems {
-		if item == nil {
-			continue
-		}
+	radius := projectile.circleRadius()
+	// The nearest blocker along the step wins rather than whichever the index
+	// happened to visit first: a step can cross two colliders, and which one a
+	// round is stopped by must not depend on bucket order.
+	var struckItem *Entity
+	nearestItem := math.Inf(1)
+	w.terrain.along(from, to, radius, func(item *Entity) bool {
 		// Rewound resolution tests the terrain that stood at the claimed moment
 		// rather than today's: a player-authored wall's lifetime is shorter than
 		// the rewind window is wide, so a shot fired before one went up passes
 		// through it, and a shot rewound to while a tree still stood is stopped by
 		// it even though it has since fallen.
-		blocked := item.intersectsSegment(from, to, projectile.circleRadius())
+		blocked := item.intersectsSegment(from, to, radius)
 		if historical {
-			blocked = item.blockedSegmentAt(from, to, projectile.circleRadius(), at)
+			blocked = item.blockedSegmentAt(from, to, radius, at)
 		}
-		if blocked {
-			// Destruction is recorded rather than merely flagged, so the moment it
-			// happened is part of the terrain's lifetime and a later rewind can be
-			// resolved against it.
-			if _, destroyed := item.TakeDamage(projectile.hitDamage()); destroyed {
-				item.Delete(at)
-			}
-			w.resolveBlast(projectile, from, at)
+		if !blocked {
 			return true
 		}
+		if distance := item.Position.Sub(from).LengthSq(); distance < nearestItem || (distance == nearestItem && struckItem != nil && item.ID < struckItem.ID) {
+			struckItem, nearestItem = item, distance
+		}
+		return true
+	})
+	if struckItem != nil {
+		// Destruction is recorded rather than merely flagged, so the moment it
+		// happened is part of the terrain's lifetime and a later rewind can be
+		// resolved against it.
+		if _, destroyed := struckItem.TakeDamage(projectile.hitDamage()); destroyed {
+			w.deleteWorldItem(struckItem, at)
+		}
+		w.resolveBlast(projectile, from, at)
+		return true
 	}
-	for _, id := range sortedPlayerIDs(w.players) {
-		target := w.players[id]
+	slack := 0.0
+	if historical {
+		slack = w.rewindSlack()
+	}
+	for _, target := range w.bodiesAlong(from, to, radius, slack) {
+		id := target.ID
 		if id == projectile.OwnerID || !target.Alive {
 			continue
 		}
@@ -1095,6 +1163,7 @@ func (w *World) advanceProjectile(projectile *Projectile, dt float64, at time.Ti
 		return true
 	}
 	projectile.Position = to
+	w.shots.moved(projectile)
 	projectile.Travelled += math.Sqrt(to.Sub(from).LengthSq())
 	// A hard maximum range stops a round the way the rim does: it is the
 	// weapon's reach, not its lifetime, and beyond it nothing lands at all.
@@ -1200,6 +1269,43 @@ func (w *World) DrainProgress() map[string]model.Progress {
 	return changed
 }
 
+// playersWithin lists the living bodies inside a radius, in ID order. Area
+// resolution — a blast, a field pulse, a dispel — reaches it instead of walking
+// every body in the world, and the ID ordering is what keeps the result
+// reproducible even though the index buckets are a map.
+func (w *World) playersWithin(at Vec, radius float64) []*Player {
+	found := make([]*Player, 0, 8)
+	w.bodies.near(at, radius, func(p *Player) bool {
+		if p.Alive && p.Position.Sub(at).LengthSq() <= radius*radius {
+			found = append(found, p)
+		}
+		return true
+	})
+	sort.Slice(found, func(i, j int) bool { return found[i].ID < found[j].ID })
+	return found
+}
+
+// bodiesAlong lists the bodies a swept step can reach, in ID order. slack
+// widens the query for a rewound resolve, where the position that matters is
+// where a body *was* rather than where the index currently holds it: a dash can
+// carry a body a fair way inside the rewind window, and a shot must still be
+// able to hit where the shooter saw it.
+func (w *World) bodiesAlong(from, to Vec, pad, slack float64) []*Player {
+	found := make([]*Player, 0, 8)
+	w.bodies.along(from, to, pad+slack, func(p *Player) bool {
+		found = append(found, p)
+		return true
+	})
+	sort.Slice(found, func(i, j int) bool { return found[i].ID < found[j].ID })
+	return found
+}
+
+// rewindSlack is the furthest a body can travel inside the rewind window, which
+// is how much extra reach a historical query needs.
+func (w *World) rewindSlack() float64 {
+	return w.tuning.MaxRewind.Seconds() * math.Max(w.tuning.PlayerSpeed, w.tuning.dashSpeed())
+}
+
 func (w *World) moveCircle(from, delta Vec, radius float64) Vec {
 	result := Vec{from.X + delta.X, from.Y}
 	if w.collides(result, radius) {
@@ -1217,15 +1323,12 @@ func (w *World) moveCircle(from, delta Vec, radius float64) Vec {
 }
 
 func (w *World) collides(position Vec, radius float64) bool {
-	for _, item := range w.worldItems {
-		if item == nil {
-			continue
-		}
-		if item.intersectsCircle(position, radius) {
-			return true
-		}
-	}
-	return false
+	blocked := false
+	w.terrain.near(position, radius, func(item *Entity) bool {
+		blocked = item.intersectsCircle(position, radius)
+		return !blocked
+	})
+	return blocked
 }
 
 func (w *World) recordHistory(p *Player, now time.Time) {
@@ -1262,53 +1365,6 @@ func (w *World) positionAt(id string, at time.Time) Vec {
 		return a.position.Add(b.position.Sub(a.position).Mul(t))
 	}
 	return samples[len(samples)-1].position
-}
-
-// generateWorldItems materializes authored fixtures first, then lays out
-// deterministic trees around them. A dense slice is both faster than an
-// interface collection now and shaped like a future ECS component column.
-func generateWorldItems(tables *tuning.Tables) []*Entity {
-	world, trees := tables.World, tables.World.Trees
-	result := make([]*Entity, 0, len(world.Fixtures)+trees.Count)
-	for _, fixture := range world.Fixtures {
-		entity := newEntity(fixture.ID, fixture.Entity, Vec{fixture.Position[0], fixture.Position[1]}, tables.Entities[fixture.Entity], EntityOverrides{})
-		result = append(result, &entity)
-	}
-	safeRadius := world.SafeRadius()
-	// Trees start InnerMargin outside the safe radius and stop OuterMargin
-	// short of the rim, so neither the hub nor the world edge is walled in.
-	reach := world.Radius - safeRadius - trees.OuterMargin
-	if trees.Count <= 0 || reach <= trees.InnerMargin || trees.RadiusSpread < 1 {
-		return result
-	}
-	base := tables.Entities["tree"]
-	baseEntity := newEntity("", "tree", Vec{}, base, EntityOverrides{})
-	baseRadius := baseEntity.circleRadius()
-	state := trees.Seed
-	placed := 0
-	for placed < trees.Count {
-		state = state*6364136223846793005 + 1442695040888963407
-		a := float64(state%62832) / 10000
-		state = state*6364136223846793005 + 1442695040888963407
-		r := safeRadius + trees.InnerMargin + float64(state%uint64(reach))
-		position := Vec{math.Cos(a) * r, math.Sin(a) * r}
-		radius := baseRadius + float64(state%uint64(trees.RadiusSpread))
-		clear := true
-		for _, other := range result {
-			if other.intersectsCircle(position, radius+trees.Spacing) {
-				clear = false
-				break
-			}
-		}
-		if clear {
-			objects := collisionObjectsFromTuning(base.CollisionObjects)
-			objects[0].Radius = radius
-			entity := newEntity(fmt.Sprintf("tree-%02d", placed), "tree", position, base, EntityOverrides{CollisionObjects: &objects})
-			result = append(result, &entity)
-			placed++
-		}
-	}
-	return result
 }
 
 func segmentCircle(a, b, center Vec, radius float64) bool {

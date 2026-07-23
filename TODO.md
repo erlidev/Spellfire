@@ -40,7 +40,7 @@ Nothing else in this file can be built cleanly without these. Land them first.
 - [x] Verify the invariant in a test: editing one row changes every dependent item with no character migration ([game/tuning_test.go](server/internal/game/tuning_test.go), [tuning/tuning_test.go](server/internal/tuning/tuning_test.go))
 - [x] Common typed entity base for every materialized world family, with tuning defaults and per-instance overrides; 500-health circular trees and an immovable/undestroyable square wall fixture ([entity.go](server/internal/game/entity.go), [entities.json](data/tuning/entities.json))
 
-Biome-placement rows are intentionally empty until Phase 3; component and material rows landed with Phase 2.3. The Sentry row carries its settled contract without the values [economy-death-and-pve.md](docs/game/design/economy-death-and-pve.md#sentry) defers to implementation. Runtime table delivery to a live client stays in Phase 8.
+Biome-placement rows are intentionally empty until Phase 3.1; component and material rows landed with Phase 2.3. The Sentry row carries its settled contract without the values [economy-death-and-pve.md](docs/game/design/economy-death-and-pve.md#sentry) defers to implementation. Runtime table delivery to a live client stays in Phase 8.
 
 ### 1.2 Persistence & migration
 - [x] Read `schema_version` and run sequential forward migrations — `PRAGMA user_version` for the database schema, `characters.schema_version` for the record shape ([sqlite.go](server/internal/store/sqlite.go), [model.go](server/internal/model/model.go), [architecture.md](docs/architecture.md#persistence-and-migration))
@@ -238,7 +238,8 @@ Phase 2.7 uses prototype Signature parts, a Signature prism/stave, an Aegis crys
 ## Phase 3 — World axis
 
 Phase 3 is where the world stops being a 3,000-unit test arena and becomes the expansive,
-detailed environment the design promises. Four decisions are settled and everything below
+detailed environment the design promises. [3.0](#30-scale-substrate--prerequisites-pulled-forward-from-phase-8)
+has shipped the substrate: the world is radius 45,000, indexed and chunked. Four decisions are settled and everything below
 follows from them:
 
 | Decision | Settled as |
@@ -255,19 +256,25 @@ mob placement are what concentrate players and are load-bearing rather than deco
 
 ### 3.0 Scale substrate — prerequisites pulled forward from Phase 8
 
-At radius 45,000, MMO-plausible collider density (roughly one per 400 × 400) is ~40,000 world
-items. `generateWorldItems` builds one flat slice at construction and `SnapshotFor`,
-`collectOccluders`, and every collision path scan it linearly ([world.go:1267](server/internal/game/world.go#L1267)).
-That is dead on arrival, so the Phase 8 spatial index is a Phase 3 prerequisite, not later work.
+**Shipped.** At radius 45,000, MMO-plausible collider density (roughly one per 400 × 400) is tens of
+thousands of world items, and the old flat slice was walked by every collision test, projectile step,
+occluder collection, and per-viewer snapshot. Both are gone: one uniform grid answers every
+broad-phase question, and terrain materialises per chunk around bodies
+([architecture.md](docs/architecture.md#scale-the-spatial-index-and-chunk-residency)).
 
-- [ ] Uniform spatial grid (cell ≈ AOI half-extent) indexing world items, players, projectiles, and deployables; one index answering collision, snapshot AOI, occluder collection, and target acquisition rather than a second visibility answer ([architecture.md](docs/architecture.md#line-of-sight))
-- [ ] Chunked deterministic world-item generation: a chunk materialises from `(world_seed, chunk_coord, region parameters)` on demand and is evicted when no player is near, so the world is never fully resident
-- [ ] Chunk lifecycle must not violate existing contracts — a chunk holding a damaged or destroyed item, a Mage wall, or an item inside the rewind window is pinned, since `Entity.presentAt` history and `Entity.Delete` fades both assume the item survives its own removal window
-- [ ] Raise `world.radius` to 45,000 and re-scale the danger bands: hub 900, Fringe 9,000, Frontier 31,500, Deadlands 45,000 (the shipped 0.70 Frontier fraction is preserved; the hub becomes a real settlement footprint rather than a scaled-up spawn ring) ([world.json](data/tuning/world.json))
-- [ ] Audit every radius-derived constant for the new scale: spawn ring, tree margins, recall distance, `position_expiry` walk-back cost, AOI half-extent, and the client's world-ring rendering
-- [ ] Load test at 50 and 100 concurrent bodies against the 64 KiB snapshot guardrail with the new terrain density ([architecture.md](docs/architecture.md#snapshot-bandwidth-budget))
-- [ ] Amend [world.md](docs/game/design/world.md) with the settled scale, the friction-based traversal target, and the procedural biome field
-- [ ] Move the Phase 8 spatial-index and load-test entries here, leaving deltas/compression and priority tiers in Phase 8
+- [x] Uniform spatial grid (cell ≈ AOI half-extent, = `world.chunk_size`) indexing world items, players, projectiles, telegraphs, and deployables; one index answering collision, snapshot AOI, occluder collection, and target acquisition rather than a second visibility answer ([grid.go](server/internal/game/grid.go))
+- [x] Chunked deterministic world-item generation: a chunk materialises from `(world_seed, chunk_coord)` on demand and is evicted when no body is near, so the world is never fully resident. Placement is a jittered lattice rather than rejection sampling, because a chunk cannot see its neighbours ([chunk.go](server/internal/game/chunk.go))
+- [x] Chunk lifecycle does not violate existing contracts — a chunk holding a damaged or fading item is pinned, destruction leaves a scar that survives eviction, and authored fixtures, Mage walls, and developer spawns are never chunked at all. Chunks load before they can be seen and drop well outside interest, so the rewind window never spans a residency change
+- [x] Raised `world.radius` to 45,000 and re-scaled the danger bands: hub 900, Fringe 9,000, Frontier 31,500, Deadlands 45,000 ([world.json](data/tuning/world.json))
+- [x] Audited every radius-derived constant: spawn ring 600, terrain margins, developer-mode position bounds, and the client's world ring — now drawn as the arc facing the camera. The AOI half-extent deliberately did not move; it is a camera property rather than a world one
+- [x] Load test at 50 and 100 concurrent bodies against the 64 KiB snapshot guardrail at the new terrain density: 11.0 KB and 15.0 KB largest snapshots, plus a spread-population test holding residency bounded per body ([chunk_test.go](server/internal/game/chunk_test.go))
+- [x] [world.md](docs/game/design/world.md) carries the settled scale, the friction-based traversal target, and the procedural biome field
+- [x] Phase 8's spatial-index and load-test entries moved here; deltas/compression and priority tiers remain in Phase 8
+
+Left for the rest of Phase 3: the terrain scatter is one archetype at a uniform density until
+[3.2](#32-terrain-friction-and-traversal) gives it per-biome archetypes and chokepoints, and the
+chunk generator takes no region parameters until [3.1](#31-world-field--danger-biome-and-grade-by-position)
+produces them.
 
 ### 3.1 World field — danger, biome, and grade by position
 
@@ -448,7 +455,7 @@ palette module and scatter props fill in.
 - [ ] Versioned welcome/tuning message so simulation constants can move without desyncing client prediction
 - [ ] Rate-limit authentication endpoints; document the trusted-origin policy for split-host deployments
 
-The spatial index and the 100+ concurrent load test moved to [Phase 3.0](#30-scale-substrate--prerequisites-pulled-forward-from-phase-8): at radius 45,000 the linear per-client scan cannot survive terrain density, so they became prerequisites rather than scaling work.
+The spatial index and the 100+ concurrent load test moved to [Phase 3.0](#30-scale-substrate--prerequisites-pulled-forward-from-phase-8) and shipped there: at radius 45,000 the linear per-client scan could not survive terrain density, so they were prerequisites rather than scaling work.
 
 ---
 

@@ -63,12 +63,8 @@ func (w *World) cleanse(owner *Player, at Vec, rule tuning.Cleanse, now time.Tim
 		return
 	}
 	stripped := w.stripEffects(owner)
-	for _, id := range sortedPlayerIDs(w.players) {
-		target := w.players[id]
-		if id == owner.ID || !target.Alive {
-			continue
-		}
-		if target.Position.Sub(at).LengthSq() > rule.Radius*rule.Radius {
+	for _, target := range w.playersWithin(at, rule.Radius) {
+		if target.ID == owner.ID {
 			continue
 		}
 		// Stripping a shield off a body is an offensive act, so it is bound by
@@ -147,10 +143,9 @@ func (w *World) nearestPlayer(from Vec, radius float64, exclude map[string]bool,
 	nearest := radius * radius
 	// Collect the sight-blockers once, not per candidate: acquisition can scan
 	// every living body in range on a single cast.
-	occ := w.collectOccluders()
-	for _, id := range sortedPlayerIDs(w.players) {
-		candidate := w.players[id]
-		if exclude[id] || !candidate.Alive {
+	occ := w.collectOccluders(from, radius)
+	for _, candidate := range w.playersWithin(from, radius) {
+		if exclude[candidate.ID] {
 			continue
 		}
 		if !w.hostileReach(owner, candidate.Position) {

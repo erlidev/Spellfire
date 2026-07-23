@@ -57,13 +57,16 @@ func (w *World) deploy(ownerID string, field tuning.Deployable, at Vec, element 
 		Entity:  newEntity(fmt.Sprintf("d-%d", w.nextDeployable), field.Kind, at, definition, EntityOverrides{}),
 		OwnerID: ownerID, Element: element, Field: field, ExpiresAt: now.Add(field.Duration()),
 	}
+	// A field is an area rather than a body: its reach is the radius it covers,
+	// which is what the index has to widen queries by.
+	deployable.QueryExtent = field.Radius
 	if field.Pulses() {
 		// A field is not felt the instant it lands: the first pulse is a cadence
 		// away, which is the moment a body caught by the placement has to leave.
 		deployable.NextTickAt = now.Add(field.Tick())
 	}
 	w.nextDeployable++
-	w.deployables[deployable.ID] = deployable
+	w.addDeployable(deployable)
 	return deployable
 }
 
@@ -120,12 +123,8 @@ func (w *World) pulse(deployable *Deployable, effects []string, now time.Time) b
 		damage = w.tuning.Tables.BandDamage(field.DamageBand) * field.DamageFraction * field.DamageScale()
 	}
 	reached := false
-	for _, id := range sortedPlayerIDs(w.players) {
-		target := w.players[id]
-		if id == deployable.OwnerID || !target.Alive {
-			continue
-		}
-		if target.Position.Sub(deployable.Position).LengthSq() > field.Radius*field.Radius {
+	for _, target := range w.playersWithin(deployable.Position, field.Radius) {
+		if target.ID == deployable.OwnerID {
 			continue
 		}
 		if !w.hazardReach(owner, deployable.OwnerID, target.Position) {

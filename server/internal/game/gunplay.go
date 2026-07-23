@@ -329,21 +329,20 @@ func (w *World) hitscan(p *Player, ability tuning.Ability, origin, direction Vec
 	// Cover stops a round before anything behind it, so the nearest world item
 	// on the line wins over any target past it.
 	nearest, blocked := reach, false
-	for _, item := range w.worldItems {
-		if item == nil {
-			continue
-		}
+	w.terrain.along(origin, end, 0, func(item *Entity) bool {
 		if distance, ok := segmentEntry(origin, end, item, reach); ok && distance < nearest {
 			nearest, blocked = distance, true
 		}
-	}
+		return true
+	})
 	var struck *Player
-	for _, id := range sortedPlayerIDs(w.players) {
-		target := w.players[id]
-		if id == p.ID || !target.Alive {
+	// A hitscan round resolves against where the targets were, so the sweep is
+	// widened by how far a body can travel inside the rewind window.
+	for _, target := range w.bodiesAlong(origin, end, 0, w.rewindSlack()) {
+		if target.ID == p.ID || !target.Alive {
 			continue
 		}
-		position := w.positionAt(id, at)
+		position := w.positionAt(target.ID, at)
 		if !segmentCircle(origin, end, position, target.circleRadius()) {
 			continue
 		}
@@ -436,12 +435,8 @@ func (w *World) detonate(projectile *Projectile, at Vec, when time.Time) {
 func (w *World) explode(ownerID string, at Vec, radius, damage float64, effects []string, when time.Time, blinkOnHit bool) bool {
 	owner := w.players[ownerID]
 	struck := false
-	for _, id := range sortedPlayerIDs(w.players) {
-		target := w.players[id]
-		if id == ownerID || !target.Alive {
-			continue
-		}
-		if target.Position.Sub(at).LengthSq() > radius*radius {
+	for _, target := range w.playersWithin(at, radius) {
+		if target.ID == ownerID {
 			continue
 		}
 		if !w.hostileReach(owner, target.Position) {
@@ -467,5 +462,6 @@ func (w *World) teleport(p *Player, to Vec, now time.Time) {
 		return
 	}
 	p.Position, p.Velocity, p.DashTicksLeft = to, Vec{}, 0
+	w.bodies.update(p)
 	w.recordHistory(p, now)
 }

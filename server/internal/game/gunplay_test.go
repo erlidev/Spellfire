@@ -20,7 +20,7 @@ func degreesOff(velocity Vec, aim Vec) float64 {
 // identifier first, so a cone can be measured as well as a single round.
 func launched(w *World, ownerID string) []Vec {
 	directions := make([]Vec, 0, len(w.projectiles))
-	for _, id := range sortedProjectileIDs(w.projectiles) {
+	for _, id := range sortedKeys(w.projectiles) {
 		if projectile := w.projectiles[id]; projectile.OwnerID == ownerID {
 			directions = append(directions, projectile.Velocity.Normalized())
 		}
@@ -153,7 +153,7 @@ func TestShotgunFansPelletsAndDividesTheBand(t *testing.T) {
 		t.Fatalf("the cone spans %.2f degrees, want %.2f", spread, spec.PelletSpreadDegrees)
 	}
 	total := 0.0
-	for _, id := range sortedProjectileIDs(w.projectiles) {
+	for _, id := range sortedKeys(w.projectiles) {
 		total += w.projectiles[id].Damage
 	}
 	if band := w.tuning.Tables.BandDamage(equippedAbility(w, p).DamageBand); math.Abs(total-band) > 0.001 {
@@ -242,7 +242,7 @@ func TestHitscanLandsInstantlyAndFallsOffPastItsCap(t *testing.T) {
 	if len(empty.projectiles) != 1 {
 		t.Fatalf("a hitscan round that reached nothing produced %d travelling rounds", len(empty.projectiles))
 	}
-	for _, id := range sortedProjectileIDs(empty.projectiles) {
+	for _, id := range sortedKeys(empty.projectiles) {
 		round := empty.projectiles[id]
 		if round.Travelled < spec.HitscanRange {
 			t.Fatalf("the travelling round starts at %g, want the %g cap it already covered", round.Travelled, spec.HitscanRange)

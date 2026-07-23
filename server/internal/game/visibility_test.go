@@ -13,7 +13,7 @@ func TestTerrainOccludesSnapshotsUntilItStopsStanding(t *testing.T) {
 	behindCover := addTestPlayer(w, "behind-cover", model.Mage, Vec{1500, 0}, now)
 	besideCover := addTestPlayer(w, "beside-cover", model.Mage, Vec{1500, 160}, now)
 	wall := testWorldItem(w, "wall", "stone-wall", Vec{1350, 0}, CollisionObject{Type: CollisionCircle, Radius: 35})
-	w.worldItems = []*Entity{wall}
+	w.setWorldItems(wall)
 
 	if visible(w, viewer.ID, behindCover.ID, now) {
 		t.Fatal("a stone wall did not hide the body directly behind it")
@@ -41,11 +41,11 @@ func TestCircleAndBoxTerrainShareTheSightRule(t *testing.T) {
 	w, _ := testWorld()
 	from, to := Vec{1200, 0}, Vec{1500, 0}
 
-	w.worldItems = []*Entity{testWorldItem(w, "stone-wall", "stone-wall", Vec{1350, 0}, CollisionObject{Type: CollisionCircle, Radius: 30})}
+	w.setWorldItems(testWorldItem(w, "stone-wall", "stone-wall", Vec{1350, 0}, CollisionObject{Type: CollisionCircle, Radius: 30}))
 	if !w.terrainOccluded(from, to) {
 		t.Fatal("circular terrain did not block line of sight")
 	}
-	w.worldItems = []*Entity{testWorldItem(w, "wall", "wall", Vec{1350, 0}, CollisionObject{Type: CollisionBox, HalfWidth: 12, HalfHeight: 70})}
+	w.setWorldItems(testWorldItem(w, "wall", "wall", Vec{1350, 0}, CollisionObject{Type: CollisionBox, HalfWidth: 12, HalfHeight: 70}))
 	if !w.terrainOccluded(from, to) {
 		t.Fatal("box terrain did not block line of sight")
 	}
@@ -57,7 +57,7 @@ func TestCircleAndBoxTerrainShareTheSightRule(t *testing.T) {
 func TestCollisionDoesNotImplyVisionOcclusion(t *testing.T) {
 	w, _ := testWorld()
 	tree := testWorldItem(w, "tree", "tree", Vec{1350, 0}, CollisionObject{Type: CollisionCircle, Radius: 30})
-	w.worldItems = []*Entity{tree}
+	w.setWorldItems(tree)
 	if w.terrainOccluded(Vec{1200, 0}, Vec{1500, 0}) {
 		t.Fatal("a collidable tree occluded vision without the entity attribute")
 	}
@@ -71,7 +71,7 @@ func TestOcclusionUsesTheWholeSilhouette(t *testing.T) {
 	viewer := addTestPlayer(w, "viewer", model.Gunslinger, Vec{1000, 0}, now)
 	target := addTestPlayer(w, "target", model.Gunslinger, Vec{1250, 0}, now)
 	post := testWorldItem(w, "post", "stone-wall", Vec{1200, 0}, CollisionObject{Type: CollisionCircle, Radius: 6})
-	w.worldItems = []*Entity{post}
+	w.setWorldItems(post)
 
 	// A post narrower than the body it stands in front of blocks the centre line
 	// but not the flanks: the body stays visible.
@@ -91,7 +91,7 @@ func TestOcclusionUsesTheWholeSilhouette(t *testing.T) {
 func TestFieldsIgnoreLineOfSight(t *testing.T) {
 	w, now := testWorld()
 	viewer := addTestPlayer(w, "viewer", model.Gunslinger, Vec{1000, 0}, now)
-	w.worldItems = []*Entity{testWorldItem(w, "wall", "stone-wall", Vec{1150, 0}, CollisionObject{Type: CollisionCircle, Radius: 40})}
+	w.setWorldItems(testWorldItem(w, "wall", "stone-wall", Vec{1150, 0}, CollisionObject{Type: CollisionCircle, Radius: 40}))
 
 	storm := w.deploy("caster", *w.tuning.Tables.Abilities["firestorm-cast"].Deployable, Vec{1400, 0}, "fire", now)
 	cloud := w.deploy("caster", *w.tuning.Tables.Abilities["smoke-throw"].Deployable, Vec{1400, 0}, "", now)
@@ -109,7 +109,7 @@ func TestAutomaticTargetingRequiresLineOfSight(t *testing.T) {
 	owner := addTestPlayer(w, "owner", model.Mage, Vec{1200, 0}, now)
 	blocked := addTestPlayer(w, "blocked", model.Gunslinger, Vec{1380, 0}, now)
 	open := addTestPlayer(w, "open", model.Gunslinger, Vec{1450, 300}, now)
-	w.worldItems = []*Entity{testWorldItem(w, "wall", "wall", Vec{1300, 0}, CollisionObject{Type: CollisionBox, HalfWidth: 18, HalfHeight: 60})}
+	w.setWorldItems(testWorldItem(w, "wall", "wall", Vec{1300, 0}, CollisionObject{Type: CollisionBox, HalfWidth: 18, HalfHeight: 60}))
 
 	if got := w.nearestPlayer(owner.Position, 500, map[string]bool{owner.ID: true}, owner); got != open {
 		id := "<nil>"
@@ -122,7 +122,7 @@ func TestAutomaticTargetingRequiresLineOfSight(t *testing.T) {
 	// Smoke participates in the same acquisition rule without becoming solid: a
 	// concealing cloud casts a shadow, so a body behind it is passed over for one
 	// in the open, without the cloud swallowing the acquiring body's own view.
-	w.worldItems = nil
+	w.setWorldItems()
 	owner.Position = Vec{1100, 0}
 	blocked.Position = Vec{1400, 0}
 	open.Position = Vec{1300, 300}

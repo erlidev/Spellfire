@@ -1,12 +1,13 @@
 {
-  "radius": 3000,
-  "spawn_radius": 170,
+  "radius": 45000,
+  "spawn_radius": 600,
+  "chunk_size": 1200,
   "danger_bands": [
     {
       "id": "hub",
       "name": "Central hub",
       "tier": 0,
-      "outer_radius": 430,
+      "outer_radius": 900,
       "material_grade": "",
       "pvp": "off",
       "shape": "◆",
@@ -16,7 +17,7 @@
       "id": "fringe",
       "name": "Fringe",
       "tier": 1,
-      "outer_radius": 1000,
+      "outer_radius": 9000,
       "material_grade": "common",
       "pvp": "restricted",
       "shape": "○",
@@ -26,7 +27,7 @@
       "id": "frontier",
       "name": "Frontier",
       "tier": 2,
-      "outer_radius": 2100,
+      "outer_radius": 31500,
       "material_grade": "uncommon",
       "pvp": "on",
       "shape": "△",
@@ -36,26 +37,28 @@
       "id": "deadlands",
       "name": "Deadlands",
       "tier": 3,
-      "outer_radius": 3000,
+      "outer_radius": 45000,
       "material_grade": "rare",
       "pvp": "full",
       "shape": "▲",
       "summary": "T3 · Full PvP · high insurance"
     }
   ],
-  "trees": {
-    "count": 72,
+  "terrain": {
+    "entity": "tree",
     "seed": 1592614637,
+    "cell": 400,
+    "fill": 0.8,
     "radius_spread": 17,
-    "inner_margin": 130,
-    "outer_margin": 260,
+    "inner_margin": 400,
+    "outer_margin": 600,
     "spacing": 55
   },
   "fixtures": [
     {
       "id": "wall-00",
       "entity": "wall",
-      "position": [650, 0]
+      "position": [2400, 0]
     }
   ]
 }

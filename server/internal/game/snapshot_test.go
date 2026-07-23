@@ -14,7 +14,7 @@ func TestSnapshotCoversTheFullViewDistanceSquare(t *testing.T) {
 	viewer := world.AddPlayer(model.Character{ID: "viewer", Name: "Viewer", Class: model.Gunslinger}, now)
 	corner := world.AddPlayer(model.Character{ID: "corner", Name: "Corner", Class: model.Mage}, now)
 	outside := world.AddPlayer(model.Character{ID: "outside", Name: "Outside", Class: model.Mage}, now)
-	world.worldItems = nil
+	world.setWorldItems()
 
 	// This corner was outside the old circular AOI even though both axes are
 	// within the camera's configured maximum range.

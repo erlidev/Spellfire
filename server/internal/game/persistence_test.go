@@ -224,8 +224,12 @@ func TestStateOfCapturesCarriedStateAndUnplacesTheDead(t *testing.T) {
 // Dropping the connection must not remove the target. The body holds its
 // ground, stops acting, and stays killable until the logout window closes.
 func TestLingeringBodyCannotActButCanStillBeKilled(t *testing.T) {
-	world := NewWorld(DefaultTuning())
-	world.worldItems = nil
+	balance := DefaultTuning()
+	// The compact test arena testWorld() explains: this is about the logout
+	// window, not about where PvP protection ends.
+	balance.SafeRadius, balance.PvPRadius = 430, 1000
+	world := NewWorld(balance)
+	world.setWorldItems()
 	now := time.Unix(1_700_000_000, 0)
 	victim := world.AddPlayer(placed("victim", 1500, 0), now)
 	attacker := world.AddPlayer(placed("attacker", 1400, 0), now)

@@ -70,15 +70,16 @@ func (w *World) placeable(ability tuning.Ability, at, direction Vec) bool {
 		if position.LengthSq() > w.tuning.WorldRadius*w.tuning.WorldRadius {
 			return false
 		}
-		for _, id := range sortedPlayerIDs(w.players) {
-			body := w.players[id]
-			if !body.Alive {
-				continue
-			}
+		// The index pads a query by the widest body it holds, so asking for the
+		// wall's own extent still visits everyone who could be standing in it.
+		occupied := false
+		w.bodies.near(position, extent, func(body *Player) bool {
 			reach := extent + body.circleRadius()
-			if body.Position.Sub(position).LengthSq() < reach*reach {
-				return false
-			}
+			occupied = body.Alive && body.Position.Sub(position).LengthSq() < reach*reach
+			return !occupied
+		})
+		if occupied {
+			return false
 		}
 	}
 	return true
@@ -104,7 +105,7 @@ func (w *World) raiseWall(ownerID string, at, direction Vec, wall tuning.Wall, n
 		entity := newEntity(fmt.Sprintf("wall-%d-%d", w.nextWall, index), wall.Kind, position, definition, EntityOverrides{})
 		entity.SpawnedAt = now
 		group.Segments = append(group.Segments, &entity)
-		w.addWorldItem(&entity)
+		w.addResidentItem(&entity)
 	}
 	w.nextWall++
 	if len(group.Segments) == 0 {
@@ -121,7 +122,7 @@ func (w *World) dropWall(ownerID string, now time.Time) {
 		return
 	}
 	for _, segment := range group.Segments {
-		segment.Delete(now)
+		w.deleteWorldItem(segment, now)
 	}
 	delete(w.walls, ownerID)
 }
@@ -143,19 +144,6 @@ func (w *World) stepWalls(now time.Time) {
 			delete(w.walls, ownerID)
 		}
 	}
-}
-
-// addWorldItem puts a runtime-authored entity into the dense terrain slice,
-// reusing a slot a reaped item left behind so a long session does not grow the
-// slice without bound.
-func (w *World) addWorldItem(entity *Entity) {
-	for index, item := range w.worldItems {
-		if item == nil {
-			w.worldItems[index] = entity
-			return
-		}
-	}
-	w.worldItems = append(w.worldItems, entity)
 }
 
 // Walls exposes standing player-authored terrain for tests and tooling.

@@ -71,7 +71,7 @@ func (w *World) startTelegraph(ownerID, element string, origin, direction Vec, a
 	telegraph.ActiveUntil = telegraph.PendingUntil.Add(row.ActiveDuration())
 	telegraph.ExpiresAt = telegraph.ActiveUntil.Add(row.ResolvedDuration())
 	w.nextTelegraph++
-	w.telegraphs[telegraph.ID] = telegraph
+	w.addTelegraph(telegraph)
 	return telegraph
 }
 
@@ -89,7 +89,7 @@ func (w *World) stepTelegraphs(now time.Time) {
 			w.deliverAt(telegraph.OwnerID, telegraph.Position, telegraph.Direction, telegraph.ability, now, telegraph.Element)
 		}
 		if !now.Before(telegraph.ExpiresAt) {
-			delete(w.telegraphs, id)
+			w.removeTelegraph(id)
 		}
 	}
 }

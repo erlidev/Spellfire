@@ -36,7 +36,7 @@ func TestEntityDefaultsAndTypedRuntimeOverrides(t *testing.T) {
 func TestPlayerSimulationUsesDynamicEntityOverrides(t *testing.T) {
 	w, now := testWorld()
 	wall := testWorldItem(w, "wall", "wall", Vec{50, 0}, CollisionObject{Type: CollisionCircle, Radius: 10})
-	w.worldItems = []*Entity{wall}
+	w.setWorldItems(wall)
 	p := addTestPlayer(w, "player", model.Gunslinger, Vec{}, now)
 	objects := []CollisionObject{{Type: CollisionCircle, Radius: 30}}
 	p.ApplyOverrides(EntityOverrides{CollisionObjects: &objects})
@@ -47,7 +47,7 @@ func TestPlayerSimulationUsesDynamicEntityOverrides(t *testing.T) {
 	if p.Position.X > 10.01 {
 		t.Fatalf("overridden player radius did not drive collision: x=%g", p.Position.X)
 	}
-	w.worldItems = nil
+	w.setWorldItems()
 	p.ApplyOverrides(EntityOverrides{Mass: number(-1)})
 	before := p.Position
 	w.ApplyInput(p.ID, protocol.Input{Sequence: 21, Buttons: ButtonRight | ButtonDash, AimX: 1})
@@ -60,7 +60,7 @@ func TestPlayerSimulationUsesDynamicEntityOverrides(t *testing.T) {
 func TestProjectileDamagesAndDestroysTreeEntity(t *testing.T) {
 	w, now := testWorld()
 	tree := testWorldItem(w, "tree", "tree", Vec{50, 0}, CollisionObject{Type: CollisionCircle, Radius: 20})
-	w.worldItems = []*Entity{tree}
+	w.setWorldItems(tree)
 	projectile := &Projectile{Damage: 200, Remaining: 1}
 	projectile.Entity = w.newProjectileEntity("projectile", Vec{}, Vec{100, 0}, 5)
 	if !w.advanceProjectile(projectile, 1, now, false) || tree.Health != 300 || !tree.Alive {

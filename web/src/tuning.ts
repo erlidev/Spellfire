@@ -31,9 +31,9 @@ export interface CollisionObject { type: "circle" | "box"; offset_x?: number; of
 export interface AdminOption { value: string; label: string }
 export interface AdminField { attribute: string; label: string; input: "number" | "text" | "select" | "position" | "rotation"; scope: "spawn" | "edit" | "both"; default: string; min?: number; max?: number; step?: number; max_length?: number; options?: AdminOption[] }
 export interface EntityDefinition { mass: number; max_health: number; occludes_vision: boolean; visible_in_shadow: boolean; collision_objects: CollisionObject[]; admin: { name: string; spawnable: boolean; fields: AdminField[] } }
-export interface Trees { count: number; seed: number; radius_spread: number; inner_margin: number; outer_margin: number; spacing: number }
+export interface Terrain { entity: string; seed: number; cell: number; fill: number; radius_spread: number; inner_margin: number; outer_margin: number; spacing: number }
 export interface Fixture { id: string; entity: string; position: [number, number] }
-export interface WorldTable { radius: number; spawn_radius: number; danger_bands: DangerBand[]; trees: Trees; fixtures: Fixture[] }
+export interface WorldTable { radius: number; spawn_radius: number; chunk_size: number; danger_bands: DangerBand[]; terrain: Terrain; fixtures: Fixture[] }
 export interface PlayerBody { speed: number; max_mana: number; mana_regen: number }
 export interface Dash { distance: number; duration_ms: number; cooldown_ms: number }
 export interface DamageBand { name: string; damage_per_hit: number; interval_ms: number; target_ttk_seconds: number; ttk_tolerance_seconds: number }

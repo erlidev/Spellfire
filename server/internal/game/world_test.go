@@ -13,8 +13,14 @@ import (
 func testWorld() (*World, time.Time) {
 	tuning := DefaultTuning()
 	tuning.AOIRadius = 500
+	// The shipped world is 45,000 units across and its PvP protection reaches
+	// 9,000 of them. These tests are about combat, prediction, and lifecycle
+	// rather than about geography, so they run in a compact arena — the same
+	// deliberate override AOIRadius already gets here. The scale itself is
+	// covered by the tuning suite and by the world-scale tests.
+	tuning.SafeRadius, tuning.PvPRadius = 430, 1000
 	world := NewWorld(tuning)
-	world.worldItems = nil
+	world.setWorldItems()
 	return world, time.Unix(1_700_000_000, 0)
 }
 
@@ -24,13 +30,19 @@ func testWorldItem(w *World, id, kind string, position Vec, object CollisionObje
 	return &entity
 }
 
+// worldItemByKind finds one generated item of a kind. Terrain is chunked, so
+// the chunks around the hub are materialised first: an untouched world holds
+// nothing but its authored fixtures.
 func worldItemByKind(w *World, kind string) *Entity {
-	for _, item := range w.worldItems {
+	w.loadChunksAround(Vec{})
+	var found *Entity
+	w.terrain.all(func(item *Entity) bool {
 		if item.Kind == kind {
-			return item
+			found = item
 		}
-	}
-	return nil
+		return found == nil
+	})
+	return found
 }
 
 // equippedWeapon and equippedAbility resolve what a body is actually holding,
@@ -61,8 +73,10 @@ func equippedDamage(w *World, p *Player) float64 {
 
 func addTestPlayer(world *World, id string, class model.Class, position Vec, now time.Time) *Player {
 	p := world.AddPlayer(model.Character{ID: id, Name: id, Class: class, Progress: model.Progress{Level: 1}}, now)
-	p.Position = position
-	world.recordHistory(p, now)
+	// SetPlayerPosition rather than a bare assignment: a body that moves has to
+	// be re-bucketed in the spatial index, or every query keeps finding it where
+	// it entered.
+	world.SetPlayerPosition(p.ID, position, now)
 	return p
 }
 
@@ -206,7 +220,7 @@ func TestDashCarriesPlayerAgainstMovementInput(t *testing.T) {
 
 func TestPlayerCannotMoveThroughTreeOrWorldBoundary(t *testing.T) {
 	w, now := testWorld()
-	w.worldItems = []*Entity{testWorldItem(w, "tree", "tree", Vec{50, 0}, CollisionObject{Type: CollisionCircle, Radius: 20})}
+	w.setWorldItems(testWorldItem(w, "tree", "tree", Vec{50, 0}, CollisionObject{Type: CollisionCircle, Radius: 20}))
 	p := addTestPlayer(w, "p", model.Gunslinger, Vec{}, now)
 	for i := 1; i <= 30; i++ {
 		w.ApplyInput(p.ID, protocol.Input{Sequence: uint32(i), Buttons: ButtonRight, AimX: 1})
@@ -333,10 +347,10 @@ func TestSnapshotAppliesAreaOfInterestAndIncludesWorldItems(t *testing.T) {
 	addTestPlayer(w, "viewer", model.Gunslinger, Vec{}, now)
 	addTestPlayer(w, "near", model.Mage, Vec{100, 0}, now)
 	addTestPlayer(w, "far", model.Mage, Vec{800, 0}, now)
-	w.worldItems = []*Entity{
+	w.setWorldItems(
 		testWorldItem(w, "near-tree", "tree", Vec{200, 0}, CollisionObject{Type: CollisionCircle, Radius: 30}),
 		testWorldItem(w, "far-tree", "tree", Vec{900, 0}, CollisionObject{Type: CollisionCircle, Radius: 30}),
-	}
+	)
 	snapshot := w.SnapshotFor("viewer", now, protocol.ServerSnapshot)
 	if len(snapshot.Entities) != 3 || snapshot.Entities[2].ID != "near-tree" || snapshot.Entities[2].Type != protocol.EntityWorldItem {
 		t.Fatalf("AOI entities = %#v", snapshot.Entities)

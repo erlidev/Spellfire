@@ -156,7 +156,7 @@ func TestBlinkCarriesTheCasterAndStopsAtCover(t *testing.T) {
 
 	// A wall in the way is where the blink ends, because a blink that crossed
 	// cover would make every piece of cover in the world optional.
-	w.worldItems = append(w.worldItems, testWorldItem(w, "block", "wall", Vec{mage.Position.X + 120, 0}, CollisionObject{Type: CollisionCircle, Radius: 40}))
+	w.addResidentItem(testWorldItem(w, "block", "wall", Vec{mage.Position.X + 120, 0}, CollisionObject{Type: CollisionCircle, Radius: 40}))
 	mage.Cooldowns = map[string]time.Time{}
 	before := mage.Position
 	castFor(w, mage, Vec{1, 0}, at.Add(time.Second), w.tuning.TickRate/2)

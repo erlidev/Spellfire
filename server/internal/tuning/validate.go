@@ -254,21 +254,35 @@ func (t *Tables) validateWorld(r *report) {
 	r.require(previous == w.Radius, "world: outermost danger band ends at %g but the world radius is %g", previous, w.Radius)
 	r.require(w.SafeRadius() > 0, "world: no band has pvp \"off\"; there is nowhere to craft or respawn")
 	r.require(w.PvPRadius() >= w.SafeRadius(), "world: PvP-protected radius must contain the safe radius")
-	trees := w.Trees
-	r.require(trees.Count >= 0, "world: trees.count must not be negative")
-	r.require(trees.RadiusSpread > 0, "world: trees need a positive radius_spread")
-	r.require(trees.Spacing >= 0, "world: trees.spacing must not be negative")
-	r.require(w.SafeRadius()+trees.InnerMargin+trees.OuterMargin < w.Radius, "world: tree margins leave no room between the safe radius and the rim")
-	seenFixtures := map[string]bool{}
-	generatedTreeIDs := map[string]bool{}
-	for index := 0; index < trees.Count; index++ {
-		generatedTreeIDs[fmt.Sprintf("tree-%02d", index)] = true
+	terrain := w.Terrain
+	r.require(terrain.Entity != "", "world: terrain must name the entity archetype it scatters")
+	definition, known := t.Entities[terrain.Entity]
+	r.require(known, "world: terrain scatters unknown entity %q", terrain.Entity)
+	r.require(terrain.Cell > 0, "world: terrain.cell must be positive; it is the site lattice the chunk generator places on")
+	r.require(terrain.Fill >= 0 && terrain.Fill <= 1, "world: terrain.fill must be a fraction between 0 and 1")
+	r.require(terrain.RadiusSpread > 0, "world: terrain needs a positive radius_spread")
+	r.require(terrain.Spacing >= 0, "world: terrain.spacing must not be negative")
+	// The generator jitters each site inside its own cell by whatever Spacing and
+	// the widest item leave room for. Without that room two neighbouring sites
+	// could overlap, which is the one thing chunked generation cannot repair
+	// after the fact: the two sites may belong to different chunks.
+	widest := entityExtent(definition) + terrain.RadiusSpread
+	r.require(terrain.Cell > terrain.Spacing+2*widest,
+		"world: terrain.cell %g leaves no room for a %g-unit item at %g spacing; widen the cell or thin the scatter", terrain.Cell, widest, terrain.Spacing)
+	r.require(w.ChunkSize > 0, "world: chunk_size must be positive")
+	if terrain.Cell > 0 && w.ChunkSize > 0 {
+		r.require(math.Mod(w.ChunkSize, terrain.Cell) == 0,
+			"world: chunk_size %g must be a whole multiple of terrain.cell %g, or a site lattice would not line up with chunk edges", w.ChunkSize, terrain.Cell)
 	}
+	r.require(w.ChunkSize <= w.Radius, "world: chunk_size %g must not exceed the world radius %g", w.ChunkSize, w.Radius)
+	r.require(w.SafeRadius()+terrain.InnerMargin+terrain.OuterMargin < w.Radius, "world: terrain margins leave no room between the safe radius and the rim")
+	seenFixtures := map[string]bool{}
+	generated := terrain.Entity + "-"
 	for index, fixture := range w.Fixtures {
 		r.require(fixture.ID != "", "world: fixture %d has no id", index)
 		r.require(!seenFixtures[fixture.ID], "world: duplicate fixture id %q", fixture.ID)
 		seenFixtures[fixture.ID] = true
-		r.require(!generatedTreeIDs[fixture.ID], "world: fixture id %q collides with a generated tree id", fixture.ID)
+		r.require(!strings.HasPrefix(fixture.ID, generated), "world: fixture id %q uses the %q prefix the terrain generator owns", fixture.ID, generated)
 		definition, ok := t.Entities[fixture.Entity]
 		r.require(ok, "world: fixture %q references unknown entity %q", fixture.ID, fixture.Entity)
 		distance := math.Hypot(fixture.Position[0], fixture.Position[1])

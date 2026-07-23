@@ -21,7 +21,7 @@ import (
 // SchemaVersion is the table shape this build understands. Bump it only when a
 // table changes shape, and add the matching forward migration; a plain balance
 // edit bumps Manifest.Version instead and needs no code change.
-const SchemaVersion = 20
+const SchemaVersion = 21
 
 type Manifest struct {
 	// Version is the content revision. Bump it on any balance edit; a change
@@ -139,10 +139,20 @@ type EntityDefinition struct {
 	Admin            EntityAdmin       `json:"admin"`
 }
 
-// Trees drives the deterministic procedural cover generator.
-type Trees struct {
-	Count        int     `json:"count"`
+// Terrain drives the chunked deterministic cover generator. There is no total
+// count: at radius 45,000 the world is never fully resident, so density is
+// declared per unit area and a chunk materialises the sites that fall inside it.
+//
+// Cell is the site lattice — one candidate every Cell units on each axis — and
+// Fill is the fraction of those sites that actually carry an item. Placement is
+// jittered inside each cell by exactly as much as Spacing and the archetype's
+// widest radius leave room for, so two items can never be closer than Spacing
+// however their chunks were loaded.
+type Terrain struct {
+	Entity       string  `json:"entity"`
 	Seed         uint64  `json:"seed"`
+	Cell         float64 `json:"cell"`
+	Fill         float64 `json:"fill"`
 	RadiusSpread float64 `json:"radius_spread"`
 	InnerMargin  float64 `json:"inner_margin"`
 	OuterMargin  float64 `json:"outer_margin"`
@@ -159,10 +169,16 @@ type Fixture struct {
 }
 
 type World struct {
-	Radius      float64      `json:"radius"`
-	SpawnRadius float64      `json:"spawn_radius"`
+	Radius      float64 `json:"radius"`
+	SpawnRadius float64 `json:"spawn_radius"`
+	// ChunkSize is the edge of one generation chunk and of one spatial-index
+	// cell — the two are the same coordinate space deliberately, so residency
+	// and broad-phase bucketing never disagree. It is sized at the AOI
+	// half-extent, which keeps a player's interest square inside a 3 × 3
+	// neighbourhood of chunks.
+	ChunkSize   float64      `json:"chunk_size"`
 	DangerBands []DangerBand `json:"danger_bands"`
-	Trees       Trees        `json:"trees"`
+	Terrain     Terrain      `json:"terrain"`
 	Fixtures    []Fixture    `json:"fixtures"`
 }
 

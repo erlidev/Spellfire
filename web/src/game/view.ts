@@ -289,8 +289,28 @@ export class GameView {
     for (let x = Math.floor(left / cell) * cell; x <= right; x += cell) this.ground.moveTo(x, top).lineTo(x, bottom);
     for (let y = Math.floor(top / cell) * cell; y <= bottom; y += cell) this.ground.moveTo(left, y).lineTo(right, y);
     this.ground.stroke({ color: colors.grid, width: 1, alpha: .62 });
-    this.ground.circle(0, 0, safeRadius).stroke({ color: colors.safe, width: 5, alpha: .7 });
-    this.ground.circle(0, 0, world.radius).stroke({ color: colors.rim, width: 8, alpha: .8 });
+    const reach = Math.hypot(width, height) / 2 + cell;
+    this.drawRing(safeRadius, colors.safe, 5, .7, cameraX, cameraY, reach);
+    this.drawRing(world.radius, colors.rim, 8, .8, cameraX, cameraY, reach);
+  }
+
+  /**
+   * A world ring, drawn only where it can actually be seen. The world radius is
+   * 45,000 units: a full circle at that size is thousands of tessellated
+   * vertices rebuilt every frame for an arc a few pixels long, and off-screen it
+   * is that cost for nothing at all. Only the span facing the camera is emitted,
+   * and a ring the camera cannot reach is skipped outright.
+   */
+  private drawRing(radius: number, color: number, width: number, alpha: number, cameraX: number, cameraY: number, reach: number): void {
+    const distance = Math.hypot(cameraX, cameraY);
+    if (distance + reach < radius || distance - reach > radius) return;
+    const facing = Math.atan2(cameraY, cameraX);
+    // The half-angle of the arc that falls inside the camera's reach, from the
+    // triangle (origin, camera, ring point). A camera at the origin, or one
+    // close enough to see the whole ring, clamps to a full circle.
+    const cosine = distance === 0 ? -1 : (distance * distance + radius * radius - reach * reach) / (2 * distance * radius);
+    const span = Math.acos(Math.max(-1, Math.min(1, cosine))) + .05;
+    this.ground.arc(0, 0, radius, facing - span, facing + span).stroke({ color, width, alpha });
   }
 
   private drawSightShadow(viewerX: number, viewerY: number, cameraX: number, cameraY: number, width: number, height: number): void {

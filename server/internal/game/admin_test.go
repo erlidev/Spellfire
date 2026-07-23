@@ -49,7 +49,7 @@ func TestEntityMetadataSpawnsLiveEntitiesAndRegistryAppliesOverrides(t *testing.
 	if updated.SpeedMultiplier != 1.5 || updated.ViewDistance != 2000 {
 		t.Fatalf("updated player = %#v", updated)
 	}
-	if err := world.adminSpawn(AdminSpawn{ID: "player", Position: Vec{X: 9_999}, Config: map[string]string{}}, now); err == nil {
+	if err := world.adminSpawn(AdminSpawn{ID: "player", Position: Vec{X: world.tuning.WorldRadius + 1}, Config: map[string]string{}}, now); err == nil {
 		t.Fatal("out-of-world placement was accepted")
 	}
 }
@@ -68,7 +68,7 @@ func TestAdminCanSpawnEveryDeployableSpellAndTheStoneWall(t *testing.T) {
 		t.Fatalf("spawn stone-wall: %v", err)
 	}
 	found := false
-	for _, item := range world.worldItems {
+	for _, item := range world.WorldItems() {
 		if item.DefinitionID == "stone-wall" && item.AdminSpawned {
 			found = true
 		}
@@ -132,6 +132,9 @@ func TestAdminViewDistanceChangesOnlyTheViewerSnapshot(t *testing.T) {
 	world := NewWorld(DefaultTuning())
 	viewer := world.AddPlayer(model.Character{ID: "viewer", Name: "Viewer", Class: model.Gunslinger}, now)
 	world.AddPlayer(model.Character{ID: "far", Name: "Far", Class: model.Mage}, now)
+	// Both bodies are placed rather than left on the hub spawn ring, which is
+	// wide enough at this world scale to decide the distance being measured.
+	world.SetPlayerPosition("viewer", Vec{}, now)
 	if !world.SetPlayerPosition("far", Vec{X: 1600}, now) {
 		t.Fatal("could not move far test player")
 	}

@@ -195,9 +195,10 @@ func TestSmokeDoesNotHideYourOwnRounds(t *testing.T) {
 	fire(w, shooter, 1, now)
 	fire(w, other, 1, now)
 	var mine, theirs *Projectile
-	for _, id := range sortedProjectileIDs(w.projectiles) {
+	for _, id := range sortedKeys(w.projectiles) {
 		p := w.projectiles[id]
 		p.Position = cloud // inside the cloud, on each shooter's sightline
+		w.shots.update(p)
 		if p.OwnerID == shooter.ID {
 			mine = p
 		} else {
