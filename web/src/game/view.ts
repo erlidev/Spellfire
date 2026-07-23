@@ -310,7 +310,12 @@ export class GameView {
     // close enough to see the whole ring, clamps to a full circle.
     const cosine = distance === 0 ? -1 : (distance * distance + radius * radius - reach * reach) / (2 * distance * radius);
     const span = Math.acos(Math.max(-1, Math.min(1, cosine))) + .05;
-    this.ground.arc(0, 0, radius, facing - span, facing + span).stroke({ color, width, alpha });
+    const start = facing - span;
+    // The moveTo is not decoration: arc() continues the path it is called on, so
+    // without a fresh subpath it draws a chord from wherever the last grid line
+    // or the previous ring ended to where this arc starts.
+    this.ground.moveTo(Math.cos(start) * radius, Math.sin(start) * radius);
+    this.ground.arc(0, 0, radius, start, facing + span).stroke({ color, width, alpha });
   }
 
   private drawSightShadow(viewerX: number, viewerY: number, cameraX: number, cameraY: number, width: number, height: number): void {
