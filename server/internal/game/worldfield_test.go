@@ -145,13 +145,13 @@ func TestMaterialGradeRisesWithRadius(t *testing.T) {
 // and both suites would still pass.
 func TestShippedTablesBuildTheGoldenField(t *testing.T) {
 	params := tuning.MustLoad().FieldParams()
-	if params.Radius != 45000 || params.Seed != 2676017207 {
+	if params.Radius != 22500 || params.Seed != 2676017207 {
 		t.Fatalf("the shipped field is radius %g seed %d; update testdata/worldfield.json", params.Radius, params.Seed)
 	}
-	if params.RegionCell != 9000 || params.RadialReference != 22500 || params.RegionJitter != 0.72 {
+	if params.RegionCell != 4500 || params.RadialReference != 11250 || params.RegionJitter != 0.72 {
 		t.Fatalf("the shipped lattice moved: %+v", params)
 	}
-	if params.WarpCell != 14000 || params.WarpAmplitude != 2600 || params.BlendWidth != 0.16 {
+	if params.WarpCell != 7000 || params.WarpAmplitude != 1300 || params.BlendWidth != 0.16 {
 		t.Fatalf("the shipped warp moved: %+v", params)
 	}
 }

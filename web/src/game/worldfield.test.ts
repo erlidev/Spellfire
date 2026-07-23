@@ -69,13 +69,13 @@ describe("the world field", () => {
   });
 
   it("raises the material grade with radius and leaves it alone across biomes", () => {
-    expect(worldField.gradeAt(2000, 0).id).toBe("common");
-    expect(worldField.gradeAt(20000, 0).id).toBe("uncommon");
-    expect(worldField.gradeAt(40000, 0).id).toBe("rare");
-    const east = worldField.gradeAt(0, 20000), north = worldField.gradeAt(20000, 0);
+    expect(worldField.gradeAt(1000, 0).id).toBe("common");
+    expect(worldField.gradeAt(10000, 0).id).toBe("uncommon");
+    expect(worldField.gradeAt(20000, 0).id).toBe("rare");
+    const east = worldField.gradeAt(0, 10000), north = worldField.gradeAt(10000, 0);
     expect(east.id).toBe(north.id);
     expect(east.richness).toBeCloseTo(north.richness, 12);
-    expect(east.id).not.toBe(worldField.biomeAt(0, 20000).id);
+    expect(east.id).not.toBe(worldField.biomeAt(0, 10000).id);
   });
 
   it("yields universal stock everywhere and aligned stock only in its own biome", () => {

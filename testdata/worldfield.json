@@ -1,12 +1,12 @@
 {
   "params": {
-    "Radius": 45000,
+    "Radius": 22500,
     "Seed": 2676017207,
-    "RegionCell": 9000,
+    "RegionCell": 4500,
     "RegionJitter": 0.72,
-    "RadialReference": 22500,
-    "WarpCell": 14000,
-    "WarpAmplitude": 2600,
+    "RadialReference": 11250,
+    "WarpCell": 7000,
+    "WarpAmplitude": 1300,
     "BlendWidth": 0.16,
     "Biomes": [
       "arcane-hollow",
@@ -24,7 +24,7 @@
         "Shape": "",
         "Summary": "",
         "Tier": 0,
-        "OuterRadius": 900
+        "OuterRadius": 450
       },
       {
         "ID": "fringe",
@@ -34,7 +34,7 @@
         "Shape": "",
         "Summary": "",
         "Tier": 1,
-        "OuterRadius": 9000
+        "OuterRadius": 4500
       },
       {
         "ID": "frontier",
@@ -44,7 +44,7 @@
         "Shape": "",
         "Summary": "",
         "Tier": 2,
-        "OuterRadius": 31500
+        "OuterRadius": 15750
       },
       {
         "ID": "deadlands",
@@ -54,7 +54,7 @@
         "Shape": "",
         "Summary": "",
         "Tier": 3,
-        "OuterRadius": 45000
+        "OuterRadius": 22500
       }
     ],
     "Grades": {
@@ -111,7 +111,7 @@
       "danger": "deadlands",
       "biome": "arcane-hollow",
       "neighbour": "emberlands",
-      "blend": 0.4042820697745633,
+      "blend": 1,
       "grade": "rare",
       "tier": 3,
       "richness": 1
@@ -119,14 +119,14 @@
     {
       "x": -25600,
       "y": -32000,
-      "region": "region--2:-3",
+      "region": "region--3:-3",
       "danger": "deadlands",
-      "biome": "stonereach",
-      "neighbour": "arcane-hollow",
-      "blend": 0.15163328360520595,
+      "biome": "arcane-hollow",
+      "neighbour": "stonereach",
+      "blend": 0.6182137741836281,
       "grade": "rare",
       "tier": 3,
-      "richness": 0.848133148961542
+      "richness": 1
     },
     {
       "x": -19200,
@@ -134,35 +134,35 @@
       "region": "region--2:-3",
       "danger": "deadlands",
       "biome": "stonereach",
-      "neighbour": "rimeshelf",
+      "neighbour": "arcane-hollow",
       "blend": 1,
       "grade": "rare",
       "tier": 3,
-      "richness": 0.7225222229567795
+      "richness": 1
     },
     {
       "x": -12800,
       "y": -32000,
-      "region": "region--2:-3",
+      "region": "region--2:-4",
       "danger": "deadlands",
       "biome": "stonereach",
       "neighbour": "rimeshelf",
-      "blend": 0.2030106986452438,
+      "blend": 1,
       "grade": "rare",
       "tier": 3,
-      "richness": 0.6261529609734323
+      "richness": 1
     },
     {
       "x": -6400,
       "y": -32000,
-      "region": "region--1:-3",
+      "region": "region--1:-4",
       "danger": "deadlands",
       "biome": "rimeshelf",
-      "neighbour": "stormflats",
+      "neighbour": "stonereach",
       "blend": 1,
       "grade": "rare",
       "tier": 3,
-      "richness": 0.5642947072940137
+      "richness": 1
     },
     {
       "x": 0,
@@ -170,23 +170,23 @@
       "region": "region-0:-4",
       "danger": "deadlands",
       "biome": "stormflats",
-      "neighbour": "stonereach",
-      "blend": 0.4117369114275208,
+      "neighbour": "arcane-hollow",
+      "blend": 1,
       "grade": "rare",
       "tier": 3,
-      "richness": 0.542888888888889
+      "richness": 1
     },
     {
       "x": 6400,
       "y": -32000,
-      "region": "region-0:-3",
+      "region": "region-0:-4",
       "danger": "deadlands",
-      "biome": "stonereach",
-      "neighbour": "stormflats",
-      "blend": 1,
+      "biome": "stormflats",
+      "neighbour": "arcane-hollow",
+      "blend": 0.8565246864437799,
       "grade": "rare",
       "tier": 3,
-      "richness": 0.5642947072940137
+      "richness": 1
     },
     {
       "x": 12800,
@@ -194,11 +194,11 @@
       "region": "region-1:-3",
       "danger": "deadlands",
       "biome": "stonereach",
-      "neighbour": "stormflats",
+      "neighbour": "arcane-hollow",
       "blend": 1,
       "grade": "rare",
       "tier": 3,
-      "richness": 0.6261529609734323
+      "richness": 1
     },
     {
       "x": 19200,
@@ -207,26 +207,146 @@
       "danger": "deadlands",
       "biome": "stonereach",
       "neighbour": "stormflats",
-      "blend": 0.7055082583524792,
+      "blend": 1,
       "grade": "rare",
       "tier": 3,
-      "richness": 0.7225222229567795
+      "richness": 1
     },
     {
       "x": 25600,
       "y": -32000,
-      "region": "region-1:-2",
+      "region": "region-2:-3",
       "danger": "deadlands",
       "biome": "stormflats",
       "neighbour": "stonereach",
       "blend": 1,
       "grade": "rare",
       "tier": 3,
-      "richness": 0.848133148961542
+      "richness": 1
     },
     {
       "x": 32000,
       "y": -32000,
+      "region": "region-2:-3",
+      "danger": "deadlands",
+      "biome": "stormflats",
+      "neighbour": "stonereach",
+      "blend": 1,
+      "grade": "rare",
+      "tier": 3,
+      "richness": 1
+    },
+    {
+      "x": -32000,
+      "y": -25600,
+      "region": "region--3:-3",
+      "danger": "deadlands",
+      "biome": "arcane-hollow",
+      "neighbour": "emberlands",
+      "blend": 1,
+      "grade": "rare",
+      "tier": 3,
+      "richness": 1
+    },
+    {
+      "x": -25600,
+      "y": -25600,
+      "region": "region--3:-3",
+      "danger": "deadlands",
+      "biome": "arcane-hollow",
+      "neighbour": "emberlands",
+      "blend": 1,
+      "grade": "rare",
+      "tier": 3,
+      "richness": 1
+    },
+    {
+      "x": -19200,
+      "y": -25600,
+      "region": "region--2:-3",
+      "danger": "deadlands",
+      "biome": "stonereach",
+      "neighbour": "arcane-hollow",
+      "blend": 1,
+      "grade": "rare",
+      "tier": 3,
+      "richness": 1
+    },
+    {
+      "x": -12800,
+      "y": -25600,
+      "region": "region--2:-3",
+      "danger": "deadlands",
+      "biome": "stonereach",
+      "neighbour": "rimeshelf",
+      "blend": 1,
+      "grade": "rare",
+      "tier": 3,
+      "richness": 1
+    },
+    {
+      "x": -6400,
+      "y": -25600,
+      "region": "region--1:-4",
+      "danger": "deadlands",
+      "biome": "rimeshelf",
+      "neighbour": "stonereach",
+      "blend": 0.9220931935099985,
+      "grade": "rare",
+      "tier": 3,
+      "richness": 1
+    },
+    {
+      "x": 0,
+      "y": -25600,
+      "region": "region-0:-4",
+      "danger": "deadlands",
+      "biome": "stormflats",
+      "neighbour": "stonereach",
+      "blend": 1,
+      "grade": "rare",
+      "tier": 3,
+      "richness": 1
+    },
+    {
+      "x": 6400,
+      "y": -25600,
+      "region": "region-0:-4",
+      "danger": "deadlands",
+      "biome": "stormflats",
+      "neighbour": "stonereach",
+      "blend": 0.5816298595643553,
+      "grade": "rare",
+      "tier": 3,
+      "richness": 1
+    },
+    {
+      "x": 12800,
+      "y": -25600,
+      "region": "region-1:-3",
+      "danger": "deadlands",
+      "biome": "stonereach",
+      "neighbour": "stormflats",
+      "blend": 1,
+      "grade": "rare",
+      "tier": 3,
+      "richness": 1
+    },
+    {
+      "x": 19200,
+      "y": -25600,
+      "region": "region-2:-3",
+      "danger": "deadlands",
+      "biome": "stormflats",
+      "neighbour": "stonereach",
+      "blend": 0.016640533665142874,
+      "grade": "rare",
+      "tier": 3,
+      "richness": 1
+    },
+    {
+      "x": 25600,
+      "y": -25600,
       "region": "region-2:-3",
       "danger": "deadlands",
       "biome": "stormflats",
@@ -237,8 +357,20 @@
       "richness": 1
     },
     {
-      "x": -32000,
+      "x": 32000,
       "y": -25600,
+      "region": "region-2:-2",
+      "danger": "deadlands",
+      "biome": "arcane-hollow",
+      "neighbour": "stormflats",
+      "blend": 0.35695262147885926,
+      "grade": "rare",
+      "tier": 3,
+      "richness": 1
+    },
+    {
+      "x": -32000,
+      "y": -19200,
       "region": "region--3:-2",
       "danger": "deadlands",
       "biome": "emberlands",
@@ -246,11 +378,167 @@
       "blend": 1,
       "grade": "rare",
       "tier": 3,
-      "richness": 0.848133148961542
+      "richness": 1
     },
     {
       "x": -25600,
-      "y": -25600,
+      "y": -19200,
+      "region": "region--3:-2",
+      "danger": "deadlands",
+      "biome": "emberlands",
+      "neighbour": "arcane-hollow",
+      "blend": 1,
+      "grade": "rare",
+      "tier": 3,
+      "richness": 1
+    },
+    {
+      "x": -19200,
+      "y": -19200,
+      "region": "region--3:-3",
+      "danger": "deadlands",
+      "biome": "arcane-hollow",
+      "neighbour": "emberlands",
+      "blend": 1,
+      "grade": "rare",
+      "tier": 3,
+      "richness": 1
+    },
+    {
+      "x": -12800,
+      "y": -19200,
+      "region": "region--2:-3",
+      "danger": "deadlands",
+      "biome": "stonereach",
+      "neighbour": "arcane-hollow",
+      "blend": 1,
+      "grade": "rare",
+      "tier": 3,
+      "richness": 1
+    },
+    {
+      "x": -6400,
+      "y": -19200,
+      "region": "region--1:-3",
+      "danger": "deadlands",
+      "biome": "rimeshelf",
+      "neighbour": "stonereach",
+      "blend": 0.33029305171551315,
+      "grade": "rare",
+      "tier": 3,
+      "richness": 0.8292283145830219
+    },
+    {
+      "x": 0,
+      "y": -19200,
+      "region": "region-0:-4",
+      "danger": "deadlands",
+      "biome": "stormflats",
+      "neighbour": "stonereach",
+      "blend": 1,
+      "grade": "rare",
+      "tier": 3,
+      "richness": 0.7590666666666668
+    },
+    {
+      "x": 6400,
+      "y": -19200,
+      "region": "region-1:-3",
+      "danger": "deadlands",
+      "biome": "stonereach",
+      "neighbour": "stormflats",
+      "blend": 1,
+      "grade": "rare",
+      "tier": 3,
+      "richness": 0.8292283145830219
+    },
+    {
+      "x": 12800,
+      "y": -19200,
+      "region": "region-1:-3",
+      "danger": "deadlands",
+      "biome": "stonereach",
+      "neighbour": "stormflats",
+      "blend": 1,
+      "grade": "rare",
+      "tier": 3,
+      "richness": 1
+    },
+    {
+      "x": 19200,
+      "y": -19200,
+      "region": "region-2:-3",
+      "danger": "deadlands",
+      "biome": "stormflats",
+      "neighbour": "arcane-hollow",
+      "blend": 1,
+      "grade": "rare",
+      "tier": 3,
+      "richness": 1
+    },
+    {
+      "x": 25600,
+      "y": -19200,
+      "region": "region-2:-2",
+      "danger": "deadlands",
+      "biome": "arcane-hollow",
+      "neighbour": "stormflats",
+      "blend": 1,
+      "grade": "rare",
+      "tier": 3,
+      "richness": 1
+    },
+    {
+      "x": 32000,
+      "y": -19200,
+      "region": "region-2:-2",
+      "danger": "deadlands",
+      "biome": "arcane-hollow",
+      "neighbour": "stonereach",
+      "blend": 1,
+      "grade": "rare",
+      "tier": 3,
+      "richness": 1
+    },
+    {
+      "x": -32000,
+      "y": -12800,
+      "region": "region--3:-2",
+      "danger": "deadlands",
+      "biome": "emberlands",
+      "neighbour": "stormflats",
+      "blend": 0.4858512608177244,
+      "grade": "rare",
+      "tier": 3,
+      "richness": 1
+    },
+    {
+      "x": -25600,
+      "y": -12800,
+      "region": "region--3:-2",
+      "danger": "deadlands",
+      "biome": "emberlands",
+      "neighbour": "stormflats",
+      "blend": 1,
+      "grade": "rare",
+      "tier": 3,
+      "richness": 1
+    },
+    {
+      "x": -19200,
+      "y": -12800,
+      "region": "region--3:-2",
+      "danger": "deadlands",
+      "biome": "emberlands",
+      "neighbour": "arcane-hollow",
+      "blend": 1,
+      "grade": "rare",
+      "tier": 3,
+      "richness": 1
+    },
+    {
+      "x": -12800,
+      "y": -12800,
       "region": "region--3:-2",
       "danger": "deadlands",
       "biome": "emberlands",
@@ -261,20 +549,8 @@
       "richness": 0.6848861808680418
     },
     {
-      "x": -19200,
-      "y": -25600,
-      "region": "region--2:-3",
-      "danger": "deadlands",
-      "biome": "stonereach",
-      "neighbour": "rimeshelf",
-      "blend": 0.9195132711693829,
-      "grade": "rare",
-      "tier": 3,
-      "richness": 0.542888888888889
-    },
-    {
-      "x": -12800,
-      "y": -25600,
+      "x": -6400,
+      "y": -12800,
       "region": "region--1:-3",
       "danger": "frontier",
       "biome": "rimeshelf",
@@ -285,20 +561,8 @@
       "richness": 0.44003388067831967
     },
     {
-      "x": -6400,
-      "y": -25600,
-      "region": "region--1:-3",
-      "danger": "frontier",
-      "biome": "rimeshelf",
-      "neighbour": "stormflats",
-      "blend": 1,
-      "grade": "uncommon",
-      "tier": 2,
-      "richness": 0.3733178966513971
-    },
-    {
       "x": 0,
-      "y": -25600,
+      "y": -12800,
       "region": "region-0:-3",
       "danger": "frontier",
       "biome": "stonereach",
@@ -310,19 +574,7 @@
     },
     {
       "x": 6400,
-      "y": -25600,
-      "region": "region-0:-3",
-      "danger": "frontier",
-      "biome": "stonereach",
-      "neighbour": "stormflats",
-      "blend": 1,
-      "grade": "uncommon",
-      "tier": 2,
-      "richness": 0.3733178966513971
-    },
-    {
-      "x": 12800,
-      "y": -25600,
+      "y": -12800,
       "region": "region-1:-3",
       "danger": "frontier",
       "biome": "stonereach",
@@ -333,20 +585,8 @@
       "richness": 0.44003388067831967
     },
     {
-      "x": 19200,
-      "y": -25600,
-      "region": "region-1:-2",
-      "danger": "deadlands",
-      "biome": "stormflats",
-      "neighbour": "stonereach",
-      "blend": 1,
-      "grade": "rare",
-      "tier": 3,
-      "richness": 0.542888888888889
-    },
-    {
-      "x": 25600,
-      "y": -25600,
+      "x": 12800,
+      "y": -12800,
       "region": "region-1:-2",
       "danger": "deadlands",
       "biome": "stormflats",
@@ -357,140 +597,8 @@
       "richness": 0.6848861808680418
     },
     {
-      "x": 32000,
-      "y": -25600,
-      "region": "region-1:-2",
-      "danger": "deadlands",
-      "biome": "stormflats",
-      "neighbour": "arcane-hollow",
-      "blend": 0.03862473857108581,
-      "grade": "rare",
-      "tier": 3,
-      "richness": 0.848133148961542
-    },
-    {
-      "x": -32000,
-      "y": -19200,
-      "region": "region--3:-2",
-      "danger": "deadlands",
-      "biome": "emberlands",
-      "neighbour": "arcane-hollow",
-      "blend": 1,
-      "grade": "rare",
-      "tier": 3,
-      "richness": 0.7225222229567795
-    },
-    {
-      "x": -25600,
-      "y": -19200,
-      "region": "region--3:-2",
-      "danger": "deadlands",
-      "biome": "emberlands",
-      "neighbour": "arcane-hollow",
-      "blend": 1,
-      "grade": "rare",
-      "tier": 3,
-      "richness": 0.542888888888889
-    },
-    {
-      "x": -19200,
-      "y": -19200,
-      "region": "region--3:-2",
-      "danger": "frontier",
-      "biome": "emberlands",
-      "neighbour": "arcane-hollow",
-      "blend": 1,
-      "grade": "uncommon",
-      "tier": 2,
-      "richness": 0.3961666252072277
-    },
-    {
-      "x": -12800,
-      "y": -19200,
-      "region": "region--1:-3",
-      "danger": "frontier",
-      "biome": "rimeshelf",
-      "neighbour": "emberlands",
-      "blend": 1,
-      "grade": "uncommon",
-      "tier": 2,
-      "richness": 0.27438910780069
-    },
-    {
-      "x": -6400,
-      "y": -19200,
-      "region": "region--1:-3",
-      "danger": "frontier",
-      "biome": "rimeshelf",
-      "neighbour": "stormflats",
-      "blend": 1,
-      "grade": "uncommon",
-      "tier": 2,
-      "richness": 0.18986292430093155
-    },
-    {
-      "x": 0,
-      "y": -19200,
-      "region": "region-0:-3",
-      "danger": "frontier",
-      "biome": "stonereach",
-      "neighbour": "stormflats",
-      "blend": 1,
-      "grade": "uncommon",
-      "tier": 2,
-      "richness": 0.17740000000000003
-    },
-    {
-      "x": 6400,
-      "y": -19200,
-      "region": "region-0:-3",
-      "danger": "frontier",
-      "biome": "stonereach",
-      "neighbour": "rimeshelf",
-      "blend": 1,
-      "grade": "uncommon",
-      "tier": 2,
-      "richness": 0.18986292430093155
-    },
-    {
-      "x": 12800,
-      "y": -19200,
-      "region": "region-1:-2",
-      "danger": "frontier",
-      "biome": "stormflats",
-      "neighbour": "stonereach",
-      "blend": 1,
-      "grade": "uncommon",
-      "tier": 2,
-      "richness": 0.27438910780069
-    },
-    {
       "x": 19200,
-      "y": -19200,
-      "region": "region-1:-2",
-      "danger": "frontier",
-      "biome": "stormflats",
-      "neighbour": "arcane-hollow",
-      "blend": 1,
-      "grade": "uncommon",
-      "tier": 2,
-      "richness": 0.3961666252072277
-    },
-    {
-      "x": 25600,
-      "y": -19200,
-      "region": "region-1:-2",
-      "danger": "deadlands",
-      "biome": "stormflats",
-      "neighbour": "arcane-hollow",
-      "blend": 0.9624551805342233,
-      "grade": "rare",
-      "tier": 3,
-      "richness": 0.542888888888889
-    },
-    {
-      "x": 32000,
-      "y": -19200,
+      "y": -12800,
       "region": "region-2:-2",
       "danger": "deadlands",
       "biome": "arcane-hollow",
@@ -498,23 +606,71 @@
       "blend": 1,
       "grade": "rare",
       "tier": 3,
-      "richness": 0.7225222229567795
+      "richness": 1
+    },
+    {
+      "x": 25600,
+      "y": -12800,
+      "region": "region-2:-2",
+      "danger": "deadlands",
+      "biome": "arcane-hollow",
+      "neighbour": "stormflats",
+      "blend": 1,
+      "grade": "rare",
+      "tier": 3,
+      "richness": 1
+    },
+    {
+      "x": 32000,
+      "y": -12800,
+      "region": "region-2:-2",
+      "danger": "deadlands",
+      "biome": "arcane-hollow",
+      "neighbour": "stormflats",
+      "blend": 0.11709705913841364,
+      "grade": "rare",
+      "tier": 3,
+      "richness": 1
     },
     {
       "x": -32000,
-      "y": -12800,
+      "y": -6400,
+      "region": "region--4:-1",
+      "danger": "deadlands",
+      "biome": "stormflats",
+      "neighbour": "arcane-hollow",
+      "blend": 0.5202562507856303,
+      "grade": "rare",
+      "tier": 3,
+      "richness": 1
+    },
+    {
+      "x": -25600,
+      "y": -6400,
+      "region": "region--3:-1",
+      "danger": "deadlands",
+      "biome": "arcane-hollow",
+      "neighbour": "stormflats",
+      "blend": 0.24657771670198497,
+      "grade": "rare",
+      "tier": 3,
+      "richness": 1
+    },
+    {
+      "x": -19200,
+      "y": -6400,
       "region": "region--3:-2",
       "danger": "deadlands",
       "biome": "emberlands",
       "neighbour": "arcane-hollow",
-      "blend": 1,
+      "blend": 0.061824297007179514,
       "grade": "rare",
       "tier": 3,
-      "richness": 0.6261529609734323
+      "richness": 0.8292283145830219
     },
     {
-      "x": -25600,
-      "y": -12800,
+      "x": -12800,
+      "y": -6400,
       "region": "region--3:-2",
       "danger": "frontier",
       "biome": "emberlands",
@@ -525,20 +681,8 @@
       "richness": 0.44003388067831967
     },
     {
-      "x": -19200,
-      "y": -12800,
-      "region": "region--3:-2",
-      "danger": "frontier",
-      "biome": "emberlands",
-      "neighbour": "arcane-hollow",
-      "blend": 1,
-      "grade": "uncommon",
-      "tier": 2,
-      "richness": 0.27438910780069
-    },
-    {
-      "x": -12800,
-      "y": -12800,
+      "x": -6400,
+      "y": -6400,
       "region": "region--2:-2",
       "danger": "frontier",
       "biome": "emberlands",
@@ -549,20 +693,8 @@
       "richness": 0.16422320318050743
     },
     {
-      "x": -6400,
-      "y": -12800,
-      "region": "region--1:-3",
-      "danger": "frontier",
-      "biome": "rimeshelf",
-      "neighbour": "stormflats",
-      "blend": 1,
-      "grade": "uncommon",
-      "tier": 2,
-      "richness": 0.11873002067198385
-    },
-    {
       "x": 0,
-      "y": -12800,
+      "y": -6400,
       "region": "region-0:-3",
       "danger": "frontier",
       "biome": "stonereach",
@@ -574,19 +706,7 @@
     },
     {
       "x": 6400,
-      "y": -12800,
-      "region": "region-0:-3",
-      "danger": "frontier",
-      "biome": "stonereach",
-      "neighbour": "stormflats",
-      "blend": 0.49082167558529854,
-      "grade": "uncommon",
-      "tier": 2,
-      "richness": 0.11873002067198385
-    },
-    {
-      "x": 12800,
-      "y": -12800,
+      "y": -6400,
       "region": "region-1:-2",
       "danger": "frontier",
       "biome": "stormflats",
@@ -597,20 +717,8 @@
       "richness": 0.16422320318050743
     },
     {
-      "x": 19200,
-      "y": -12800,
-      "region": "region-1:-2",
-      "danger": "frontier",
-      "biome": "stormflats",
-      "neighbour": "arcane-hollow",
-      "blend": 1,
-      "grade": "uncommon",
-      "tier": 2,
-      "richness": 0.27438910780069
-    },
-    {
-      "x": 25600,
-      "y": -12800,
+      "x": 12800,
+      "y": -6400,
       "region": "region-2:-2",
       "danger": "frontier",
       "biome": "arcane-hollow",
@@ -621,136 +729,28 @@
       "richness": 0.44003388067831967
     },
     {
-      "x": 32000,
-      "y": -12800,
-      "region": "region-2:-1",
-      "danger": "deadlands",
-      "biome": "stormflats",
-      "neighbour": "arcane-hollow",
-      "blend": 1,
-      "grade": "rare",
-      "tier": 3,
-      "richness": 0.6261529609734323
-    },
-    {
-      "x": -32000,
-      "y": -6400,
-      "region": "region--3:-1",
-      "danger": "deadlands",
-      "biome": "arcane-hollow",
-      "neighbour": "stormflats",
-      "blend": 1,
-      "grade": "rare",
-      "tier": 3,
-      "richness": 0.5642947072940137
-    },
-    {
-      "x": -25600,
-      "y": -6400,
-      "region": "region--3:-1",
-      "danger": "frontier",
-      "biome": "arcane-hollow",
-      "neighbour": "emberlands",
-      "blend": 1,
-      "grade": "uncommon",
-      "tier": 2,
-      "richness": 0.3733178966513971
-    },
-    {
-      "x": -19200,
-      "y": -6400,
-      "region": "region--3:-1",
-      "danger": "frontier",
-      "biome": "arcane-hollow",
-      "neighbour": "emberlands",
-      "blend": 0.294137503820395,
-      "grade": "uncommon",
-      "tier": 2,
-      "richness": 0.18986292430093155
-    },
-    {
-      "x": -12800,
-      "y": -6400,
-      "region": "region--2:-2",
-      "danger": "frontier",
-      "biome": "emberlands",
-      "neighbour": "rimeshelf",
-      "blend": 0.5647299185696308,
-      "grade": "uncommon",
-      "tier": 2,
-      "richness": 0.11873002067198385
-    },
-    {
-      "x": -6400,
-      "y": -6400,
-      "region": "region--2:-2",
-      "danger": "frontier",
-      "biome": "emberlands",
-      "neighbour": "rimeshelf",
-      "blend": 1,
-      "grade": "uncommon",
-      "tier": 2,
-      "richness": 0.055611601590253704
-    },
-    {
-      "x": 0,
-      "y": -6400,
-      "region": "region--1:-2",
-      "danger": "fringe",
-      "biome": "stormflats",
-      "neighbour": "rimeshelf",
-      "blend": 0.14560781780254123,
-      "grade": "common",
-      "tier": 1,
-      "richness": 0.0391111111111111
-    },
-    {
-      "x": 6400,
-      "y": -6400,
-      "region": "region-1:-1",
-      "danger": "frontier",
-      "biome": "stonereach",
-      "neighbour": "stormflats",
-      "blend": 0.8069755707623598,
-      "grade": "uncommon",
-      "tier": 2,
-      "richness": 0.055611601590253704
-    },
-    {
-      "x": 12800,
-      "y": -6400,
-      "region": "region-1:-1",
-      "danger": "frontier",
-      "biome": "stonereach",
-      "neighbour": "stormflats",
-      "blend": 0.9079594870810455,
-      "grade": "uncommon",
-      "tier": 2,
-      "richness": 0.11873002067198385
-    },
-    {
       "x": 19200,
       "y": -6400,
       "region": "region-2:-1",
-      "danger": "frontier",
+      "danger": "deadlands",
       "biome": "stormflats",
       "neighbour": "arcane-hollow",
       "blend": 1,
-      "grade": "uncommon",
-      "tier": 2,
-      "richness": 0.18986292430093155
+      "grade": "rare",
+      "tier": 3,
+      "richness": 0.8292283145830219
     },
     {
       "x": 25600,
       "y": -6400,
       "region": "region-2:-1",
-      "danger": "frontier",
+      "danger": "deadlands",
       "biome": "stormflats",
       "neighbour": "arcane-hollow",
       "blend": 1,
-      "grade": "uncommon",
-      "tier": 2,
-      "richness": 0.3733178966513971
+      "grade": "rare",
+      "tier": 3,
+      "richness": 1
     },
     {
       "x": 32000,
@@ -762,7 +762,7 @@
       "blend": 1,
       "grade": "rare",
       "tier": 3,
-      "richness": 0.5642947072940137
+      "richness": 1
     },
     {
       "x": -32000,
@@ -774,10 +774,34 @@
       "blend": 1,
       "grade": "rare",
       "tier": 3,
-      "richness": 0.542888888888889
+      "richness": 1
     },
     {
       "x": -25600,
+      "y": 0,
+      "region": "region--3:-1",
+      "danger": "deadlands",
+      "biome": "arcane-hollow",
+      "neighbour": "stormflats",
+      "blend": 1,
+      "grade": "rare",
+      "tier": 3,
+      "richness": 1
+    },
+    {
+      "x": -19200,
+      "y": 0,
+      "region": "region--3:-1",
+      "danger": "deadlands",
+      "biome": "arcane-hollow",
+      "neighbour": "stormflats",
+      "blend": 1,
+      "grade": "rare",
+      "tier": 3,
+      "richness": 0.7590666666666668
+    },
+    {
+      "x": -12800,
       "y": 0,
       "region": "region--3:-1",
       "danger": "frontier",
@@ -789,19 +813,7 @@
       "richness": 0.3497866666666667
     },
     {
-      "x": -19200,
-      "y": 0,
-      "region": "region--3:-1",
-      "danger": "frontier",
-      "biome": "arcane-hollow",
-      "neighbour": "stormflats",
-      "blend": 1,
-      "grade": "uncommon",
-      "tier": 2,
-      "richness": 0.17740000000000003
-    },
-    {
-      "x": -12800,
+      "x": -6400,
       "y": 0,
       "region": "region--3:-1",
       "danger": "frontier",
@@ -811,18 +823,6 @@
       "grade": "uncommon",
       "tier": 2,
       "richness": 0.1006
-    },
-    {
-      "x": -6400,
-      "y": 0,
-      "region": "region--2:0",
-      "danger": "fringe",
-      "biome": "arcane-hollow",
-      "neighbour": "rimeshelf",
-      "blend": 1,
-      "grade": "common",
-      "tier": 1,
-      "richness": 0.0391111111111111
     },
     {
       "x": 0,
@@ -840,18 +840,6 @@
       "x": 6400,
       "y": 0,
       "region": "region-1:0",
-      "danger": "fringe",
-      "biome": "emberlands",
-      "neighbour": "stonereach",
-      "blend": 0.8954079500150095,
-      "grade": "common",
-      "tier": 1,
-      "richness": 0.0391111111111111
-    },
-    {
-      "x": 12800,
-      "y": 0,
-      "region": "region-1:0",
       "danger": "frontier",
       "biome": "emberlands",
       "neighbour": "stormflats",
@@ -861,19 +849,7 @@
       "richness": 0.1006
     },
     {
-      "x": 19200,
-      "y": 0,
-      "region": "region-2:-1",
-      "danger": "frontier",
-      "biome": "stormflats",
-      "neighbour": "stonereach",
-      "blend": 0.5727648515327833,
-      "grade": "uncommon",
-      "tier": 2,
-      "richness": 0.17740000000000003
-    },
-    {
-      "x": 25600,
+      "x": 12800,
       "y": 0,
       "region": "region-2:-1",
       "danger": "frontier",
@@ -885,6 +861,30 @@
       "richness": 0.3497866666666667
     },
     {
+      "x": 19200,
+      "y": 0,
+      "region": "region-2:-1",
+      "danger": "deadlands",
+      "biome": "stormflats",
+      "neighbour": "stonereach",
+      "blend": 1,
+      "grade": "rare",
+      "tier": 3,
+      "richness": 0.7590666666666668
+    },
+    {
+      "x": 25600,
+      "y": 0,
+      "region": "region-2:-1",
+      "danger": "deadlands",
+      "biome": "stormflats",
+      "neighbour": "stonereach",
+      "blend": 1,
+      "grade": "rare",
+      "tier": 3,
+      "richness": 1
+    },
+    {
       "x": 32000,
       "y": 0,
       "region": "region-2:-1",
@@ -894,7 +894,7 @@
       "blend": 1,
       "grade": "rare",
       "tier": 3,
-      "richness": 0.542888888888889
+      "richness": 1
     },
     {
       "x": -32000,
@@ -906,143 +906,35 @@
       "blend": 1,
       "grade": "rare",
       "tier": 3,
-      "richness": 0.5642947072940137
+      "richness": 1
     },
     {
       "x": -25600,
       "y": 6400,
       "region": "region--3:0",
-      "danger": "frontier",
+      "danger": "deadlands",
       "biome": "arcane-hollow",
       "neighbour": "stormflats",
       "blend": 1,
-      "grade": "uncommon",
-      "tier": 2,
-      "richness": 0.3733178966513971
+      "grade": "rare",
+      "tier": 3,
+      "richness": 1
     },
     {
       "x": -19200,
       "y": 6400,
       "region": "region--3:0",
-      "danger": "frontier",
+      "danger": "deadlands",
       "biome": "arcane-hollow",
       "neighbour": "stormflats",
       "blend": 1,
-      "grade": "uncommon",
-      "tier": 2,
-      "richness": 0.18986292430093155
+      "grade": "rare",
+      "tier": 3,
+      "richness": 0.8292283145830219
     },
     {
       "x": -12800,
       "y": 6400,
-      "region": "region--3:1",
-      "danger": "frontier",
-      "biome": "stormflats",
-      "neighbour": "arcane-hollow",
-      "blend": 0.5723083855681801,
-      "grade": "uncommon",
-      "tier": 2,
-      "richness": 0.11873002067198385
-    },
-    {
-      "x": -6400,
-      "y": 6400,
-      "region": "region--2:1",
-      "danger": "frontier",
-      "biome": "stonereach",
-      "neighbour": "rimeshelf",
-      "blend": 1,
-      "grade": "uncommon",
-      "tier": 2,
-      "richness": 0.055611601590253704
-    },
-    {
-      "x": 0,
-      "y": 6400,
-      "region": "region--1:1",
-      "danger": "fringe",
-      "biome": "stormflats",
-      "neighbour": "rimeshelf",
-      "blend": 1,
-      "grade": "common",
-      "tier": 1,
-      "richness": 0.0391111111111111
-    },
-    {
-      "x": 6400,
-      "y": 6400,
-      "region": "region-1:1",
-      "danger": "frontier",
-      "biome": "arcane-hollow",
-      "neighbour": "emberlands",
-      "blend": 1,
-      "grade": "uncommon",
-      "tier": 2,
-      "richness": 0.055611601590253704
-    },
-    {
-      "x": 12800,
-      "y": 6400,
-      "region": "region-2:1",
-      "danger": "frontier",
-      "biome": "rimeshelf",
-      "neighbour": "arcane-hollow",
-      "blend": 0.9425108257944582,
-      "grade": "uncommon",
-      "tier": 2,
-      "richness": 0.11873002067198385
-    },
-    {
-      "x": 19200,
-      "y": 6400,
-      "region": "region-2:0",
-      "danger": "frontier",
-      "biome": "stonereach",
-      "neighbour": "rimeshelf",
-      "blend": 1,
-      "grade": "uncommon",
-      "tier": 2,
-      "richness": 0.18986292430093155
-    },
-    {
-      "x": 25600,
-      "y": 6400,
-      "region": "region-2:0",
-      "danger": "frontier",
-      "biome": "stonereach",
-      "neighbour": "rimeshelf",
-      "blend": 1,
-      "grade": "uncommon",
-      "tier": 2,
-      "richness": 0.3733178966513971
-    },
-    {
-      "x": 32000,
-      "y": 6400,
-      "region": "region-2:0",
-      "danger": "deadlands",
-      "biome": "stonereach",
-      "neighbour": "stormflats",
-      "blend": 1,
-      "grade": "rare",
-      "tier": 3,
-      "richness": 0.5642947072940137
-    },
-    {
-      "x": -32000,
-      "y": 12800,
-      "region": "region--3:0",
-      "danger": "deadlands",
-      "biome": "arcane-hollow",
-      "neighbour": "stormflats",
-      "blend": 1,
-      "grade": "rare",
-      "tier": 3,
-      "richness": 0.6261529609734323
-    },
-    {
-      "x": -25600,
-      "y": 12800,
       "region": "region--3:1",
       "danger": "frontier",
       "biome": "stormflats",
@@ -1053,20 +945,8 @@
       "richness": 0.44003388067831967
     },
     {
-      "x": -19200,
-      "y": 12800,
-      "region": "region--3:1",
-      "danger": "frontier",
-      "biome": "stormflats",
-      "neighbour": "stonereach",
-      "blend": 1,
-      "grade": "uncommon",
-      "tier": 2,
-      "richness": 0.27438910780069
-    },
-    {
-      "x": -12800,
-      "y": 12800,
+      "x": -6400,
+      "y": 6400,
       "region": "region--2:1",
       "danger": "frontier",
       "biome": "stonereach",
@@ -1077,20 +957,8 @@
       "richness": 0.16422320318050743
     },
     {
-      "x": -6400,
-      "y": 12800,
-      "region": "region--1:2",
-      "danger": "frontier",
-      "biome": "rimeshelf",
-      "neighbour": "stormflats",
-      "blend": 1,
-      "grade": "uncommon",
-      "tier": 2,
-      "richness": 0.11873002067198385
-    },
-    {
       "x": 0,
-      "y": 12800,
+      "y": 6400,
       "region": "region--1:1",
       "danger": "frontier",
       "biome": "stormflats",
@@ -1102,19 +970,7 @@
     },
     {
       "x": 6400,
-      "y": 12800,
-      "region": "region-0:2",
-      "danger": "frontier",
-      "biome": "arcane-hollow",
-      "neighbour": "emberlands",
-      "blend": 0.38260045016553035,
-      "grade": "uncommon",
-      "tier": 2,
-      "richness": 0.11873002067198385
-    },
-    {
-      "x": 12800,
-      "y": 12800,
+      "y": 6400,
       "region": "region-1:2",
       "danger": "frontier",
       "biome": "emberlands",
@@ -1125,20 +981,8 @@
       "richness": 0.16422320318050743
     },
     {
-      "x": 19200,
-      "y": 12800,
-      "region": "region-2:1",
-      "danger": "frontier",
-      "biome": "rimeshelf",
-      "neighbour": "arcane-hollow",
-      "blend": 1,
-      "grade": "uncommon",
-      "tier": 2,
-      "richness": 0.27438910780069
-    },
-    {
-      "x": 25600,
-      "y": 12800,
+      "x": 12800,
+      "y": 6400,
       "region": "region-2:1",
       "danger": "frontier",
       "biome": "rimeshelf",
@@ -1149,164 +993,80 @@
       "richness": 0.44003388067831967
     },
     {
-      "x": 32000,
-      "y": 12800,
+      "x": 19200,
+      "y": 6400,
       "region": "region-2:0",
       "danger": "deadlands",
       "biome": "stonereach",
       "neighbour": "rimeshelf",
-      "blend": 0.45865039912957856,
-      "grade": "rare",
-      "tier": 3,
-      "richness": 0.6261529609734323
-    },
-    {
-      "x": -32000,
-      "y": 19200,
-      "region": "region--3:1",
-      "danger": "deadlands",
-      "biome": "stormflats",
-      "neighbour": "arcane-hollow",
       "blend": 1,
       "grade": "rare",
       "tier": 3,
-      "richness": 0.7225222229567795
-    },
-    {
-      "x": -25600,
-      "y": 19200,
-      "region": "region--3:1",
-      "danger": "deadlands",
-      "biome": "stormflats",
-      "neighbour": "arcane-hollow",
-      "blend": 1,
-      "grade": "rare",
-      "tier": 3,
-      "richness": 0.542888888888889
-    },
-    {
-      "x": -19200,
-      "y": 19200,
-      "region": "region--2:2",
-      "danger": "frontier",
-      "biome": "emberlands",
-      "neighbour": "stonereach",
-      "blend": 0.738521636924729,
-      "grade": "uncommon",
-      "tier": 2,
-      "richness": 0.3961666252072277
-    },
-    {
-      "x": -12800,
-      "y": 19200,
-      "region": "region--1:2",
-      "danger": "frontier",
-      "biome": "rimeshelf",
-      "neighbour": "emberlands",
-      "blend": 0.35771187264076804,
-      "grade": "uncommon",
-      "tier": 2,
-      "richness": 0.27438910780069
-    },
-    {
-      "x": -6400,
-      "y": 19200,
-      "region": "region--1:2",
-      "danger": "frontier",
-      "biome": "rimeshelf",
-      "neighbour": "stormflats",
-      "blend": 1,
-      "grade": "uncommon",
-      "tier": 2,
-      "richness": 0.18986292430093155
-    },
-    {
-      "x": 0,
-      "y": 19200,
-      "region": "region--1:1",
-      "danger": "frontier",
-      "biome": "stormflats",
-      "neighbour": "rimeshelf",
-      "blend": 0.43499497138626947,
-      "grade": "uncommon",
-      "tier": 2,
-      "richness": 0.17740000000000003
-    },
-    {
-      "x": 6400,
-      "y": 19200,
-      "region": "region-0:2",
-      "danger": "frontier",
-      "biome": "arcane-hollow",
-      "neighbour": "stormflats",
-      "blend": 1,
-      "grade": "uncommon",
-      "tier": 2,
-      "richness": 0.18986292430093155
-    },
-    {
-      "x": 12800,
-      "y": 19200,
-      "region": "region-1:2",
-      "danger": "frontier",
-      "biome": "emberlands",
-      "neighbour": "arcane-hollow",
-      "blend": 1,
-      "grade": "uncommon",
-      "tier": 2,
-      "richness": 0.27438910780069
-    },
-    {
-      "x": 19200,
-      "y": 19200,
-      "region": "region-1:2",
-      "danger": "frontier",
-      "biome": "emberlands",
-      "neighbour": "rimeshelf",
-      "blend": 1,
-      "grade": "uncommon",
-      "tier": 2,
-      "richness": 0.3961666252072277
+      "richness": 0.8292283145830219
     },
     {
       "x": 25600,
-      "y": 19200,
-      "region": "region-2:1",
+      "y": 6400,
+      "region": "region-2:0",
       "danger": "deadlands",
-      "biome": "rimeshelf",
+      "biome": "stonereach",
       "neighbour": "emberlands",
       "blend": 1,
       "grade": "rare",
       "tier": 3,
-      "richness": 0.542888888888889
+      "richness": 1
     },
     {
       "x": 32000,
-      "y": 19200,
-      "region": "region-2:1",
+      "y": 6400,
+      "region": "region-2:0",
       "danger": "deadlands",
-      "biome": "rimeshelf",
-      "neighbour": "stonereach",
-      "blend": 1,
+      "biome": "stonereach",
+      "neighbour": "emberlands",
+      "blend": 0.27645342506048426,
       "grade": "rare",
       "tier": 3,
-      "richness": 0.7225222229567795
+      "richness": 1
     },
     {
       "x": -32000,
-      "y": 25600,
+      "y": 12800,
+      "region": "region--3:0",
+      "danger": "deadlands",
+      "biome": "arcane-hollow",
+      "neighbour": "emberlands",
+      "blend": 0.12125244881203293,
+      "grade": "rare",
+      "tier": 3,
+      "richness": 1
+    },
+    {
+      "x": -25600,
+      "y": 12800,
+      "region": "region--3:1",
+      "danger": "deadlands",
+      "biome": "stormflats",
+      "neighbour": "emberlands",
+      "blend": 0.25490442271359814,
+      "grade": "rare",
+      "tier": 3,
+      "richness": 1
+    },
+    {
+      "x": -19200,
+      "y": 12800,
       "region": "region--3:1",
       "danger": "deadlands",
       "biome": "stormflats",
       "neighbour": "arcane-hollow",
-      "blend": 0.08594503295915261,
+      "blend": 1,
       "grade": "rare",
       "tier": 3,
-      "richness": 0.848133148961542
+      "richness": 1
     },
     {
-      "x": -25600,
-      "y": 25600,
+      "x": -12800,
+      "y": 12800,
       "region": "region--2:2",
       "danger": "deadlands",
       "biome": "emberlands",
@@ -1317,20 +1077,8 @@
       "richness": 0.6848861808680418
     },
     {
-      "x": -19200,
-      "y": 25600,
-      "region": "region--2:2",
-      "danger": "deadlands",
-      "biome": "emberlands",
-      "neighbour": "stonereach",
-      "blend": 1,
-      "grade": "rare",
-      "tier": 3,
-      "richness": 0.542888888888889
-    },
-    {
-      "x": -12800,
-      "y": 25600,
+      "x": -6400,
+      "y": 12800,
       "region": "region--1:2",
       "danger": "frontier",
       "biome": "rimeshelf",
@@ -1341,20 +1089,8 @@
       "richness": 0.44003388067831967
     },
     {
-      "x": -6400,
-      "y": 25600,
-      "region": "region--1:2",
-      "danger": "frontier",
-      "biome": "rimeshelf",
-      "neighbour": "stormflats",
-      "blend": 1,
-      "grade": "uncommon",
-      "tier": 2,
-      "richness": 0.3733178966513971
-    },
-    {
       "x": 0,
-      "y": 25600,
+      "y": 12800,
       "region": "region--1:2",
       "danger": "frontier",
       "biome": "rimeshelf",
@@ -1366,19 +1102,7 @@
     },
     {
       "x": 6400,
-      "y": 25600,
-      "region": "region-0:2",
-      "danger": "frontier",
-      "biome": "arcane-hollow",
-      "neighbour": "stormflats",
-      "blend": 1,
-      "grade": "uncommon",
-      "tier": 2,
-      "richness": 0.3733178966513971
-    },
-    {
-      "x": 12800,
-      "y": 25600,
+      "y": 12800,
       "region": "region-0:2",
       "danger": "frontier",
       "biome": "arcane-hollow",
@@ -1389,20 +1113,8 @@
       "richness": 0.44003388067831967
     },
     {
-      "x": 19200,
-      "y": 25600,
-      "region": "region-1:2",
-      "danger": "deadlands",
-      "biome": "emberlands",
-      "neighbour": "arcane-hollow",
-      "blend": 1,
-      "grade": "rare",
-      "tier": 3,
-      "richness": 0.542888888888889
-    },
-    {
-      "x": 25600,
-      "y": 25600,
+      "x": 12800,
+      "y": 12800,
       "region": "region-1:2",
       "danger": "deadlands",
       "biome": "emberlands",
@@ -1413,16 +1125,304 @@
       "richness": 0.6848861808680418
     },
     {
-      "x": 32000,
-      "y": 25600,
+      "x": 19200,
+      "y": 12800,
       "region": "region-2:1",
       "danger": "deadlands",
       "biome": "rimeshelf",
+      "neighbour": "stonereach",
+      "blend": 1,
+      "grade": "rare",
+      "tier": 3,
+      "richness": 1
+    },
+    {
+      "x": 25600,
+      "y": 12800,
+      "region": "region-2:1",
+      "danger": "deadlands",
+      "biome": "rimeshelf",
+      "neighbour": "stonereach",
+      "blend": 1,
+      "grade": "rare",
+      "tier": 3,
+      "richness": 1
+    },
+    {
+      "x": 32000,
+      "y": 12800,
+      "region": "region-3:1",
+      "danger": "deadlands",
+      "biome": "stonereach",
+      "neighbour": "rimeshelf",
+      "blend": 1,
+      "grade": "rare",
+      "tier": 3,
+      "richness": 1
+    },
+    {
+      "x": -32000,
+      "y": 19200,
+      "region": "region--4:1",
+      "danger": "deadlands",
+      "biome": "emberlands",
+      "neighbour": "arcane-hollow",
+      "blend": 1,
+      "grade": "rare",
+      "tier": 3,
+      "richness": 1
+    },
+    {
+      "x": -25600,
+      "y": 19200,
+      "region": "region--3:2",
+      "danger": "deadlands",
+      "biome": "arcane-hollow",
+      "neighbour": "stormflats",
+      "blend": 1,
+      "grade": "rare",
+      "tier": 3,
+      "richness": 1
+    },
+    {
+      "x": -19200,
+      "y": 19200,
+      "region": "region--3:2",
+      "danger": "deadlands",
+      "biome": "arcane-hollow",
       "neighbour": "emberlands",
       "blend": 1,
       "grade": "rare",
       "tier": 3,
-      "richness": 0.848133148961542
+      "richness": 1
+    },
+    {
+      "x": -12800,
+      "y": 19200,
+      "region": "region--2:2",
+      "danger": "deadlands",
+      "biome": "emberlands",
+      "neighbour": "rimeshelf",
+      "blend": 1,
+      "grade": "rare",
+      "tier": 3,
+      "richness": 1
+    },
+    {
+      "x": -6400,
+      "y": 19200,
+      "region": "region--1:2",
+      "danger": "deadlands",
+      "biome": "rimeshelf",
+      "neighbour": "stonereach",
+      "blend": 1,
+      "grade": "rare",
+      "tier": 3,
+      "richness": 0.8292283145830219
+    },
+    {
+      "x": 0,
+      "y": 19200,
+      "region": "region--1:2",
+      "danger": "deadlands",
+      "biome": "rimeshelf",
+      "neighbour": "stonereach",
+      "blend": 0.07009559296816027,
+      "grade": "rare",
+      "tier": 3,
+      "richness": 0.7590666666666668
+    },
+    {
+      "x": 6400,
+      "y": 19200,
+      "region": "region-0:2",
+      "danger": "deadlands",
+      "biome": "arcane-hollow",
+      "neighbour": "stormflats",
+      "blend": 1,
+      "grade": "rare",
+      "tier": 3,
+      "richness": 0.8292283145830219
+    },
+    {
+      "x": 12800,
+      "y": 19200,
+      "region": "region-1:2",
+      "danger": "deadlands",
+      "biome": "emberlands",
+      "neighbour": "arcane-hollow",
+      "blend": 1,
+      "grade": "rare",
+      "tier": 3,
+      "richness": 1
+    },
+    {
+      "x": 19200,
+      "y": 19200,
+      "region": "region-1:2",
+      "danger": "deadlands",
+      "biome": "emberlands",
+      "neighbour": "stonereach",
+      "blend": 1,
+      "grade": "rare",
+      "tier": 3,
+      "richness": 1
+    },
+    {
+      "x": 25600,
+      "y": 19200,
+      "region": "region-2:1",
+      "danger": "deadlands",
+      "biome": "rimeshelf",
+      "neighbour": "stonereach",
+      "blend": 1,
+      "grade": "rare",
+      "tier": 3,
+      "richness": 1
+    },
+    {
+      "x": 32000,
+      "y": 19200,
+      "region": "region-2:1",
+      "danger": "deadlands",
+      "biome": "rimeshelf",
+      "neighbour": "stonereach",
+      "blend": 1,
+      "grade": "rare",
+      "tier": 3,
+      "richness": 1
+    },
+    {
+      "x": -32000,
+      "y": 25600,
+      "region": "region--3:2",
+      "danger": "deadlands",
+      "biome": "arcane-hollow",
+      "neighbour": "rimeshelf",
+      "blend": 1,
+      "grade": "rare",
+      "tier": 3,
+      "richness": 1
+    },
+    {
+      "x": -25600,
+      "y": 25600,
+      "region": "region--3:2",
+      "danger": "deadlands",
+      "biome": "arcane-hollow",
+      "neighbour": "emberlands",
+      "blend": 1,
+      "grade": "rare",
+      "tier": 3,
+      "richness": 1
+    },
+    {
+      "x": -19200,
+      "y": 25600,
+      "region": "region--2:2",
+      "danger": "deadlands",
+      "biome": "emberlands",
+      "neighbour": "arcane-hollow",
+      "blend": 1,
+      "grade": "rare",
+      "tier": 3,
+      "richness": 1
+    },
+    {
+      "x": -12800,
+      "y": 25600,
+      "region": "region--2:2",
+      "danger": "deadlands",
+      "biome": "emberlands",
+      "neighbour": "rimeshelf",
+      "blend": 1,
+      "grade": "rare",
+      "tier": 3,
+      "richness": 1
+    },
+    {
+      "x": -6400,
+      "y": 25600,
+      "region": "region--1:2",
+      "danger": "deadlands",
+      "biome": "rimeshelf",
+      "neighbour": "stonereach",
+      "blend": 0.03048836983080226,
+      "grade": "rare",
+      "tier": 3,
+      "richness": 1
+    },
+    {
+      "x": 0,
+      "y": 25600,
+      "region": "region--1:3",
+      "danger": "deadlands",
+      "biome": "stonereach",
+      "neighbour": "arcane-hollow",
+      "blend": 1,
+      "grade": "rare",
+      "tier": 3,
+      "richness": 1
+    },
+    {
+      "x": 6400,
+      "y": 25600,
+      "region": "region-0:2",
+      "danger": "deadlands",
+      "biome": "arcane-hollow",
+      "neighbour": "stormflats",
+      "blend": 0.7013124071202794,
+      "grade": "rare",
+      "tier": 3,
+      "richness": 1
+    },
+    {
+      "x": 12800,
+      "y": 25600,
+      "region": "region-0:2",
+      "danger": "deadlands",
+      "biome": "arcane-hollow",
+      "neighbour": "stonereach",
+      "blend": 0.7420583911786568,
+      "grade": "rare",
+      "tier": 3,
+      "richness": 1
+    },
+    {
+      "x": 19200,
+      "y": 25600,
+      "region": "region-1:2",
+      "danger": "deadlands",
+      "biome": "emberlands",
+      "neighbour": "stonereach",
+      "blend": 1,
+      "grade": "rare",
+      "tier": 3,
+      "richness": 1
+    },
+    {
+      "x": 25600,
+      "y": 25600,
+      "region": "region-2:2",
+      "danger": "deadlands",
+      "biome": "stonereach",
+      "neighbour": "emberlands",
+      "blend": 0.547559505706942,
+      "grade": "rare",
+      "tier": 3,
+      "richness": 1
+    },
+    {
+      "x": 32000,
+      "y": 25600,
+      "region": "region-2:2",
+      "danger": "deadlands",
+      "biome": "stonereach",
+      "neighbour": "rimeshelf",
+      "blend": 0.33271686052441524,
+      "grade": "rare",
+      "tier": 3,
+      "richness": 1
     },
     {
       "x": -32000,
@@ -1430,8 +1430,8 @@
       "region": "region--3:2",
       "danger": "deadlands",
       "biome": "arcane-hollow",
-      "neighbour": "emberlands",
-      "blend": 0.4411958433391722,
+      "neighbour": "rimeshelf",
+      "blend": 1,
       "grade": "rare",
       "tier": 3,
       "richness": 1
@@ -1446,7 +1446,7 @@
       "blend": 1,
       "grade": "rare",
       "tier": 3,
-      "richness": 0.848133148961542
+      "richness": 1
     },
     {
       "x": -19200,
@@ -1454,71 +1454,71 @@
       "region": "region--2:2",
       "danger": "deadlands",
       "biome": "emberlands",
-      "neighbour": "rimeshelf",
-      "blend": 1,
-      "grade": "rare",
-      "tier": 3,
-      "richness": 0.7225222229567795
-    },
-    {
-      "x": -12800,
-      "y": 32000,
-      "region": "region--1:2",
-      "danger": "deadlands",
-      "biome": "rimeshelf",
-      "neighbour": "emberlands",
-      "blend": 1,
-      "grade": "rare",
-      "tier": 3,
-      "richness": 0.6261529609734323
-    },
-    {
-      "x": -6400,
-      "y": 32000,
-      "region": "region--1:2",
-      "danger": "deadlands",
-      "biome": "rimeshelf",
-      "neighbour": "stormflats",
-      "blend": 1,
-      "grade": "rare",
-      "tier": 3,
-      "richness": 0.5642947072940137
-    },
-    {
-      "x": 0,
-      "y": 32000,
-      "region": "region--1:2",
-      "danger": "deadlands",
-      "biome": "rimeshelf",
-      "neighbour": "stormflats",
-      "blend": 0.7409986942702554,
-      "grade": "rare",
-      "tier": 3,
-      "richness": 0.542888888888889
-    },
-    {
-      "x": 6400,
-      "y": 32000,
-      "region": "region-0:2",
-      "danger": "deadlands",
-      "biome": "arcane-hollow",
       "neighbour": "stonereach",
       "blend": 1,
       "grade": "rare",
       "tier": 3,
-      "richness": 0.5642947072940137
+      "richness": 1
+    },
+    {
+      "x": -12800,
+      "y": 32000,
+      "region": "region--2:2",
+      "danger": "deadlands",
+      "biome": "emberlands",
+      "neighbour": "stonereach",
+      "blend": 1,
+      "grade": "rare",
+      "tier": 3,
+      "richness": 1
+    },
+    {
+      "x": -6400,
+      "y": 32000,
+      "region": "region--1:3",
+      "danger": "deadlands",
+      "biome": "stonereach",
+      "neighbour": "rimeshelf",
+      "blend": 1,
+      "grade": "rare",
+      "tier": 3,
+      "richness": 1
+    },
+    {
+      "x": 0,
+      "y": 32000,
+      "region": "region--1:3",
+      "danger": "deadlands",
+      "biome": "stonereach",
+      "neighbour": "arcane-hollow",
+      "blend": 1,
+      "grade": "rare",
+      "tier": 3,
+      "richness": 1
+    },
+    {
+      "x": 6400,
+      "y": 32000,
+      "region": "region-0:3",
+      "danger": "deadlands",
+      "biome": "stormflats",
+      "neighbour": "arcane-hollow",
+      "blend": 1,
+      "grade": "rare",
+      "tier": 3,
+      "richness": 1
     },
     {
       "x": 12800,
       "y": 32000,
-      "region": "region-0:2",
+      "region": "region-1:3",
       "danger": "deadlands",
-      "biome": "arcane-hollow",
-      "neighbour": "emberlands",
-      "blend": 1,
+      "biome": "stonereach",
+      "neighbour": "arcane-hollow",
+      "blend": 0.4469271635702351,
       "grade": "rare",
       "tier": 3,
-      "richness": 0.6261529609734323
+      "richness": 1
     },
     {
       "x": 19200,
@@ -1526,31 +1526,31 @@
       "region": "region-1:2",
       "danger": "deadlands",
       "biome": "emberlands",
-      "neighbour": "arcane-hollow",
-      "blend": 1,
+      "neighbour": "stonereach",
+      "blend": 0.5599452555650758,
       "grade": "rare",
       "tier": 3,
-      "richness": 0.7225222229567795
+      "richness": 1
     },
     {
       "x": 25600,
       "y": 32000,
-      "region": "region-1:2",
+      "region": "region-2:2",
       "danger": "deadlands",
-      "biome": "emberlands",
-      "neighbour": "stonereach",
-      "blend": 1,
+      "biome": "stonereach",
+      "neighbour": "emberlands",
+      "blend": 0.04491218878170444,
       "grade": "rare",
       "tier": 3,
-      "richness": 0.848133148961542
+      "richness": 1
     },
     {
       "x": 32000,
       "y": 32000,
-      "region": "region-1:2",
+      "region": "region-2:2",
       "danger": "deadlands",
-      "biome": "emberlands",
-      "neighbour": "rimeshelf",
+      "biome": "stonereach",
+      "neighbour": "emberlands",
       "blend": 1,
       "grade": "rare",
       "tier": 3,
@@ -1578,35 +1578,11 @@
       "blend": 1,
       "grade": "common",
       "tier": 1,
-      "richness": 0.009166666666666667
+      "richness": 0.018333333333333333
     },
     {
       "x": 1800,
       "y": 2400,
-      "region": "region-0:1",
-      "danger": "fringe",
-      "biome": "emberlands",
-      "neighbour": "arcane-hollow",
-      "blend": 1,
-      "grade": "common",
-      "tier": 1,
-      "richness": 0.018333333333333333
-    },
-    {
-      "x": 2700,
-      "y": 3600,
-      "region": "region-0:1",
-      "danger": "fringe",
-      "biome": "emberlands",
-      "neighbour": "arcane-hollow",
-      "blend": 0.8094342307267349,
-      "grade": "common",
-      "tier": 1,
-      "richness": 0.0275
-    },
-    {
-      "x": 3600,
-      "y": 4800,
       "region": "region-0:1",
       "danger": "fringe",
       "biome": "emberlands",
@@ -1617,20 +1593,8 @@
       "richness": 0.03666666666666667
     },
     {
-      "x": 4500,
-      "y": 6000,
-      "region": "region-0:1",
-      "danger": "fringe",
-      "biome": "emberlands",
-      "neighbour": "arcane-hollow",
-      "blend": 0.041821110547047305,
-      "grade": "common",
-      "tier": 1,
-      "richness": 0.04583333333333333
-    },
-    {
-      "x": 5400,
-      "y": 7200,
+      "x": 2700,
+      "y": 3600,
       "region": "region-1:1",
       "danger": "fringe",
       "biome": "arcane-hollow",
@@ -1641,16 +1605,52 @@
       "richness": 0.055
     },
     {
+      "x": 3600,
+      "y": 4800,
+      "region": "region-1:2",
+      "danger": "frontier",
+      "biome": "emberlands",
+      "neighbour": "arcane-hollow",
+      "blend": 1,
+      "grade": "uncommon",
+      "tier": 2,
+      "richness": 0.091
+    },
+    {
+      "x": 4500,
+      "y": 6000,
+      "region": "region-1:2",
+      "danger": "frontier",
+      "biome": "emberlands",
+      "neighbour": "arcane-hollow",
+      "blend": 1,
+      "grade": "uncommon",
+      "tier": 2,
+      "richness": 0.127
+    },
+    {
+      "x": 5400,
+      "y": 7200,
+      "region": "region-1:2",
+      "danger": "frontier",
+      "biome": "emberlands",
+      "neighbour": "arcane-hollow",
+      "blend": 1,
+      "grade": "uncommon",
+      "tier": 2,
+      "richness": 0.163
+    },
+    {
       "x": 6300,
       "y": 8400,
       "region": "region-1:2",
       "danger": "frontier",
       "biome": "emberlands",
       "neighbour": "arcane-hollow",
-      "blend": 0.614107446913544,
+      "blend": 1,
       "grade": "uncommon",
       "tier": 2,
-      "richness": 0.073
+      "richness": 0.2124
     },
     {
       "x": 7200,
@@ -1662,7 +1662,7 @@
       "blend": 1,
       "grade": "uncommon",
       "tier": 2,
-      "richness": 0.091
+      "richness": 0.30200000000000005
     },
     {
       "x": 8100,
@@ -1674,7 +1674,7 @@
       "blend": 1,
       "grade": "uncommon",
       "tier": 2,
-      "richness": 0.10899999999999999
+      "richness": 0.39160000000000006
     },
     {
       "x": 9000,
@@ -1686,143 +1686,11 @@
       "blend": 1,
       "grade": "uncommon",
       "tier": 2,
-      "richness": 0.127
+      "richness": 0.4812
     },
     {
       "x": 9900,
       "y": 13200,
-      "region": "region-1:2",
-      "danger": "frontier",
-      "biome": "emberlands",
-      "neighbour": "arcane-hollow",
-      "blend": 1,
-      "grade": "uncommon",
-      "tier": 2,
-      "richness": 0.145
-    },
-    {
-      "x": 10800,
-      "y": 14400,
-      "region": "region-1:2",
-      "danger": "frontier",
-      "biome": "emberlands",
-      "neighbour": "arcane-hollow",
-      "blend": 1,
-      "grade": "uncommon",
-      "tier": 2,
-      "richness": 0.163
-    },
-    {
-      "x": 11700,
-      "y": 15600,
-      "region": "region-1:2",
-      "danger": "frontier",
-      "biome": "emberlands",
-      "neighbour": "arcane-hollow",
-      "blend": 1,
-      "grade": "uncommon",
-      "tier": 2,
-      "richness": 0.181
-    },
-    {
-      "x": 12600,
-      "y": 16800,
-      "region": "region-1:2",
-      "danger": "frontier",
-      "biome": "emberlands",
-      "neighbour": "arcane-hollow",
-      "blend": 1,
-      "grade": "uncommon",
-      "tier": 2,
-      "richness": 0.2124
-    },
-    {
-      "x": 13500,
-      "y": 18000,
-      "region": "region-1:2",
-      "danger": "frontier",
-      "biome": "emberlands",
-      "neighbour": "arcane-hollow",
-      "blend": 1,
-      "grade": "uncommon",
-      "tier": 2,
-      "richness": 0.2572
-    },
-    {
-      "x": 14400,
-      "y": 19200,
-      "region": "region-1:2",
-      "danger": "frontier",
-      "biome": "emberlands",
-      "neighbour": "arcane-hollow",
-      "blend": 1,
-      "grade": "uncommon",
-      "tier": 2,
-      "richness": 0.30200000000000005
-    },
-    {
-      "x": 15300,
-      "y": 20400,
-      "region": "region-1:2",
-      "danger": "frontier",
-      "biome": "emberlands",
-      "neighbour": "arcane-hollow",
-      "blend": 1,
-      "grade": "uncommon",
-      "tier": 2,
-      "richness": 0.3468
-    },
-    {
-      "x": 16200,
-      "y": 21600,
-      "region": "region-1:2",
-      "danger": "frontier",
-      "biome": "emberlands",
-      "neighbour": "arcane-hollow",
-      "blend": 1,
-      "grade": "uncommon",
-      "tier": 2,
-      "richness": 0.39160000000000006
-    },
-    {
-      "x": 17100,
-      "y": 22800,
-      "region": "region-1:2",
-      "danger": "frontier",
-      "biome": "emberlands",
-      "neighbour": "arcane-hollow",
-      "blend": 1,
-      "grade": "uncommon",
-      "tier": 2,
-      "richness": 0.4364
-    },
-    {
-      "x": 18000,
-      "y": 24000,
-      "region": "region-1:2",
-      "danger": "frontier",
-      "biome": "emberlands",
-      "neighbour": "arcane-hollow",
-      "blend": 1,
-      "grade": "uncommon",
-      "tier": 2,
-      "richness": 0.4812
-    },
-    {
-      "x": 18900,
-      "y": 25200,
-      "region": "region-1:2",
-      "danger": "frontier",
-      "biome": "emberlands",
-      "neighbour": "arcane-hollow",
-      "blend": 1,
-      "grade": "rare",
-      "tier": 3,
-      "richness": 0.526
-    },
-    {
-      "x": 19800,
-      "y": 26400,
       "region": "region-1:2",
       "danger": "deadlands",
       "biome": "emberlands",
@@ -1833,20 +1701,8 @@
       "richness": 0.5766666666666667
     },
     {
-      "x": 20700,
-      "y": 27600,
-      "region": "region-1:2",
-      "danger": "deadlands",
-      "biome": "emberlands",
-      "neighbour": "arcane-hollow",
-      "blend": 1,
-      "grade": "rare",
-      "tier": 3,
-      "richness": 0.6273333333333334
-    },
-    {
-      "x": 21600,
-      "y": 28800,
+      "x": 10800,
+      "y": 14400,
       "region": "region-1:2",
       "danger": "deadlands",
       "biome": "emberlands",
@@ -1857,20 +1713,8 @@
       "richness": 0.678
     },
     {
-      "x": 22500,
-      "y": 30000,
-      "region": "region-1:2",
-      "danger": "deadlands",
-      "biome": "emberlands",
-      "neighbour": "arcane-hollow",
-      "blend": 1,
-      "grade": "rare",
-      "tier": 3,
-      "richness": 0.7286666666666667
-    },
-    {
-      "x": 23400,
-      "y": 31200,
+      "x": 11700,
+      "y": 15600,
       "region": "region-1:2",
       "danger": "deadlands",
       "biome": "emberlands",
@@ -1881,20 +1725,8 @@
       "richness": 0.7793333333333333
     },
     {
-      "x": 24300,
-      "y": 32400,
-      "region": "region-1:2",
-      "danger": "deadlands",
-      "biome": "emberlands",
-      "neighbour": "arcane-hollow",
-      "blend": 1,
-      "grade": "rare",
-      "tier": 3,
-      "richness": 0.83
-    },
-    {
-      "x": 25200,
-      "y": 33600,
+      "x": 12600,
+      "y": 16800,
       "region": "region-1:2",
       "danger": "deadlands",
       "biome": "emberlands",
@@ -1905,8 +1737,8 @@
       "richness": 0.8866666666666666
     },
     {
-      "x": 26100,
-      "y": 34800,
+      "x": 13500,
+      "y": 18000,
       "region": "region-1:2",
       "danger": "deadlands",
       "biome": "emberlands",
@@ -1914,16 +1746,184 @@
       "blend": 1,
       "grade": "rare",
       "tier": 3,
-      "richness": 0.9433333333333334
+      "richness": 1
     },
     {
-      "x": 27000,
-      "y": 36000,
+      "x": 14400,
+      "y": 19200,
       "region": "region-1:2",
       "danger": "deadlands",
       "biome": "emberlands",
       "neighbour": "stonereach",
       "blend": 1,
+      "grade": "rare",
+      "tier": 3,
+      "richness": 1
+    },
+    {
+      "x": 15300,
+      "y": 20400,
+      "region": "region-1:2",
+      "danger": "deadlands",
+      "biome": "emberlands",
+      "neighbour": "stonereach",
+      "blend": 1,
+      "grade": "rare",
+      "tier": 3,
+      "richness": 1
+    },
+    {
+      "x": 16200,
+      "y": 21600,
+      "region": "region-1:2",
+      "danger": "deadlands",
+      "biome": "emberlands",
+      "neighbour": "stonereach",
+      "blend": 1,
+      "grade": "rare",
+      "tier": 3,
+      "richness": 1
+    },
+    {
+      "x": 17100,
+      "y": 22800,
+      "region": "region-1:2",
+      "danger": "deadlands",
+      "biome": "emberlands",
+      "neighbour": "stonereach",
+      "blend": 1,
+      "grade": "rare",
+      "tier": 3,
+      "richness": 1
+    },
+    {
+      "x": 18000,
+      "y": 24000,
+      "region": "region-1:2",
+      "danger": "deadlands",
+      "biome": "emberlands",
+      "neighbour": "stonereach",
+      "blend": 1,
+      "grade": "rare",
+      "tier": 3,
+      "richness": 1
+    },
+    {
+      "x": 18900,
+      "y": 25200,
+      "region": "region-1:2",
+      "danger": "deadlands",
+      "biome": "emberlands",
+      "neighbour": "stonereach",
+      "blend": 1,
+      "grade": "rare",
+      "tier": 3,
+      "richness": 1
+    },
+    {
+      "x": 19800,
+      "y": 26400,
+      "region": "region-1:2",
+      "danger": "deadlands",
+      "biome": "emberlands",
+      "neighbour": "stonereach",
+      "blend": 1,
+      "grade": "rare",
+      "tier": 3,
+      "richness": 1
+    },
+    {
+      "x": 20700,
+      "y": 27600,
+      "region": "region-1:2",
+      "danger": "deadlands",
+      "biome": "emberlands",
+      "neighbour": "stonereach",
+      "blend": 1,
+      "grade": "rare",
+      "tier": 3,
+      "richness": 1
+    },
+    {
+      "x": 21600,
+      "y": 28800,
+      "region": "region-1:2",
+      "danger": "deadlands",
+      "biome": "emberlands",
+      "neighbour": "stonereach",
+      "blend": 1,
+      "grade": "rare",
+      "tier": 3,
+      "richness": 1
+    },
+    {
+      "x": 22500,
+      "y": 30000,
+      "region": "region-1:2",
+      "danger": "deadlands",
+      "biome": "emberlands",
+      "neighbour": "stonereach",
+      "blend": 0.9099014385037303,
+      "grade": "rare",
+      "tier": 3,
+      "richness": 1
+    },
+    {
+      "x": 23400,
+      "y": 31200,
+      "region": "region-1:2",
+      "danger": "deadlands",
+      "biome": "emberlands",
+      "neighbour": "stonereach",
+      "blend": 0.6476885101467695,
+      "grade": "rare",
+      "tier": 3,
+      "richness": 1
+    },
+    {
+      "x": 24300,
+      "y": 32400,
+      "region": "region-1:2",
+      "danger": "deadlands",
+      "biome": "emberlands",
+      "neighbour": "stonereach",
+      "blend": 0.39546599763386514,
+      "grade": "rare",
+      "tier": 3,
+      "richness": 1
+    },
+    {
+      "x": 25200,
+      "y": 33600,
+      "region": "region-1:2",
+      "danger": "deadlands",
+      "biome": "emberlands",
+      "neighbour": "stonereach",
+      "blend": 0.15351884158227766,
+      "grade": "rare",
+      "tier": 3,
+      "richness": 1
+    },
+    {
+      "x": 26100,
+      "y": 34800,
+      "region": "region-2:2",
+      "danger": "deadlands",
+      "biome": "stonereach",
+      "neighbour": "emberlands",
+      "blend": 0.07797097401245942,
+      "grade": "rare",
+      "tier": 3,
+      "richness": 1
+    },
+    {
+      "x": 27000,
+      "y": 36000,
+      "region": "region-2:2",
+      "danger": "deadlands",
+      "biome": "stonereach",
+      "neighbour": "emberlands",
+      "blend": 0.2989408787421294,
       "grade": "rare",
       "tier": 3,
       "richness": 1
@@ -1950,31 +1950,31 @@
       "blend": 1,
       "grade": "common",
       "tier": 1,
-      "richness": 0.0000034162149656246787
+      "richness": 0.0000068324299312493575
     },
     {
       "x": -899,
       "y": 0,
       "region": "region--2:-1",
-      "danger": "hub",
+      "danger": "fringe",
       "biome": "rimeshelf",
       "neighbour": "arcane-hollow",
       "blend": 1,
       "grade": "common",
       "tier": 1,
-      "richness": 0.005493888888888888
+      "richness": 0.010987777777777777
     },
     {
       "x": 44999,
       "y": 0,
-      "region": "region-2:-1",
+      "region": "region-3:0",
       "danger": "deadlands",
-      "biome": "stormflats",
-      "neighbour": "stonereach",
-      "blend": 1,
+      "biome": "emberlands",
+      "neighbour": "stormflats",
+      "blend": 0.7377754135781756,
       "grade": "rare",
       "tier": 3,
-      "richness": 0.9999622222222222
+      "richness": 1
     }
   ]
 }

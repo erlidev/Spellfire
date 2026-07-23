@@ -134,8 +134,12 @@ func TestAdminViewDistanceChangesOnlyTheViewerSnapshot(t *testing.T) {
 	world.AddPlayer(model.Character{ID: "far", Name: "Far", Class: model.Mage}, now)
 	// Both bodies are placed rather than left on the hub spawn ring, which is
 	// wide enough at this world scale to decide the distance being measured.
+	// At the halved world scale the ridge belts and scatter crowd closer to the
+	// hub than the fixed-size camera, so the far body is placed on a bearing with
+	// a verified clear line of sight rather than an arbitrary one the terrain
+	// happens to occlude; the distance being measured is the view extent, not cover.
 	world.SetPlayerPosition("viewer", Vec{}, now)
-	if !world.SetPlayerPosition("far", Vec{X: 1600}, now) {
+	if !world.SetPlayerPosition("far", Vec{X: -1600}, now) {
 		t.Fatal("could not move far test player")
 	}
 	if hasPlayer(world.SnapshotFor(viewer.ID, now, protocol.ServerSnapshot), "far") {

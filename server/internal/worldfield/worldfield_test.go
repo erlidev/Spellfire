@@ -39,15 +39,15 @@ type GoldenSample struct {
 // holds them to the table.
 func testParams() Params {
 	return Params{
-		Radius: 45000, Seed: 2676017207,
-		RegionCell: 9000, RegionJitter: 0.72, RadialReference: 22500,
-		WarpCell: 14000, WarpAmplitude: 2600, BlendWidth: 0.16,
+		Radius: 22500, Seed: 2676017207,
+		RegionCell: 4500, RegionJitter: 0.72, RadialReference: 11250,
+		WarpCell: 7000, WarpAmplitude: 1300, BlendWidth: 0.16,
 		Biomes: []string{"arcane-hollow", "emberlands", "rimeshelf", "stonereach", "stormflats"},
 		Bands: []Band{
-			{ID: "hub", Name: "Central hub", PvP: "off", Tier: 0, OuterRadius: 900},
-			{ID: "fringe", Name: "Fringe", PvP: "restricted", MaterialGrade: "common", Tier: 1, OuterRadius: 9000},
-			{ID: "frontier", Name: "Frontier", PvP: "on", MaterialGrade: "uncommon", Tier: 2, OuterRadius: 31500},
-			{ID: "deadlands", Name: "Deadlands", PvP: "full", MaterialGrade: "rare", Tier: 3, OuterRadius: 45000},
+			{ID: "hub", Name: "Central hub", PvP: "off", Tier: 0, OuterRadius: 450},
+			{ID: "fringe", Name: "Fringe", PvP: "restricted", MaterialGrade: "common", Tier: 1, OuterRadius: 4500},
+			{ID: "frontier", Name: "Frontier", PvP: "on", MaterialGrade: "uncommon", Tier: 2, OuterRadius: 15750},
+			{ID: "deadlands", Name: "Deadlands", PvP: "full", MaterialGrade: "rare", Tier: 3, OuterRadius: 22500},
 		},
 		Grades: GradeCurve{
 			Points: []GradePoint{{0, 0}, {0.2, 0.055}, {0.45, 0.19}, {0.7, 0.526}, {0.9, 0.83}, {1, 1}},
@@ -175,7 +175,7 @@ func TestRewardCurveIsConvex(t *testing.T) {
 	field := New(testParams())
 	previous, previousSlope := 0.0, 0.0
 	for step := 1; step <= 450; step++ {
-		at := float64(step) * 100
+		at := float64(step) * 50
 		richness := field.RichnessAt(at, 0)
 		if richness < previous-1e-12 {
 			t.Fatalf("richness fell from %g to %g at radius %g", previous, richness, at)
@@ -186,7 +186,7 @@ func TestRewardCurveIsConvex(t *testing.T) {
 		}
 		previous, previousSlope = richness, slope
 	}
-	if got := field.RichnessAt(45000, 0); math.Abs(got-1) > 1e-12 {
+	if got := field.RichnessAt(22500, 0); math.Abs(got-1) > 1e-12 {
 		t.Fatalf("the rim is worth %g, want the full 1", got)
 	}
 }
@@ -196,7 +196,7 @@ func TestRewardCurveIsConvex(t *testing.T) {
 // covers them.
 func TestGradeFollowsRadiusNotBiome(t *testing.T) {
 	field := New(testParams())
-	for _, radius := range []float64{4000, 15000, 35000} {
+	for _, radius := range []float64{2000, 7500, 17500} {
 		want := field.GradeAt(radius, 0)
 		for step := -300; step <= 300; step++ {
 			x := float64(step) * radius / 300

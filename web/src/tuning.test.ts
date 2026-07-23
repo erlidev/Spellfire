@@ -67,7 +67,7 @@ describe("shared tuning tables", () => {
   it("shares entity mass, health, and collision defaults with the server", () => {
     expect(entityDefinitions.tree).toMatchObject({ mass: -1, max_health: 500, collision_objects: [{ type: "circle" }] });
     expect(entityDefinitions.wall).toMatchObject({ mass: -1, max_health: -1, collision_objects: [{ type: "box", width: 96, height: 96 }] });
-    expect(world.fixtures).toContainEqual({ id: "wall-00", entity: "wall", position: [2400, 0] });
+    expect(world.fixtures).toContainEqual({ id: "wall-00", entity: "wall", position: [1200, 0] });
   });
 
   it("exposes spawn and edit metadata on entity archetypes", () => {

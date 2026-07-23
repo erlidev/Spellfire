@@ -1,13 +1,13 @@
 {
-  "radius": 45000,
-  "spawn_radius": 600,
+  "radius": 22500,
+  "spawn_radius": 300,
   "chunk_size": 1200,
   "danger_bands": [
     {
       "id": "hub",
       "name": "Central hub",
       "tier": 0,
-      "outer_radius": 900,
+      "outer_radius": 450,
       "material_grade": "",
       "pvp": "off",
       "shape": "◆",
@@ -17,7 +17,7 @@
       "id": "fringe",
       "name": "Fringe",
       "tier": 1,
-      "outer_radius": 9000,
+      "outer_radius": 4500,
       "material_grade": "common",
       "pvp": "restricted",
       "shape": "○",
@@ -27,7 +27,7 @@
       "id": "frontier",
       "name": "Frontier",
       "tier": 2,
-      "outer_radius": 31500,
+      "outer_radius": 15750,
       "material_grade": "uncommon",
       "pvp": "on",
       "shape": "△",
@@ -37,7 +37,7 @@
       "id": "deadlands",
       "name": "Deadlands",
       "tier": 3,
-      "outer_radius": 45000,
+      "outer_radius": 22500,
       "material_grade": "rare",
       "pvp": "full",
       "shape": "▲",
@@ -46,11 +46,11 @@
   ],
   "field": {
     "seed": 2676017207,
-    "region_cell": 9000,
+    "region_cell": 4500,
     "region_jitter": 0.72,
-    "radial_reference": 22500,
-    "warp_cell": 14000,
-    "warp_amplitude": 2600,
+    "radial_reference": 11250,
+    "warp_cell": 7000,
+    "warp_amplitude": 1300,
     "blend_width": 0.16,
     "grade_curve": {
       "points": [[0, 0], [0.2, 0.055], [0.45, 0.19], [0.7, 0.526], [0.9, 0.83], [1, 1]],
@@ -79,13 +79,13 @@
     "belts": {
       "seed": 809912773,
       "cell": 200,
-      "thickness": 720,
-      "radius_spread": 26,
-      "waviness": 900,
+      "thickness": 360,
+      "radius_spread": 13,
+      "waviness": 450,
       "wave_count": 6,
       "passes_per_belt": 3,
       "pass_half_angle": 0.1,
-      "radii": [3600, 8200, 13600, 20000, 27200, 35200]
+      "radii": [1800, 4100, 6800, 10000, 13600, 17600]
     },
     "routes": {
       "clear_fill": 0.35,
@@ -96,7 +96,7 @@
     {
       "id": "wall-00",
       "entity": "wall",
-      "position": [2400, 0]
+      "position": [1200, 0]
     }
   ]
 }

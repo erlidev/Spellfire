@@ -4,9 +4,9 @@ SpellFire is one contiguous world for 100+ concurrent players. A radial danger g
 
 ## Scale and traversal
 
-The world is a circle of radius 45,000 units. Band radii are hub 900, Fringe 9,000, Frontier 31,500, and Deadlands 45,000, so the Frontier remains the widest band and the hub is a settlement footprint rather than a spawn ring.
+The world is a circle of radius 22,500 units. Band radii are hub 450, Fringe 4,500, Frontier 15,750, and Deadlands 22,500, so the Frontier remains the widest band and the hub is a settlement footprint rather than a spawn ring.
 
-**A journey from the hub to the rim takes about five minutes on foot.** That figure is a property of the route, not of the radius: a straight radial line at base speed would take under three minutes, and no such line exists. Impassable formations funnel radial travel through passes, hostile territory forces detours, and the direct approach is the dangerous one. Traversal time is therefore bought with terrain and risk, which is content, rather than with empty distance, which is not.
+**A journey from the hub to the rim takes roughly twice as long on foot as the straight line would.** That ratio is a property of the route, not of the radius: a straight radial line at base speed does not exist, so travel is funnelled through offset passes and detours. At the current halved world and raised player speed the median on-foot journey is about 105 seconds against a ~55-second straight line; the detour ratio, not the absolute figure, is what the traversal design guarantees. Impassable formations funnel radial travel through passes, hostile territory forces detours, and the direct approach is the dangerous one. Traversal time is therefore bought with terrain and risk, which is content, rather than with empty distance, which is not.
 
 This is a large world for its population. At 50 concurrent players the density is roughly one player per twenty screens of area, so **the design risk is emptiness, not crowding**. Nodes, outposts, routes, and mob placement are what concentrate players into contact, and are load-bearing rather than decorative. Expansion extends the rim, and the population that fills it is the reason to extend it.
 

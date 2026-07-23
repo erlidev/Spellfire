@@ -585,13 +585,13 @@ func TestUnknownFieldsAreRejected(t *testing.T) {
 
 func TestBandAtResolvesEveryRadius(t *testing.T) {
 	world := MustLoad().World
-	cases := map[float64]string{0: "hub", 900: "hub", 901: "fringe", 9000: "fringe", 31500: "frontier", 44999: "deadlands", 60000: "deadlands"}
+	cases := map[float64]string{0: "hub", 450: "hub", 451: "fringe", 4500: "fringe", 15750: "frontier", 22499: "deadlands", 60000: "deadlands"}
 	for distance, want := range cases {
 		if got := world.BandAt(distance); got.ID != want {
 			t.Fatalf("BandAt(%g) = %q, want %q", distance, got.ID, want)
 		}
 	}
-	if world.SafeRadius() != 900 || world.PvPRadius() != 9000 {
+	if world.SafeRadius() != 450 || world.PvPRadius() != 4500 {
 		t.Fatalf("derived radii = %g / %g", world.SafeRadius(), world.PvPRadius())
 	}
 }

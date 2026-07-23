@@ -2,7 +2,7 @@
   "roles": ["damage", "burst", "control", "mobility", "sustain", "zone", "range"],
   "dodge_vectors": ["projectile_travel", "cast_time", "telegraph", "ground_indicator", "scoped_commit"],
   "player": {
-    "speed": 260,
+    "speed": 390,
     "max_mana": 100,
     "mana_regen": 13
   },

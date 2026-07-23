@@ -326,7 +326,7 @@ func TestSpreadPopulationKeepsResidencyBounded(t *testing.T) {
 	const count = 100
 	for index := 0; index < count; index++ {
 		angle := float64(index) * 2.399963
-		reach := 10_000 + 15_000*float64(index)/float64(count)
+		reach := 5_000 + 7_500*float64(index)/float64(count)
 		addTestPlayer(w, playerID(index), model.Gunslinger, Vec{math.Cos(angle) * reach, math.Sin(angle) * reach}, now)
 	}
 	started := time.Now()

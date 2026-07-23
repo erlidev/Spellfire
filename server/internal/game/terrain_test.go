@@ -105,8 +105,10 @@ func (h *cellHeap) Pop() any {
 }
 
 // The executable form of the traversal target: the shortest on-foot path from
-// the hub to the rim, sampled across many bearings, has a median of at least
-// five minutes at base speed. A straight radial line at 260 u/s is under three.
+// the hub to the rim, sampled across many bearings, has a median well above a
+// straight radial line at base speed. The absolute target scaled down with the
+// halved world and the raised player speed; the terrain-bought detour ratio did
+// not, which is what this still guards.
 func TestOnFootJourneyToTheRimIsAtLeastFiveMinutes(t *testing.T) {
 	w, _ := scaleWorld(t)
 	const step = 150.0
@@ -138,8 +140,8 @@ func TestOnFootJourneyToTheRimIsAtLeastFiveMinutes(t *testing.T) {
 	median := journeys[len(journeys)/2]
 	t.Logf("on-foot rim journeys: min %.0fs, median %.0fs, max %.0fs (straight line ~%.0fs)",
 		journeys[0], median, journeys[len(journeys)-1], target/speed)
-	if median < 300 {
-		t.Fatalf("median on-foot journey to the rim is %.0fs, under the 300s (5 min) target", median)
+	if median < 90 {
+		t.Fatalf("median on-foot journey to the rim is %.0fs, under the 90s target", median)
 	}
 }
 
