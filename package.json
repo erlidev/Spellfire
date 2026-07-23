@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite --config web/vite.config.ts --host 0.0.0.0",
-    "build": "tsc --noEmit && vite build --config web/vite.config.ts",
+    "build": "tsc --noEmit -p tsconfig.build.json && vite build --config web/vite.config.ts",
     "check": "tsc --noEmit",
     "test": "vitest run"
   },

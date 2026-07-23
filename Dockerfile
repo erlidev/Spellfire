@@ -6,7 +6,7 @@ WORKDIR /app
 # Install deps against the lockfile first so this layer caches across source edits.
 COPY package.json package-lock.json ./
 RUN npm ci
-COPY tsconfig.json ./
+COPY tsconfig.json tsconfig.build.json ./
 COPY data ./data
 COPY web ./web
 RUN npm run build

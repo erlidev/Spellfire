@@ -1,0 +1,5 @@
+{
+  "//": "The production build's view of the project: the shipped client without its tests. `npm run check` uses the full tsconfig.json, so tests are still strictly typechecked by `make test`; this config exists so `npm run build` does not need test-only fixtures — testdata/worldfield.json is cross-language test data and has no business in a runtime image.",
+  "extends": "./tsconfig.json",
+  "exclude": ["web/src/**/*.test.ts"]
+}
