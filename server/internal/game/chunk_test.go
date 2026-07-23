@@ -2,6 +2,7 @@ package game
 
 import (
 	"math"
+	"strings"
 	"testing"
 	"time"
 
@@ -74,15 +75,21 @@ func TestChunkGenerationIsDeterministicAndOrderIndependent(t *testing.T) {
 }
 
 // The jittered lattice is what replaces rejection sampling, and this is the
-// property it buys: two items can never overlap, in the same chunk or across a
-// chunk edge, without either chunk having to see the other.
+// property it buys: two scatter items can never overlap, in the same chunk or
+// across a chunk edge, without either chunk having to see the other. Belt items
+// are the deliberate exception — a ridge is meant to be a solid overlapping mass
+// — so they are excluded from the no-overlap check.
 func TestGeneratedTerrainNeverOverlapsAcrossChunkEdges(t *testing.T) {
 	w, _ := scaleWorld(t)
 	spacing := w.tuning.Tables.World.Terrain.Spacing
 	items := make([]*Entity, 0, 512)
-	for y := int32(-2); y <= 2; y++ {
-		for x := int32(3); x <= 7; x++ {
-			items = append(items, w.generateChunk(gridCell{x, y})...)
+	for y := int32(-6); y <= 6; y++ {
+		for x := int32(3); x <= 14; x++ {
+			for _, item := range w.generateChunk(gridCell{x, y}) {
+				if !strings.HasPrefix(item.ID, "belt-") {
+					items = append(items, item)
+				}
+			}
 		}
 	}
 	if len(items) < 50 {
@@ -329,8 +336,13 @@ func TestSpreadPopulationKeepsResidencyBounded(t *testing.T) {
 	elapsed := time.Since(started) / 60
 	chunks, items := len(w.chunks), w.terrain.len()
 	// One chunk's worth of sites is the density the tables declare; the whole
-	// world is that times its area.
-	perChunk := math.Pow(w.chunkSize/w.tuning.Tables.World.Terrain.Cell, 2) * w.tuning.Tables.World.Terrain.Fill
+	// world is that times its area. The default biome's scatter fills sum to the
+	// chance a site carries anything, which is the density estimate the log wants.
+	defaultFill := 0.0
+	for _, scatter := range w.tuning.Tables.World.Terrain.Default.Scatter {
+		defaultFill += scatter.Fill
+	}
+	perChunk := math.Pow(w.chunkSize/w.tuning.Tables.World.Terrain.Cell, 2) * defaultFill
 	worldChunks := math.Pi * math.Pow(w.tuning.WorldRadius/w.chunkSize, 2)
 	// What residency actually promises is that the cost follows the players
 	// rather than the map: each body keeps the chunks inside its keep reach and
@@ -346,4 +358,6 @@ func TestSpreadPopulationKeepsResidencyBounded(t *testing.T) {
 	}
 }
 
-func playerID(index int) string { return "load-" + string(rune('a'+index/26)) + string(rune('a'+index%26)) }
+func playerID(index int) string {
+	return "load-" + string(rune('a'+index/26)) + string(rune('a'+index%26))
+}

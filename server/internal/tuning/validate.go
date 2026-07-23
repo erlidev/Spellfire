@@ -256,20 +256,8 @@ func (t *Tables) validateWorld(r *report) {
 	r.require(w.SafeRadius() > 0, "world: no band has pvp \"off\"; there is nowhere to craft or respawn")
 	r.require(w.PvPRadius() >= w.SafeRadius(), "world: PvP-protected radius must contain the safe radius")
 	terrain := w.Terrain
-	r.require(terrain.Entity != "", "world: terrain must name the entity archetype it scatters")
-	definition, known := t.Entities[terrain.Entity]
-	r.require(known, "world: terrain scatters unknown entity %q", terrain.Entity)
 	r.require(terrain.Cell > 0, "world: terrain.cell must be positive; it is the site lattice the chunk generator places on")
-	r.require(terrain.Fill >= 0 && terrain.Fill <= 1, "world: terrain.fill must be a fraction between 0 and 1")
-	r.require(terrain.RadiusSpread > 0, "world: terrain needs a positive radius_spread")
 	r.require(terrain.Spacing >= 0, "world: terrain.spacing must not be negative")
-	// The generator jitters each site inside its own cell by whatever Spacing and
-	// the widest item leave room for. Without that room two neighbouring sites
-	// could overlap, which is the one thing chunked generation cannot repair
-	// after the fact: the two sites may belong to different chunks.
-	widest := entityExtent(definition) + terrain.RadiusSpread
-	r.require(terrain.Cell > terrain.Spacing+2*widest,
-		"world: terrain.cell %g leaves no room for a %g-unit item at %g spacing; widen the cell or thin the scatter", terrain.Cell, widest, terrain.Spacing)
 	r.require(w.ChunkSize > 0, "world: chunk_size must be positive")
 	if terrain.Cell > 0 && w.ChunkSize > 0 {
 		r.require(math.Mod(w.ChunkSize, terrain.Cell) == 0,
@@ -277,17 +265,89 @@ func (t *Tables) validateWorld(r *report) {
 	}
 	r.require(w.ChunkSize <= w.Radius, "world: chunk_size %g must not exceed the world radius %g", w.ChunkSize, w.Radius)
 	r.require(w.SafeRadius()+terrain.InnerMargin+terrain.OuterMargin < w.Radius, "world: terrain margins leave no room between the safe radius and the rim")
+
+	// The scatter and barrier archetypes across every biome, gathered so the
+	// jitter-room and fixture-prefix rules can range over all of them.
+	prefixes := map[string]bool{"belt-": true}
+	widestScatter := 0.0
+	validateBiomeTerrain := func(label string, set BiomeTerrain) {
+		barrier, known := t.Entities[set.Barrier]
+		if r.require(known, "world: %s barrier %q is not an entity archetype", label, set.Barrier) {
+			r.require(len(barrier.CollisionObjects) > 0, "world: %s barrier %q has no collision geometry; an impassable formation must collide", label, set.Barrier)
+			r.require(terrain.Belts.Cell < 2*entityExtent(barrier),
+				"world: belts.cell %g is not smaller than twice the %q radius; the belt would be a passable picket rather than a solid mass", terrain.Belts.Cell, set.Barrier)
+		}
+		sum := 0.0
+		for _, scatter := range set.Scatter {
+			definition, ok := t.Entities[scatter.Entity]
+			if !r.require(ok, "world: %s scatters unknown entity %q", label, scatter.Entity) {
+				continue
+			}
+			r.require(scatter.Fill >= 0 && scatter.Fill <= 1, "world: %s scatter %q fill %g must be a fraction between 0 and 1", label, scatter.Entity, scatter.Fill)
+			r.require(scatter.RadiusSpread > 0, "world: %s scatter %q needs a positive radius_spread", label, scatter.Entity)
+			sum += scatter.Fill
+			widestScatter = math.Max(widestScatter, entityExtent(definition)+scatter.RadiusSpread)
+			prefixes[scatter.Entity+"-"] = true
+		}
+		r.require(sum <= 1+1e-9, "world: %s scatter fills sum to %g, over 1; they are absolute probabilities", label, sum)
+	}
+	validateBiomeTerrain("terrain.default", terrain.Default)
+	for _, id := range sortedKeys(terrain.Biomes) {
+		r.require(t.Biomes[id].Name != "", "world: terrain.biomes references unknown biome %q", id)
+		validateBiomeTerrain("terrain.biomes."+id, terrain.Biomes[id])
+	}
+	// The generator jitters each scatter site inside its own cell by whatever
+	// Spacing and the widest item leave room for. Without that room two
+	// neighbouring sites could overlap, which is the one thing chunked
+	// generation cannot repair after the fact: they may belong to different chunks.
+	r.require(widestScatter == 0 || terrain.Cell > terrain.Spacing+2*widestScatter,
+		"world: terrain.cell %g leaves no room for a %g-unit scatter item at %g spacing; widen the cell or thin the scatter", terrain.Cell, widestScatter, terrain.Spacing)
+
+	t.validateBelts(r, w)
+
 	seenFixtures := map[string]bool{}
-	generated := terrain.Entity + "-"
 	for index, fixture := range w.Fixtures {
 		r.require(fixture.ID != "", "world: fixture %d has no id", index)
 		r.require(!seenFixtures[fixture.ID], "world: duplicate fixture id %q", fixture.ID)
 		seenFixtures[fixture.ID] = true
-		r.require(!strings.HasPrefix(fixture.ID, generated), "world: fixture id %q uses the %q prefix the terrain generator owns", fixture.ID, generated)
+		for prefix := range prefixes {
+			r.require(!strings.HasPrefix(fixture.ID, prefix), "world: fixture id %q uses the %q prefix the terrain generator owns", fixture.ID, prefix)
+		}
 		definition, ok := t.Entities[fixture.Entity]
 		r.require(ok, "world: fixture %q references unknown entity %q", fixture.ID, fixture.Entity)
 		distance := math.Hypot(fixture.Position[0], fixture.Position[1])
 		r.require(distance+entityExtent(definition) <= w.Radius, "world: fixture %q extends outside the world", fixture.ID)
+	}
+}
+
+// validateBelts holds the macro-structure layer to the contract the traversal
+// design depends on: belts sit inside the terrain band, ordered outward, thick
+// enough to be un-dashable, and each broken by at least one pass so nothing is
+// sealed. The connectivity and journey-length guarantees themselves are
+// executable tests over the live generator rather than static checks here.
+func (t *Tables) validateBelts(r *report, w World) {
+	belts := w.Terrain.Belts
+	r.require(belts.Cell > 0, "world: belts.cell must be positive; it is the lattice a belt is filled on")
+	if belts.Cell > 0 && w.ChunkSize > 0 {
+		r.require(math.Mod(w.ChunkSize, belts.Cell) == 0,
+			"world: chunk_size %g must be a whole multiple of belts.cell %g, or the belt lattice would not line up with chunk edges", w.ChunkSize, belts.Cell)
+	}
+	r.require(belts.Thickness > 0, "world: belts.thickness must be positive")
+	dash := t.Combat.Dash.Distance
+	r.require(belts.Thickness > dash, "world: belts.thickness %g must exceed the %g dash distance, or a belt is a formality", belts.Thickness, dash)
+	r.require(belts.WaveCount >= 0, "world: belts.wave_count must not be negative")
+	r.require(belts.PassesPerBelt >= 1, "world: belts.passes_per_belt must be at least 1, or a belt seals the world")
+	r.require(belts.PassHalfAngle > 0, "world: belts.pass_half_angle must be positive; a pass is a gap")
+	r.require(len(belts.Radii) > 0, "world: belts.radii must place at least one belt")
+	inner := w.SafeRadius() + w.Terrain.InnerMargin
+	outer := w.Radius - w.Terrain.OuterMargin
+	previous := 0.0
+	for index, radius := range belts.Radii {
+		reach := belts.Thickness/2 + belts.Waviness
+		r.require(radius-reach > inner, "world: belt %d at %g reaches inside the %g terrain floor", index, radius, inner)
+		r.require(radius+reach < outer, "world: belt %d at %g reaches past the %g terrain ceiling", index, radius, outer)
+		r.require(radius > previous, "world: belts.radii must climb outward; belt %d at %g is not past %g", index, radius, previous)
+		previous = radius
 	}
 }
 

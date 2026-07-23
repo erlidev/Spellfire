@@ -152,24 +152,37 @@ func (w *World) chunkPinned(chunk *worldChunk) bool {
 // reloaded, and two chunks generated in either order never disagree about the
 // item between them.
 //
-// Placement is a jittered lattice rather than rejection sampling. Rejection
-// sampling needs to see everything already placed, which a chunk cannot: its
-// neighbour may not exist yet. A lattice with bounded jitter needs to see
-// nothing at all — the jitter is clamped so that two sites, in the same chunk or
-// across a chunk edge, can never come closer than the declared spacing.
+// Two layers are placed. The scatter layer is avoidable landmarks on a jittered
+// lattice, its archetype and density taken from the biome underfoot. Placement
+// is a jittered lattice rather than rejection sampling — rejection sampling needs
+// to see everything already placed, which a chunk cannot, since its neighbour may
+// not exist yet — and the jitter is clamped so two scatter sites, in the same
+// chunk or across an edge, can never come closer than the declared spacing. The
+// belt layer is the macro structure: overlapping impassable formations filling
+// the ridge belts, which are meant to be a solid mass and so are exempt from the
+// no-overlap rule.
 func (w *World) generateChunk(coord gridCell) []*Entity {
 	terrain := w.tuning.Tables.World.Terrain
-	definition, ok := w.tuning.Tables.Entities[terrain.Entity]
-	if !ok || terrain.Cell <= 0 || terrain.Fill <= 0 {
+	if terrain.Cell <= 0 {
 		return nil
 	}
-	base := newEntity("", terrain.Entity, Vec{}, definition, EntityOverrides{})
-	baseRadius := base.circleRadius()
-	// The site may wander this far from its lattice point and still leave
-	// Spacing between it and anything a neighbouring site could hold.
-	jitter := math.Max(0, (terrain.Cell-terrain.Spacing-2*(baseRadius+terrain.RadiusSpread))/2)
 	inner := w.tuning.SafeRadius + terrain.InnerMargin
 	outer := w.tuning.WorldRadius - terrain.OuterMargin
+	items := w.generateScatter(coord, inner, outer)
+	items = append(items, w.generateBelts(coord, inner, outer)...)
+	return items
+}
+
+// generateScatter places the biome's avoidable landmarks. A site draws one
+// value to choose an archetype from the biome's list — the fills are absolute
+// probabilities and the remainder is bare ground — thinned inside a pass so the
+// route mouth stays open, and skipped inside a belt where a formation already
+// stands.
+func (w *World) generateScatter(coord gridCell, inner, outer float64) []*Entity {
+	terrain := w.tuning.Tables.World.Terrain
+	// The jitter budget uses the widest archetype any biome could place, so a
+	// neighbouring site can never overlap whatever this one turns out to hold.
+	jitter := math.Max(0, (terrain.Cell-terrain.Spacing-2*w.maxScatterExtent())/2)
 	perChunk := int64(math.Round(w.chunkSize / terrain.Cell))
 	if perChunk < 1 {
 		perChunk = 1
@@ -178,25 +191,40 @@ func (w *World) generateChunk(coord gridCell) []*Entity {
 	for sy := int64(coord.Y) * perChunk; sy < int64(coord.Y+1)*perChunk; sy++ {
 		for sx := int64(coord.X) * perChunk; sx < int64(coord.X+1)*perChunk; sx++ {
 			draw := newSiteStream(terrain.Seed, sx, sy)
-			if draw.next() >= terrain.Fill {
-				continue
-			}
+			pick := draw.next()
 			position := Vec{
 				(float64(sx)+0.5)*terrain.Cell + (draw.next()*2-1)*jitter,
 				(float64(sy)+0.5)*terrain.Cell + (draw.next()*2-1)*jitter,
 			}
-			// Terrain starts InnerMargin outside safety and stops OuterMargin
+			// Scatter starts InnerMargin outside safety and stops OuterMargin
 			// short of the rim, so neither the hub nor the world edge is walled in.
 			if distance := math.Sqrt(position.LengthSq()); distance < inner || distance > outer {
 				continue
 			}
-			radius := baseRadius + draw.next()*terrain.RadiusSpread
-			id := fmt.Sprintf("%s-%d:%d", terrain.Entity, sx, sy)
+			if _, barrier := w.beltBarrierAt(position); barrier {
+				continue
+			}
+			set := w.terrainSetAt(position)
+			fillScale := 1.0
+			if w.routeClearsAt(position) {
+				fillScale = terrain.Routes.ClearFill
+			}
+			kind, spread, ok := chooseScatter(set.Scatter, pick, fillScale)
+			if !ok {
+				continue
+			}
+			definition, known := w.tuning.Tables.Entities[kind]
+			if !known {
+				continue
+			}
+			id := fmt.Sprintf("%s-%d:%d", kind, sx, sy)
 			// A felled site stays felled: without the scar an evicted chunk would
 			// hand back everything the players had cleared.
 			if w.scars[id] {
 				continue
 			}
+			base := newEntity("", kind, Vec{}, definition, EntityOverrides{})
+			radius := base.circleRadius() + draw.next()*spread
 			// Authored fixtures are the one thing generation defers to, and they
 			// are read from the table rather than from the world, so deferring to
 			// them stays independent of what is currently resident.
@@ -207,11 +235,75 @@ func (w *World) generateChunk(coord gridCell) []*Entity {
 			if len(objects) > 0 {
 				objects[0].Radius = radius
 			}
-			entity := newEntity(id, terrain.Entity, position, definition, EntityOverrides{CollisionObjects: &objects})
+			entity := newEntity(id, kind, position, definition, EntityOverrides{CollisionObjects: &objects})
 			items = append(items, &entity)
 		}
 	}
 	return items
+}
+
+// generateBelts fills the ridge belts covering this chunk. Sites are placed on
+// a fine lattice with no positional jitter, because the belts must seal: an
+// adjacent pair whose circles already overlap cannot be pulled apart into a gap
+// a player could slip through. Only the radius varies, and the wavy belt edge
+// plus the biome's own barrier archetype supply the organic look.
+func (w *World) generateBelts(coord gridCell, inner, outer float64) []*Entity {
+	belts := w.tuning.Tables.World.Terrain.Belts
+	if len(belts.Radii) == 0 || belts.Cell <= 0 {
+		return nil
+	}
+	perChunk := int64(math.Round(w.chunkSize / belts.Cell))
+	if perChunk < 1 {
+		perChunk = 1
+	}
+	var items []*Entity
+	for by := int64(coord.Y) * perChunk; by < int64(coord.Y+1)*perChunk; by++ {
+		for bx := int64(coord.X) * perChunk; bx < int64(coord.X+1)*perChunk; bx++ {
+			position := Vec{(float64(bx) + 0.5) * belts.Cell, (float64(by) + 0.5) * belts.Cell}
+			if distance := math.Sqrt(position.LengthSq()); distance < inner || distance > outer {
+				continue
+			}
+			kind, barrier := w.beltBarrierAt(position)
+			if !barrier {
+				continue
+			}
+			definition, known := w.tuning.Tables.Entities[kind]
+			if !known {
+				continue
+			}
+			id := fmt.Sprintf("belt-%d:%d", bx, by)
+			if w.scars[id] {
+				continue
+			}
+			draw := newSiteStream(belts.Seed, bx, by)
+			base := newEntity("", kind, Vec{}, definition, EntityOverrides{})
+			radius := base.circleRadius() + draw.next()*belts.RadiusSpread
+			if w.fixtureOverlaps(position, radius) {
+				continue
+			}
+			objects := collisionObjectsFromTuning(definition.CollisionObjects)
+			if len(objects) > 0 {
+				objects[0].Radius = radius
+			}
+			entity := newEntity(id, kind, position, definition, EntityOverrides{CollisionObjects: &objects})
+			items = append(items, &entity)
+		}
+	}
+	return items
+}
+
+// chooseScatter selects an archetype from a biome's scatter list by one draw in
+// [0,1). The fills are absolute probabilities scaled by fillScale, so their sum
+// is the chance the site carries anything and the rest is bare ground.
+func chooseScatter(scatter []tuning.ScatterArchetype, pick, fillScale float64) (string, float64, bool) {
+	acc := 0.0
+	for _, option := range scatter {
+		acc += option.Fill * fillScale
+		if pick < acc {
+			return option.Entity, option.RadiusSpread, true
+		}
+	}
+	return "", 0, false
 }
 
 // fixtureOverlaps tests a candidate against the authored fixtures. The table is

@@ -74,6 +74,156 @@
       ]
     }
   },
+  "boulder": {
+    "mass": -1,
+    "max_health": 500,
+    "occludes_vision": true,
+    "visible_in_shadow": true,
+    "collision_objects": [{ "type": "circle", "radius": 52 }],
+    "admin": {
+      "name": "Boulder",
+      "spawnable": true,
+      "fields": [
+        { "attribute": "transform.position", "label": "Position", "input": "position", "scope": "edit", "default": "[0,0]", "min": -45000, "max": 45000, "step": 1 },
+        { "attribute": "vitals.health", "label": "Health", "input": "number", "scope": "edit", "default": "500", "min": -1, "max": 10000, "step": 1 },
+        { "attribute": "vitals.max_health", "label": "Maximum health", "input": "number", "scope": "edit", "default": "500", "min": -1, "max": 10000, "step": 1 }
+      ]
+    }
+  },
+  "cinder-spire": {
+    "mass": -1,
+    "max_health": 350,
+    "occludes_vision": true,
+    "visible_in_shadow": true,
+    "collision_objects": [{ "type": "circle", "radius": 44 }],
+    "admin": {
+      "name": "Cinder spire",
+      "spawnable": true,
+      "fields": [
+        { "attribute": "transform.position", "label": "Position", "input": "position", "scope": "edit", "default": "[0,0]", "min": -45000, "max": 45000, "step": 1 },
+        { "attribute": "vitals.health", "label": "Health", "input": "number", "scope": "edit", "default": "350", "min": -1, "max": 10000, "step": 1 },
+        { "attribute": "vitals.max_health", "label": "Maximum health", "input": "number", "scope": "edit", "default": "350", "min": -1, "max": 10000, "step": 1 }
+      ]
+    }
+  },
+  "ice-block": {
+    "mass": -1,
+    "max_health": 300,
+    "occludes_vision": false,
+    "visible_in_shadow": true,
+    "collision_objects": [{ "type": "circle", "radius": 38 }],
+    "admin": {
+      "name": "Ice block",
+      "spawnable": true,
+      "fields": [
+        { "attribute": "transform.position", "label": "Position", "input": "position", "scope": "edit", "default": "[0,0]", "min": -45000, "max": 45000, "step": 1 },
+        { "attribute": "vitals.health", "label": "Health", "input": "number", "scope": "edit", "default": "300", "min": -1, "max": 10000, "step": 1 },
+        { "attribute": "vitals.max_health", "label": "Maximum health", "input": "number", "scope": "edit", "default": "300", "min": -1, "max": 10000, "step": 1 }
+      ]
+    }
+  },
+  "salt-crag": {
+    "mass": -1,
+    "max_health": 400,
+    "occludes_vision": true,
+    "visible_in_shadow": true,
+    "collision_objects": [{ "type": "circle", "radius": 46 }],
+    "admin": {
+      "name": "Salt crag",
+      "spawnable": true,
+      "fields": [
+        { "attribute": "transform.position", "label": "Position", "input": "position", "scope": "edit", "default": "[0,0]", "min": -45000, "max": 45000, "step": 1 },
+        { "attribute": "vitals.health", "label": "Health", "input": "number", "scope": "edit", "default": "400", "min": -1, "max": 10000, "step": 1 },
+        { "attribute": "vitals.max_health", "label": "Maximum health", "input": "number", "scope": "edit", "default": "400", "min": -1, "max": 10000, "step": 1 }
+      ]
+    }
+  },
+  "hollow-thicket": {
+    "mass": -1,
+    "max_health": 250,
+    "occludes_vision": true,
+    "visible_in_shadow": true,
+    "collision_objects": [{ "type": "circle", "radius": 50 }],
+    "admin": {
+      "name": "Hollow thicket",
+      "spawnable": true,
+      "fields": [
+        { "attribute": "transform.position", "label": "Position", "input": "position", "scope": "edit", "default": "[0,0]", "min": -45000, "max": 45000, "step": 1 },
+        { "attribute": "vitals.health", "label": "Health", "input": "number", "scope": "edit", "default": "250", "min": -1, "max": 10000, "step": 1 },
+        { "attribute": "vitals.max_health", "label": "Maximum health", "input": "number", "scope": "edit", "default": "250", "min": -1, "max": 10000, "step": 1 }
+      ]
+    }
+  },
+  "boulder-ridge": {
+    "mass": -1,
+    "max_health": -1,
+    "occludes_vision": true,
+    "visible_in_shadow": true,
+    "collision_objects": [{ "type": "circle", "radius": 150 }],
+    "admin": {
+      "name": "Boulder ridge",
+      "spawnable": true,
+      "fields": [
+        { "attribute": "transform.position", "label": "Position", "input": "position", "scope": "edit", "default": "[0,0]", "min": -45000, "max": 45000, "step": 1 }
+      ]
+    }
+  },
+  "lava-flow": {
+    "mass": -1,
+    "max_health": -1,
+    "occludes_vision": false,
+    "visible_in_shadow": true,
+    "collision_objects": [{ "type": "circle", "radius": 150 }],
+    "admin": {
+      "name": "Lava flow",
+      "spawnable": true,
+      "fields": [
+        { "attribute": "transform.position", "label": "Position", "input": "position", "scope": "edit", "default": "[0,0]", "min": -45000, "max": 45000, "step": 1 }
+      ]
+    }
+  },
+  "ice-shelf": {
+    "mass": -1,
+    "max_health": -1,
+    "occludes_vision": false,
+    "visible_in_shadow": true,
+    "collision_objects": [{ "type": "circle", "radius": 150 }],
+    "admin": {
+      "name": "Ice shelf",
+      "spawnable": true,
+      "fields": [
+        { "attribute": "transform.position", "label": "Position", "input": "position", "scope": "edit", "default": "[0,0]", "min": -45000, "max": 45000, "step": 1 }
+      ]
+    }
+  },
+  "fulgurite": {
+    "mass": -1,
+    "max_health": -1,
+    "occludes_vision": true,
+    "visible_in_shadow": true,
+    "collision_objects": [{ "type": "circle", "radius": 135 }],
+    "admin": {
+      "name": "Fulgurite spine",
+      "spawnable": true,
+      "fields": [
+        { "attribute": "transform.position", "label": "Position", "input": "position", "scope": "edit", "default": "[0,0]", "min": -45000, "max": 45000, "step": 1 }
+      ]
+    }
+  },
+  "mirror-monolith": {
+    "mass": -1,
+    "max_health": -1,
+    "occludes_vision": true,
+    "visible_in_shadow": true,
+    "collision_objects": [{ "type": "circle", "radius": 140 }],
+    "admin": {
+      "name": "Mirror monolith",
+      "spawnable": true,
+      "fields": [
+        { "attribute": "transform.position", "label": "Position", "input": "position", "scope": "edit", "default": "[0,0]", "min": -45000, "max": 45000, "step": 1 }
+      ]
+    }
+  },
   "smoke": {
     "mass": -1,
     "max_health": -1,

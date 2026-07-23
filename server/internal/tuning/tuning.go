@@ -22,7 +22,7 @@ import (
 // SchemaVersion is the table shape this build understands. Bump it only when a
 // table changes shape, and add the matching forward migration; a plain balance
 // edit bumps Manifest.Version instead and needs no code change.
-const SchemaVersion = 22
+const SchemaVersion = 23
 
 type Manifest struct {
 	// Version is the content revision. Bump it on any balance edit; a change
@@ -144,20 +144,78 @@ type EntityDefinition struct {
 // count: at radius 45,000 the world is never fully resident, so density is
 // declared per unit area and a chunk materialises the sites that fall inside it.
 //
-// Cell is the site lattice — one candidate every Cell units on each axis — and
-// Fill is the fraction of those sites that actually carry an item. Placement is
-// jittered inside each cell by exactly as much as Spacing and the archetype's
-// widest radius leave room for, so two items can never be closer than Spacing
-// however their chunks were loaded.
+// Generation has two independent layers. The scatter layer is avoidable
+// landmarks — trees, boulders, thickets — placed on a jittered lattice whose
+// archetype and density come from the biome underfoot, so a region reads as
+// itself before the HUD names it. The belt layer is the macro structure:
+// concentric impassable ridge belts, broken by a handful of staggered passes,
+// that funnel radial travel through chokepoints rather than across open ground.
+//
+// Cell is the scatter site lattice — one candidate every Cell units on each
+// axis. Each scatter site is jittered inside its cell by exactly as much as
+// Spacing and the widest archetype radius leave room for, so two scatter items
+// can never be closer than Spacing however their chunks were loaded.
 type Terrain struct {
+	Seed        uint64  `json:"seed"`
+	Cell        float64 `json:"cell"`
+	InnerMargin float64 `json:"inner_margin"`
+	OuterMargin float64 `json:"outer_margin"`
+	Spacing     float64 `json:"spacing"`
+	// Default is the scatter/barrier set for any position whose biome has no
+	// explicit entry; Biomes overrides it per biome id.
+	Default BiomeTerrain            `json:"default"`
+	Biomes  map[string]BiomeTerrain `json:"biomes"`
+	Belts   Belts                   `json:"belts"`
+	Routes  Routes                  `json:"routes"`
+}
+
+// BiomeTerrain is the archetype vocabulary of one biome: the scatter it strews
+// and the single impassable archetype its belts are built from, so a ridge
+// crossing the Emberlands is lava while one crossing Stonereach is boulders.
+type BiomeTerrain struct {
+	Barrier string             `json:"barrier"`
+	Scatter []ScatterArchetype `json:"scatter"`
+}
+
+// ScatterArchetype is one avoidable-landmark option. Fill is the absolute
+// probability that a scatter site carries this archetype; the fills in a
+// biome's list sum to at most one, and the remainder is bare ground.
+type ScatterArchetype struct {
 	Entity       string  `json:"entity"`
-	Seed         uint64  `json:"seed"`
-	Cell         float64 `json:"cell"`
 	Fill         float64 `json:"fill"`
 	RadiusSpread float64 `json:"radius_spread"`
-	InnerMargin  float64 `json:"inner_margin"`
-	OuterMargin  float64 `json:"outer_margin"`
-	Spacing      float64 `json:"spacing"`
+}
+
+// Belts are the macro structure: concentric wavy ridge belts at Radii, each an
+// annulus Thickness thick, each broken by PassesPerBelt angular gaps. The pass
+// centres are staggered belt-to-belt from Seed, so no straight radial line is
+// clear through every belt and crossing the world means threading offset gaps —
+// which is what turns a three-minute straight walk into a five-minute journey.
+//
+// Cell is the fine lattice the belt is filled on; it is deliberately smaller
+// than twice the barrier archetype's radius so adjacent sites overlap into a
+// solid, un-dashable mass rather than a passable picket of boulders.
+type Belts struct {
+	Seed          uint64    `json:"seed"`
+	Cell          float64   `json:"cell"`
+	Thickness     float64   `json:"thickness"`
+	RadiusSpread  float64   `json:"radius_spread"`
+	Waviness      float64   `json:"waviness"`
+	WaveCount     float64   `json:"wave_count"`
+	PassesPerBelt int       `json:"passes_per_belt"`
+	PassHalfAngle float64   `json:"pass_half_angle"`
+	Radii         []float64 `json:"radii"`
+}
+
+// Routes thin the scatter through the belt passes, so a chokepoint reads as a
+// cleared, exposed lane rather than as more of the same cover. ClearFill scales
+// the scatter fill inside a pass channel and HalfAngleScale widens that channel
+// past the impassable gap so the mouth of the pass is visibly open. The lanes
+// that connect one outpost to the next are laid along these passes in Phase 3.3,
+// once outposts exist to connect.
+type Routes struct {
+	ClearFill      float64 `json:"clear_fill"`
+	HalfAngleScale float64 `json:"half_angle_scale"`
 }
 
 // Fixture places one entity archetype at a fixed world coordinate. Procedural

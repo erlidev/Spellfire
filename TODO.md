@@ -271,10 +271,9 @@ broad-phase question, and terrain materialises per chunk around bodies
 - [x] [world.md](docs/game/design/world.md) carries the settled scale, the friction-based traversal target, and the procedural biome field
 - [x] Phase 8's spatial-index and load-test entries moved here; deltas/compression and priority tiers remain in Phase 8
 
-Left for the rest of Phase 3: the terrain scatter is one archetype at a uniform density until
-[3.2](#32-terrain-friction-and-traversal) gives it per-biome archetypes and chokepoints, and the
-chunk generator takes no region parameters, even though [3.1](#31-world-field--danger-biome-and-grade-by-position)
-now produces them.
+Left for the rest of Phase 3: outposts, travel, the map editor, layered environment rendering, and
+world HUD. The terrain scatter is now per-biome and the world is funnelled through ridge-belt
+chokepoints ([3.2](#32-terrain-friction-and-traversal)).
 
 ### 3.1 World field — danger, biome, and grade by position
 
@@ -291,20 +290,20 @@ now produces them.
 - [x] Content: 43 material rows across seven kinds, per-element focus and core crystals, reagent- and biome-gated gun parts, three new staves, and elemental rocket recipes — so a biome is worth travelling to and a build has a geography
 
 The renderer tints the ground by biome and the HUD names the region, its band, and what
-the ground yields. The chunk generator still takes no region parameters — per-biome
-terrain archetypes are [3.2](#32-terrain-friction-and-traversal).
+the ground yields. The chunk generator now reads the field for per-biome terrain
+archetypes and belt barriers ([3.2](#32-terrain-friction-and-traversal)).
 
 ### 3.2 Terrain, friction, and traversal
 
 The 5-minute target lives here. A straight-line 2:53 becomes a 5-minute journey only if the
 straight line does not exist.
 
-- [ ] Per-biome terrain archetypes in [entities.json](data/tuning/entities.json): ridges, boulder fields, ruins, chasms, thickets, ice shelves, lava flows — each declaring its own `occludes_vision` / `visible_in_shadow` attributes ([architecture.md](docs/architecture.md#line-of-sight))
-- [ ] Macro structure: impassable formations with authored-feeling passes, so radial travel is funnelled through chokepoints rather than crossing open ground
-- [ ] Routes as the traversal reward: cleared lanes between outposts that are faster and more exposed, so speed and safety trade against each other
-- [ ] Density and placement rules per region parameter set, generated per chunk and reproducible from seed
-- [ ] Test: sampled pathfinding over N routes from the hub to the rim reports a median on-foot journey of ≥ 5 minutes, and the world contains no straight radial corridor — this is the executable form of the traversal target
-- [ ] Test: generated terrain never seals a region, strands an outpost, or encloses a spawn point
+- [x] Per-biome terrain archetypes in [entities.json](data/tuning/entities.json): boulders, ridges, thickets, ice shelves/blocks, lava flows, fulgurites, mirror monoliths, cinder spires, salt crags — each declaring its own `occludes_vision` / `visible_in_shadow` attributes; the biome underfoot chooses the scatter and the barrier the ridge belts are built from ([architecture.md](docs/architecture.md#terrain-friction-and-traversal))
+- [x] Macro structure: concentric impassable ridge belts broken by a handful of staggered passes, so radial travel is funnelled through chokepoints rather than crossing open ground — the belts fill a fine lattice with overlapping formations so they seal, and the passes stagger belt-to-belt so no straight radial line is clear ([terrain.go](server/internal/game/terrain.go))
+- [x] Routes as the traversal reward: the scatter thins in each pass mouth so a chokepoint reads as an exposed, cleared lane; the outpost-to-outpost lanes laid along the passes wait on Phase 3.3, which places the outposts to connect
+- [x] Density and placement rules per biome, generated per chunk from `(seed, chunk_coord)` and reproducible however chunks load and evict ([chunk.go](server/internal/game/chunk.go))
+- [x] Test: shortest-path search across the live walkable grid reports a median on-foot journey to the rim of ≥ 5 minutes (318 s shipped, straight line ~170 s), and no straight radial line is clear from hub to rim ([terrain_test.go](server/internal/game/terrain_test.go))
+- [x] Test: the walkable space is one connected region — every walkable cell, every biome, and the spawn ring are reachable from the hub, so nothing is sealed, stranded, or enclosed ([terrain_test.go](server/internal/game/terrain_test.go))
 
 ### 3.3 Outposts, safety, and travel
 

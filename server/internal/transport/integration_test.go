@@ -138,7 +138,9 @@ func TestWebSocketDisconnectPersistsWorldPosition(t *testing.T) {
 	if err := data.CreateCharacter(ctx, character); err != nil {
 		t.Fatal(err)
 	}
-	saved := model.CharacterState{Position: model.Point{X: 1500, Y: -200}, Placed: true, LastSeen: time.Now(), Materials: map[string]int{}}
+	// Inside the terrain floor, so the saved spot is clear of generated cover and
+	// the disconnect-persists-position behaviour is what the test exercises.
+	saved := model.CharacterState{Position: model.Point{X: 1150, Y: -200}, Placed: true, LastSeen: time.Now(), Materials: map[string]int{}}
 	if err := data.SaveCharacterState(ctx, character.ID, saved); err != nil {
 		t.Fatal(err)
 	}

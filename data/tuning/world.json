@@ -63,14 +63,34 @@
     "coverage": { "resolution": 256, "minimum_share": 0.06, "minimum_samples": 400 }
   },
   "terrain": {
-    "entity": "tree",
     "seed": 1592614637,
     "cell": 400,
-    "fill": 0.8,
-    "radius_spread": 17,
     "inner_margin": 400,
     "outer_margin": 600,
-    "spacing": 55
+    "spacing": 55,
+    "default": { "barrier": "boulder-ridge", "scatter": [{ "entity": "tree", "fill": 0.42, "radius_spread": 17 }] },
+    "biomes": {
+      "emberlands": { "barrier": "lava-flow", "scatter": [{ "entity": "cinder-spire", "fill": 0.16, "radius_spread": 12 }] },
+      "rimeshelf": { "barrier": "ice-shelf", "scatter": [{ "entity": "ice-block", "fill": 0.09, "radius_spread": 10 }] },
+      "stormflats": { "barrier": "fulgurite", "scatter": [{ "entity": "salt-crag", "fill": 0.11, "radius_spread": 12 }] },
+      "arcane-hollow": { "barrier": "mirror-monolith", "scatter": [{ "entity": "hollow-thicket", "fill": 0.2, "radius_spread": 13 }] },
+      "stonereach": { "barrier": "boulder-ridge", "scatter": [{ "entity": "boulder", "fill": 0.22, "radius_spread": 14 }, { "entity": "tree", "fill": 0.1, "radius_spread": 17 }] }
+    },
+    "belts": {
+      "seed": 809912773,
+      "cell": 200,
+      "thickness": 720,
+      "radius_spread": 26,
+      "waviness": 900,
+      "wave_count": 6,
+      "passes_per_belt": 3,
+      "pass_half_angle": 0.1,
+      "radii": [3600, 8200, 13600, 20000, 27200, 35200]
+    },
+    "routes": {
+      "clear_fill": 0.35,
+      "half_angle_scale": 1.4
+    }
   },
   "fixtures": [
     {

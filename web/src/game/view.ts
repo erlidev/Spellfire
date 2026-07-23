@@ -63,6 +63,29 @@ const colors = {
   ground: 0x16233a, grid: 0x2c405e, safe: 0x7ee1bb, rim: 0x8d5260, self: 0xffffff, hostile: 0xff6f69,
   gunner: 0x9cabbf, mage: 0xff754d, bullet: 0xffd166, tree: 0x46795a, trunk: 0x795b43, outline: 0x0b1220,
   squad: 0x7ee1bb, neutral: 0xaeb9c8, shield: 0x9ecbff, scope: 0xffe9a8,
+  rock: 0x6b6252, rockDark: 0x473f32, rockEdge: 0x231d15,
+  lava: 0x3a1710, lavaGlow: 0xff6a2a, lavaHot: 0xffc061,
+  ice: 0x9fd8f2, iceDark: 0x3f7fa6, iceEdge: 0x16374a,
+  salt: 0xb7b3c8, saltGlow: 0x9a8fe0, thicket: 0x2f6f5f, thicketDark: 0x1a3c34, mirror: 0x8fd0c0,
+};
+
+// The Phase 3.2 terrain archetypes, drawn procedurally from the item's own id so
+// two boulders never look alike. `kind` selects the silhouette family; the
+// generic case is a jittered rock polygon. Barrier archetypes (the ridge belts)
+// and destructible scatter share the vocabulary — a belt reads as a solid mass
+// because its overlapping members are drawn opaque and biome-tinted.
+type TerrainStyle = { fill: number; edge: number; spikes: number; kind?: "lava" | "ice" | "thicket" | "spire" };
+const terrainStyles: Record<string, TerrainStyle> = {
+  "boulder": { fill: colors.rock, edge: colors.rockEdge, spikes: 8 },
+  "boulder-ridge": { fill: colors.rock, edge: colors.rockEdge, spikes: 11 },
+  "mirror-monolith": { fill: colors.mirror, edge: colors.iceEdge, spikes: 6 },
+  "salt-crag": { fill: colors.salt, edge: colors.rockEdge, spikes: 6, kind: "spire" },
+  "fulgurite": { fill: colors.saltGlow, edge: colors.rockEdge, spikes: 6, kind: "spire" },
+  "cinder-spire": { fill: colors.rockDark, edge: colors.rockEdge, spikes: 5, kind: "spire" },
+  "lava-flow": { fill: colors.lava, edge: colors.rockEdge, spikes: 10, kind: "lava" },
+  "ice-shelf": { fill: colors.ice, edge: colors.iceEdge, spikes: 7, kind: "ice" },
+  "ice-block": { fill: colors.ice, edge: colors.iceEdge, spikes: 6, kind: "ice" },
+  "hollow-thicket": { fill: colors.thicket, edge: colors.outline, spikes: 7, kind: "thicket" },
 };
 
 // The widest arc any live guard covers, so the drawn shield never claims to
@@ -550,6 +573,8 @@ export class GameView {
     } else if (entity.type === EntityType.WorldItem && entity.className === "wall") {
       body.rect(-entity.length / 2, -entity.width / 2, entity.length, entity.width).fill(0x68717d).stroke({ color: colors.outline, width: 5 });
       body.moveTo(-entity.length / 2, 0).lineTo(entity.length / 2, 0).moveTo(0, -entity.width / 2).lineTo(0, entity.width / 2).stroke({ color: 0x8d98a6, width: 2 });
+    } else if (entity.type === EntityType.WorldItem && terrainStyles[entity.className]) {
+      this.drawTerrainItem(body, entity, terrainStyles[entity.className]!);
     } else if (entity.className === "mage") {
       body.circle(0, 0, 20).fill(elementColors[entity.element] ?? colors.mage).stroke({ color: outline, width: 4 });
       body.moveTo(-15, 14).lineTo(0, -23).lineTo(15, 14).closePath().fill(0xd54e64).stroke({ color: colors.outline, width: 3 });
@@ -574,6 +599,44 @@ export class GameView {
    * arc a raised shield actually covers, and the fact that a scoped body is
    * looking one way and moving slowly. Both use shape rather than colour alone.
    */
+  /**
+   * A Phase 3.2 terrain archetype: a jittered rock polygon seeded from the
+   * item's id, plus a per-family flourish. Everything is sized off the item's
+   * own collision radius, so a belt-sized boulder and a scatter pebble share one
+   * path and a felled item's health bar still lines up.
+   */
+  private drawTerrainItem(g: Graphics, entity: Entity, style: TerrainStyle): void {
+    const r = entity.radius || 40, seed = hash(entity.id);
+    if (style.kind === "thicket") {
+      for (let k = 0; k < 5; k++) {
+        const a = (k / 5) * Math.PI * 2 + fraction(seed + k) * .6, d = r * .4 * fraction(seed + k * 13);
+        g.circle(Math.cos(a) * d, Math.sin(a) * d, r * (.5 + fraction(seed + k * 7) * .22))
+          .fill(k % 2 ? colors.thicketDark : style.fill).stroke({ color: style.edge, width: 3 });
+      }
+      return;
+    }
+    const pts: number[] = [], spin = fraction(seed) * Math.PI * 2;
+    for (let k = 0; k < style.spikes; k++) {
+      const a = spin + (k / style.spikes) * Math.PI * 2;
+      const reach = style.kind === "spire"
+        ? (k % 2 === 0 ? r : r * (.36 + fraction(seed + k * 41) * .2))
+        : r * (.74 + fraction(seed + k * 41) * .34);
+      pts.push(Math.cos(a) * reach, Math.sin(a) * reach);
+    }
+    g.poly(pts).fill(style.fill).stroke({ color: style.edge, width: 4 });
+    if (style.kind === "lava") {
+      for (let k = 0; k < 4; k++) {
+        const a = fraction(seed + k * 17) * Math.PI * 2, d = r * .42 * fraction(seed + k * 29);
+        g.circle(Math.cos(a) * d, Math.sin(a) * d, r * (.14 + fraction(seed + k * 7) * .16))
+          .fill({ color: k % 2 ? colors.lavaHot : colors.lavaGlow, alpha: .85 });
+      }
+    } else if (style.kind === "ice") {
+      g.moveTo(-r * .3, -r * .4).lineTo(r * .22, 0).lineTo(-r * .1, r * .42).stroke({ color: colors.iceDark, width: 3, alpha: .7 });
+    } else if (style.kind !== "spire") {
+      g.circle(-r * .22, r * .14, r * .26).fill({ color: colors.rockDark, alpha: .4 });
+    }
+  }
+
   private drawStance(stance: Graphics, entity: Entity): void {
     stance.clear();
     stance.rotation = Math.atan2(entity.aimY, entity.aimX);

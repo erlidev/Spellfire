@@ -31,7 +31,11 @@ export interface CollisionObject { type: "circle" | "box"; offset_x?: number; of
 export interface AdminOption { value: string; label: string }
 export interface AdminField { attribute: string; label: string; input: "number" | "text" | "select" | "position" | "rotation"; scope: "spawn" | "edit" | "both"; default: string; min?: number; max?: number; step?: number; max_length?: number; options?: AdminOption[] }
 export interface EntityDefinition { mass: number; max_health: number; occludes_vision: boolean; visible_in_shadow: boolean; collision_objects: CollisionObject[]; admin: { name: string; spawnable: boolean; fields: AdminField[] } }
-export interface Terrain { entity: string; seed: number; cell: number; fill: number; radius_spread: number; inner_margin: number; outer_margin: number; spacing: number }
+export interface ScatterArchetype { entity: string; fill: number; radius_spread: number }
+export interface BiomeTerrain { barrier: string; scatter: ScatterArchetype[] }
+export interface Belts { seed: number; cell: number; thickness: number; radius_spread: number; waviness: number; wave_count: number; passes_per_belt: number; pass_half_angle: number; radii: number[] }
+export interface Routes { clear_fill: number; half_angle_scale: number }
+export interface Terrain { seed: number; cell: number; inner_margin: number; outer_margin: number; spacing: number; default: BiomeTerrain; biomes: Record<string, BiomeTerrain>; belts: Belts; routes: Routes }
 export interface Fixture { id: string; entity: string; position: [number, number] }
 export interface GradeThresholdRow { grade: string; at: number }
 export interface GradeCurveTable { points: [number, number][]; thresholds: GradeThresholdRow[] }
@@ -94,7 +98,7 @@ export const manifest = manifestData as Manifest;
 export const simulation = simulationData as Simulation;
 export const session = sessionData as SessionTable;
 export const entityDefinitions = entitiesData as Record<string, EntityDefinition>;
-export const world = worldData as WorldTable;
+export const world = worldData as unknown as WorldTable;
 export const combat = combatData as CombatTable;
 export const elements = elementsData as Record<string, Element>;
 export const abilities = abilitiesData as Record<string, Ability>;

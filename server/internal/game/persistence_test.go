@@ -96,8 +96,11 @@ func placedAt(id string, x, y float64, lastSeen time.Time) model.Character {
 // A disconnect must cost the session, not the walk back out.
 func TestSavedPositionIsRestoredOnJoin(t *testing.T) {
 	world := NewWorld(DefaultTuning())
-	p := world.AddPlayer(placed("p", 1500, -200), time.Now())
-	if p.Position != (Vec{1500, -200}) {
+	// Inside the terrain floor (safe radius + inner margin), so the saved spot is
+	// deterministically clear of generated cover and the honour path is what is
+	// under test rather than a chance collision.
+	p := world.AddPlayer(placed("p", 1150, -200), time.Now())
+	if p.Position != (Vec{1150, -200}) {
 		t.Fatalf("position = %#v, want the saved one", p.Position)
 	}
 }
@@ -110,8 +113,8 @@ func TestAnExpiredPositionRecallsToTheNearestSafeDestination(t *testing.T) {
 	world := NewWorld(DefaultTuning())
 	spawn := world.tuning.Tables.World.SpawnRadius
 
-	fresh := world.AddPlayer(placedAt("fresh", 1500, -200, now.Add(-expiry+time.Minute)), now)
-	if fresh.Position != (Vec{1500, -200}) {
+	fresh := world.AddPlayer(placedAt("fresh", 1150, -200, now.Add(-expiry+time.Minute)), now)
+	if fresh.Position != (Vec{1150, -200}) {
 		t.Fatalf("a position inside the expiry was not honoured: %#v", fresh.Position)
 	}
 	for name, character := range map[string]model.Character{
@@ -434,7 +437,7 @@ func TestEngineAutosavesWhileConnectedAndSurvivesAFailedWrite(t *testing.T) {
 	store.fail = errors.New("database is locked")
 	engine := NewEngine(DefaultTuning(), store)
 	engine.saveEvery = 20 * time.Millisecond
-	_, _ = engine.Join(placed("p", 1500, -200), time.Now())
+	_, _ = engine.Join(placed("p", 1150, -200), time.Now())
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go engine.Run(ctx)
@@ -457,7 +460,7 @@ func TestEngineAutosavesWhileConnectedAndSurvivesAFailedWrite(t *testing.T) {
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
 		if state, ok := store.saved("p"); ok {
-			if !state.Placed || state.Position != (model.Point{X: 1500, Y: -200}) {
+			if !state.Placed || state.Position != (model.Point{X: 1150, Y: -200}) {
 				t.Fatalf("autosaved state = %#v", state)
 			}
 			return

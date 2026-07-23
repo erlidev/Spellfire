@@ -133,7 +133,7 @@ Rules, from [`invariants.md`](../../docs/game/design/invariants.md) and
 | `simulation.json` | Tick/send rates, AOI radius, rewind window, interpolation delay |
 | `session.json` | Logout linger window and saved-position expiry |
 | `entities.json` | Common entity defaults, vision-occlusion/shadow-visibility attributes, spawnability, and generic admin-field/input metadata |
-| `world.json` | World radius, spawn radius, chunk size, danger bands, the deterministic world field (seed, biome lattice, convex reward curve, coverage rule), procedural terrain density, fixed fixtures |
+| `world.json` | World radius, spawn radius, chunk size, danger bands, the deterministic world field (seed, biome lattice, convex reward curve, coverage rule), per-biome terrain (scatter archetypes/fill, barrier archetype), the ridge-belt macro structure (radii, thickness, staggered passes) and route clearing, fixed fixtures |
 | `combat.json` | Role and dodge-vector vocabularies, player movement/resources, universal dash, weight classes, damage bands |
 | `loadout.json` | Slot counts per kind and the Mage affinity multiplier |
 | `progression.json` | XP curve, the XP each source awards, the starter-kit draw size, the crafted-item capacity, and the developer-mode level-grant bound |
