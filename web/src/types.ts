@@ -57,6 +57,8 @@ export interface ServerMessage {
   level: number; xp: number; xpToNext: number; unlocks: string[];
   /** Owned crafted items and carried materials, on Welcome and Craft only. */
   items: CraftedItem[]; materials: Record<string, number>;
+  /** The viewer's own running ability lockouts in milliseconds left, keyed by ability ID. */
+  cooldowns: Record<string, number>;
 }
 
 export const Buttons = { Up: 1, Down: 2, Left: 4, Right: 8, Fire: 16, Dash: 32, Reload: 64, Interact: 128, Scope: 256 } as const;

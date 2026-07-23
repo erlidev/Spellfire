@@ -82,6 +82,18 @@ message ServerEnvelope {
   // times a second, so a snapshot never pays for them.
   repeated CraftedItem items = 16;
   repeated MaterialStack materials = 17;
+  // The viewer's own running ability lockouts, on WELCOME and every SNAPSHOT.
+  // A cooldown is authoritative state the client cannot derive: whether a cast
+  // was actually charged depends on resources and placement rules the client
+  // only knows a snapshot late, so guessing it locally reads as a dead button.
+  repeated Cooldown cooldowns = 18;
+}
+
+// One running ability lockout, expressed as time left rather than as a deadline
+// so no clock has to be shared between the server and the browser.
+message Cooldown {
+  string ability = 1;
+  uint32 remaining_ms = 2;
 }
 
 message Entity {

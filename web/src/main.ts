@@ -54,10 +54,9 @@ class SpellFire {
   private xp = 0;
   private xpNext = 0;
   private selectedSlot = 0;
-  private previousButtons = 0;
-  // When each gadget's own lockout is next expected to be over, keyed by gadget
-  // ID. It is a readout, never a gate: the input is sent regardless and the
-  // server decides.
+  // When each ability's own lockout is over, keyed by ability ID and derived
+  // from the remaining time the server sends on every snapshot. It is a readout,
+  // never a gate: the input is sent regardless and the server decides.
   private cooldowns: Record<string, number> = {};
   private inSafety = true;
   private respecOwed = false;
@@ -331,6 +330,7 @@ class SpellFire {
     const local = message.entities.find((entity) => entity.id === message.playerID);
     if (!local || !this.predictor) return;
     this.localEntity = local;
+    this.applyCooldowns(message);
     this.updateAdminSelectedFromSnapshot(message.entities);
     if (message.kind === ServerKind.Welcome) this.predictor.initialize(local); else this.predictor.reconcile(local);
     this.updateHUD(local); element("connection-overlay").hidden = true; element("death-overlay").hidden = local.alive;
@@ -358,31 +358,22 @@ class SpellFire {
     this.socket?.sendInput(input);
     this.setScopeView(scoped, weapon?.scope?.view_bonus ?? 0);
     this.view?.setHeavyRecoil(this.firesExplosive(weapon));
-    this.trackCooldown(buttons);
-    this.previousButtons = buttons;
   }
 
   /**
-   * Starts the local readout for a gadget's own lockout on the press that used
-   * it. The server owns the real cooldown and refuses anything early; this only
-   * answers "why did nothing happen", which a twenty-second gadget with no
-   * feedback at all reads as a broken button.
+   * Adopts the authoritative lockouts the snapshot carried. Every slot kind can
+   * hold one — a gadget's throw and every spell above tier one are both
+   * cooldown-gated — and the answer is the server's alone: whether a use was
+   * charged at all depends on resources and placement rules the client only
+   * learns a snapshot late, so a locally guessed lockout was wrong in both
+   * directions. It showed nothing on a cast that landed the instant enough mana
+   * had regenerated, because the client's mana was still a snapshot behind, and
+   * it showed a lockout on a cast the server had refused.
    */
-  private trackCooldown(buttons: number): void {
-    if (!(buttons & Buttons.Fire) || (this.previousButtons & Buttons.Fire)) return;
-    const slot = bar(this.activeCharacter?.class ?? "gunslinger", this.loadout, this.items)[this.selectedSlot];
-    if (!slot?.id) return;
-    // Every slot kind can hold a lockout: a gadget's throw and every spell above
-    // tier one are both cooldown-gated, and both owe the same feedback.
-    const ability = abilities[slot.abilityId];
-    if (!ability?.cooldown_ms) return;
-    // A cast the server will refuse for lack of mana never starts its cooldown
-    // there, so predicting one here would show a lockout on a spell that was
-    // never actually cast.
-    if (ability.cost.kind === "mana" && (this.localEntity?.mana ?? 0) < ability.cost.amount) return;
-    const ready = this.cooldowns[slot.id] ?? 0;
-    if (Date.now() < ready) return;
-    this.cooldowns[slot.id] = Date.now() + ability.cooldown_ms;
+  private applyCooldowns(message: ServerMessage): void {
+    const now = Date.now(), cooldowns: Record<string, number> = {};
+    for (const [ability, remainingMS] of Object.entries(message.cooldowns)) cooldowns[ability] = now + remainingMS;
+    this.cooldowns = cooldowns;
   }
 
   /**
@@ -463,7 +454,7 @@ class SpellFire {
     const label = (index: number) => `${index + 1}`;
     element("ability-bar").replaceChildren(...slots.map((slot) => {
       const cell = document.createElement("div");
-      const left = Math.max(0, Math.ceil(((this.cooldowns[slot.id] ?? 0) - Date.now()) / 1000));
+      const left = Math.max(0, Math.ceil(((this.cooldowns[slot.abilityId] ?? 0) - Date.now()) / 1000));
       cell.className = `${slot.index === this.selectedSlot ? "slot selected" : "slot"}${left ? " cooling" : ""}`;
       cell.innerHTML = `<kbd>${label(slot.index)}</kbd><span>${escapeHTML(slot.name || "Empty")}</span>${left ? `<small>${left}s</small>` : ""}`;
       return cell;
@@ -1158,7 +1149,7 @@ class SpellFire {
     window.clearInterval(this.inputTimer); this.socket?.close(); this.socket = undefined; this.view?.destroy(); this.view = undefined; this.predictor = undefined; this.heldInputs.clear(); this.lastBand = "";
     this.draft = undefined; this.selectedSlot = 0; this.inSafety = true; this.respecOwed = false; this.loadoutStatus = "";
     this.items = []; this.materials = {}; this.craftWeapon = ""; this.craftChoices = {}; this.craftStatus = "";
-    this.ledger = ledgerOf([]); this.level = 1; this.xp = 0; this.xpNext = 0; this.localEntity = undefined;
+    this.ledger = ledgerOf([]); this.level = 1; this.xp = 0; this.xpNext = 0; this.localEntity = undefined; this.cooldowns = {};
     this.adminSelected = undefined; this.adminEditDraft = {}; this.adminPositionPick = undefined; this.renderedMenuState = "";
     element("ability-bar").replaceChildren(); element("touch-slots").replaceChildren();
     const menu = element<HTMLDialogElement>("menu-dialog"); if (menu.open) menu.close(); this.activeCharacter = undefined; this.setDeveloperMode(false); element("game").hidden = true; element("home").hidden = false; element("death-overlay").hidden = true; element("connection-overlay").hidden = true;

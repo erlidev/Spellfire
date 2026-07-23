@@ -425,6 +425,36 @@ func TestBlinkOnHitOnlyPaysOutOnLanding(t *testing.T) {
 	}
 }
 
+// A running lockout is authoritative state the client is sent rather than one it
+// guesses from what it last saw of its own mana. It has to appear on the cast
+// that actually happened and disappear exactly when the spell is usable again.
+func TestSnapshotCarriesTheCastersOwnCooldowns(t *testing.T) {
+	w, now := testWorld()
+	mage := casting(t, w, addTestPlayer(w, "mage", model.Mage, Vec{1200, 0}, now), "ward")
+	ability := w.tuning.Tables.Abilities["ward-cast"]
+
+	if cooldowns := w.SnapshotFor(mage.ID, now, 2).Cooldowns; len(cooldowns) != 0 {
+		t.Fatalf("a body that has cast nothing reports %v", cooldowns)
+	}
+	at := castFor(w, mage, Vec{1, 0}, now, 2)
+	cooldowns := w.SnapshotFor(mage.ID, at, 2).Cooldowns
+	if len(cooldowns) != 1 || cooldowns[0].AbilityID != ability.ID {
+		t.Fatalf("the cast reported %v rather than its own lockout", cooldowns)
+	}
+	if left := time.Duration(cooldowns[0].RemainingMS) * time.Millisecond; left > ability.Cooldown() || left < ability.Cooldown()-time.Second {
+		t.Fatalf("the lockout reported %s left of %s", left, ability.Cooldown())
+	}
+	// The cast is only ever seen by the body that made it: a lockout is what an
+	// opponent has to read from the fight, not from the wire.
+	other := addTestPlayer(w, "watcher", model.Gunslinger, Vec{1220, 0}, at)
+	if cooldowns := w.SnapshotFor(other.ID, at, 2).Cooldowns; len(cooldowns) != 0 {
+		t.Fatalf("another player was sent the caster's lockouts: %v", cooldowns)
+	}
+	if cooldowns := w.SnapshotFor(mage.ID, at.Add(ability.Cooldown()), 2).Cooldowns; len(cooldowns) != 0 {
+		t.Fatalf("an expired lockout is still reported: %v", cooldowns)
+	}
+}
+
 // Per-spell cooldowns are the second resource axis: mana alone does not gate a
 // defining spell, and the shared cadence is not what holds it back either.
 func TestSpellCooldownsGateBeyondManaAndCadence(t *testing.T) {

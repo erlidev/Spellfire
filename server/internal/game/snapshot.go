@@ -3,6 +3,7 @@ package game
 import (
 	"fmt"
 	"math"
+	"sort"
 	"time"
 
 	"spellfire/server/internal/model"
@@ -17,6 +18,7 @@ func (w *World) SnapshotFor(playerID string, now time.Time, kind uint64) protoco
 		message.Error = "player is not in the world"
 		return message
 	}
+	message.Cooldowns = playerCooldowns(viewer, now)
 	viewDistance := w.tuning.AOIRadius
 	if viewer.ViewDistance > 0 {
 		viewDistance = viewer.ViewDistance
@@ -194,6 +196,33 @@ func ownerAllegiance(viewer, owner *Player) uint64 {
 		return protocol.AllegianceNeutral
 	}
 	return playerAllegiance(viewer, owner)
+}
+
+// playerCooldowns reports the viewer's own running lockouts as time left. It is
+// the authoritative answer to "why did that button do nothing": the client
+// cannot derive it, because whether a use was charged at all depends on mana,
+// ammunition, and placement rules it only sees a snapshot late. Expired entries
+// are simply omitted; the map is bounded by the action bar, so nothing has to
+// sweep it.
+func playerCooldowns(p *Player, now time.Time) []protocol.Cooldown {
+	if len(p.Cooldowns) == 0 {
+		return nil
+	}
+	ids := make([]string, 0, len(p.Cooldowns))
+	for id := range p.Cooldowns {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	cooldowns := make([]protocol.Cooldown, 0, len(ids))
+	for _, id := range ids {
+		if left := p.Cooldowns[id].Sub(now); left > 0 {
+			cooldowns = append(cooldowns, protocol.Cooldown{AbilityID: id, RemainingMS: uint32(left.Milliseconds() + 1)})
+		}
+	}
+	if len(cooldowns) == 0 {
+		return nil
+	}
+	return cooldowns
 }
 
 func activeEffectIDs(effects []ActiveEffect) []string {

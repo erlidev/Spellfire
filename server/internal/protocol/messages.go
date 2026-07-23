@@ -105,6 +105,13 @@ type MaterialStack struct {
 	Count    uint32
 }
 
+// Cooldown is one running ability lockout belonging to the viewer, carried as
+// time left rather than as a deadline so no clock is shared with the browser.
+type Cooldown struct {
+	AbilityID   string
+	RemainingMS uint32
+}
+
 type ClientEnvelope struct {
 	Kind         uint64
 	SessionToken string
@@ -197,6 +204,12 @@ type ServerEnvelope struct {
 	// deliberate action inside safety.
 	Items     []CraftedItem
 	Materials []MaterialStack
+	// Cooldowns is the viewer's own running ability lockouts. Unlike the three
+	// fields above it does ride every snapshot: it changes on a use rather than
+	// on a deliberate action inside safety, and the client cannot derive it —
+	// whether a use was actually charged depends on resources and placement
+	// rules it only learns a snapshot later.
+	Cooldowns []Cooldown
 }
 
 func DecodeClient(data []byte) (ClientEnvelope, error) {
@@ -490,6 +503,9 @@ func EncodeServer(message ServerEnvelope) []byte {
 	for _, stack := range message.Materials {
 		out = appendMessage(out, 17, encodeStack(stack))
 	}
+	for _, cooldown := range message.Cooldowns {
+		out = appendMessage(out, 18, encodeCooldown(cooldown))
+	}
 	return out
 }
 
@@ -507,6 +523,11 @@ func encodeItem(item CraftedItem) []byte {
 func encodeComponentSlot(slot, component string) []byte {
 	out := appendString(nil, 1, slot)
 	return appendString(out, 2, component)
+}
+
+func encodeCooldown(cooldown Cooldown) []byte {
+	out := appendString(nil, 1, cooldown.AbilityID)
+	return appendVarint(out, 2, uint64(cooldown.RemainingMS))
 }
 
 func encodeStack(stack MaterialStack) []byte {

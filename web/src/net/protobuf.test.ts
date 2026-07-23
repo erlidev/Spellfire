@@ -50,6 +50,15 @@ describe("protobuf wire codec", () => {
     expect(decodeServer(envelope).colliders[0]).toMatchObject({ id: "wall:0", entityID: "wall", shape: "box", x: 10, y: 20, width: 96, height: 96 });
   });
 
+  it("decodes the viewer's own ability lockouts", () => {
+    const envelope = Uint8Array.from([
+      ...uintField(1, 2),
+      ...messageField(18, [...stringField(1, "firestorm-cast"), ...uintField(2, 12_000)]),
+      ...messageField(18, [...stringField(1, "ward-cast"), ...uintField(2, 800)]),
+    ]).buffer;
+    expect(decodeServer(envelope).cooldowns).toEqual({ "firestorm-cast": 12_000, "ward-cast": 800 });
+  });
+
   it("rejects truncated messages", () => {
     expect(() => decodeServer(Uint8Array.from([0x2a, 0x05, 0x08]).buffer)).toThrow();
   });

@@ -144,6 +144,19 @@ function decodeItem(bytes: Uint8Array): CraftedItem {
   return value;
 }
 
+function decodeCooldown(bytes: Uint8Array): [string, number] {
+  let ability = "", remainingMS = 0;
+  const reader = new Reader(bytes);
+  while (!reader.done) {
+    const tag = reader.varint(), field = tag >>> 3, wire = tag & 7;
+    switch (field) {
+      case 1: ability = reader.string(); break; case 2: remainingMS = reader.varint(); break;
+      default: reader.skip(wire);
+    }
+  }
+  return [ability, remainingMS];
+}
+
 function decodeStack(bytes: Uint8Array): [string, number] {
   let material = "", count = 0;
   const reader = new Reader(bytes);
@@ -218,7 +231,7 @@ function decodeCollider(bytes: Uint8Array): Collider {
 }
 
 export function decodeServer(data: ArrayBuffer): ServerMessage {
-  const value: ServerMessage = { kind: 0, serverTick: 0, serverTimeMS: 0, playerID: "", entities: [], colliders: [], error: "", echoedClientTimeMS: 0, loadoutEditable: false, respecOwed: false, level: 0, xp: 0, xpToNext: 0, unlocks: [], items: [], materials: {} };
+  const value: ServerMessage = { kind: 0, serverTick: 0, serverTimeMS: 0, playerID: "", entities: [], colliders: [], error: "", echoedClientTimeMS: 0, loadoutEditable: false, respecOwed: false, level: 0, xp: 0, xpToNext: 0, unlocks: [], items: [], materials: {}, cooldowns: {} };
   const reader = new Reader(new Uint8Array(data));
   while (!reader.done) {
     const tag = reader.varint(), field = tag >>> 3, wire = tag & 7;
@@ -233,6 +246,7 @@ export function decodeServer(data: ArrayBuffer): ServerMessage {
       case 14: value.xpToNext = reader.varint(); break; case 15: value.unlocks.push(reader.string()); break;
       case 16: value.items.push(decodeItem(reader.data())); break;
       case 17: { const [material, count] = decodeStack(reader.data()); if (material) value.materials[material] = count; break; }
+      case 18: { const [ability, remainingMS] = decodeCooldown(reader.data()); if (ability) value.cooldowns[ability] = remainingMS; break; }
       default: reader.skip(wire);
     }
   }
