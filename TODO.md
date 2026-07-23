@@ -237,16 +237,110 @@ Phase 2.7 uses prototype Signature parts, a Signature prism/stave, an Aegis crys
 
 ## Phase 3 — World axis
 
-- [ ] Danger tiers as a first-class lookup — hub / Fringe T1 / Frontier T2 / Deadlands T3; only two bands exist as geometry ([world.md](docs/game/design/world.md#radial-danger))
-- [ ] Material grade by radius, with a convex reward curve pulling veterans to the rim
-- [ ] Biome map crossed with radius (type × grade), plus a biome lookup by position ([world.md](docs/game/design/world.md#biomes-type--grade))
-- [ ] Universal structural materials everywhere; element-aligned materials biome-gated
-- [ ] Multiple outposts with services; discover-to-unlock ([world.md](docs/game/design/world.md#outposts-and-travel)) — the [outposts table](data/tuning/outposts.json) and the per-character unlocked list already exist and need rows plus a discovery trigger
-- [ ] Per-outpost no-PvP radius replacing radius-from-origin protection ([world.md](docs/game/design/world.md#outpost-safety))
-- [ ] Exit invulnerability state on `Player`, broken by the player's own hostile action, with a protocol field so attackers see it too
-- [ ] Mounts/vehicles and the "no fast travel while carrying raw materials" rule
-- [ ] HUD: visible no-PvP boundary, exit-invulnerability self state with remaining duration, location/biome/danger-band readout ([game-view-and-hud.md](docs/game/ui/game-view-and-hud.md#safety-and-danger))
-- [ ] Ambient palette shift by biome and danger — background value/tint, grid colour/opacity, saturation ([visual-direction.md](docs/game/design/visual-direction.md#palette)); all three channels are static today ([view.ts:86-94](web/src/game/view.ts#L86-L94))
+Phase 3 is where the world stops being a 3,000-unit test arena and becomes the expansive,
+detailed environment the design promises. Four decisions are settled and everything below
+follows from them:
+
+| Decision | Settled as |
+|---|---|
+| **Scale** | Radius **45,000** (×15 today). Straight-line foot crossing is 2:53 at 260 u/s; the ~5 minute target is met by a *real journey* — terrain detours, hostile territory, no direct route — not by dividing radius by walk speed. |
+| **Detail** | **Layered procedural depth**. No bitmap art enters the play space; detail comes from a shader ground, batched procedural decals, and a parallax overhead layer, all clamped below the gameplay layer's contrast. |
+| **Biomes** | **Procedural regions** from a world seed (noise/Voronoi), with load-time validation refusing any seed that leaves an element absent from a danger band. |
+| **Editing** | Map editor edits the **authored overlay and per-region parameters**; the substrate stays deterministic from seed. The map document is versioned JSON, exported and imported whole. |
+
+Sizing arithmetic, for reference when tuning: one "screen" is the AOI square, 2400 × 2400 =
+5.76 M u². Radius 45,000 is 1,104 screens of area — 22 per player at 50 concurrent, 11 at 100.
+Crampedness is not the risk at this scale; **emptiness is**, so nodes, outposts, routes, and
+mob placement are what concentrate players and are load-bearing rather than decorative.
+
+### 3.0 Scale substrate — prerequisites pulled forward from Phase 8
+
+At radius 45,000, MMO-plausible collider density (roughly one per 400 × 400) is ~40,000 world
+items. `generateWorldItems` builds one flat slice at construction and `SnapshotFor`,
+`collectOccluders`, and every collision path scan it linearly ([world.go:1267](server/internal/game/world.go#L1267)).
+That is dead on arrival, so the Phase 8 spatial index is a Phase 3 prerequisite, not later work.
+
+- [ ] Uniform spatial grid (cell ≈ AOI half-extent) indexing world items, players, projectiles, and deployables; one index answering collision, snapshot AOI, occluder collection, and target acquisition rather than a second visibility answer ([architecture.md](docs/architecture.md#line-of-sight))
+- [ ] Chunked deterministic world-item generation: a chunk materialises from `(world_seed, chunk_coord, region parameters)` on demand and is evicted when no player is near, so the world is never fully resident
+- [ ] Chunk lifecycle must not violate existing contracts — a chunk holding a damaged or destroyed item, a Mage wall, or an item inside the rewind window is pinned, since `Entity.presentAt` history and `Entity.Delete` fades both assume the item survives its own removal window
+- [ ] Raise `world.radius` to 45,000 and re-scale the danger bands: hub 900, Fringe 9,000, Frontier 31,500, Deadlands 45,000 (the shipped 0.70 Frontier fraction is preserved; the hub becomes a real settlement footprint rather than a scaled-up spawn ring) ([world.json](data/tuning/world.json))
+- [ ] Audit every radius-derived constant for the new scale: spawn ring, tree margins, recall distance, `position_expiry` walk-back cost, AOI half-extent, and the client's world-ring rendering
+- [ ] Load test at 50 and 100 concurrent bodies against the 64 KiB snapshot guardrail with the new terrain density ([architecture.md](docs/architecture.md#snapshot-bandwidth-budget))
+- [ ] Amend [world.md](docs/game/design/world.md) with the settled scale, the friction-based traversal target, and the procedural biome field
+- [ ] Move the Phase 8 spatial-index and load-test entries here, leaving deltas/compression and priority tiers in Phase 8
+
+### 3.1 World field — danger, biome, and grade by position
+
+- [ ] One shared deterministic world-field module: `DangerAt`, `BiomeAt`, `GradeAt`, and `RegionAt` by position, derived from the world seed and region parameters, with identical Go and TypeScript implementations so the renderer and prediction agree with the simulation
+- [ ] Danger tiers as a first-class lookup replacing radius comparisons scattered through `World` — hub / Fringe T1 / Frontier T2 / Deadlands T3 ([world.md](docs/game/design/world.md#radial-danger))
+- [ ] Procedural biome regions (noise-warped Voronoi) over the five elements, with blended borders rather than hard seams ([biomes.json](data/tuning/biomes.json))
+- [ ] Material grade by radius on a **convex** reward curve, so middle bands are a route rather than the best farm ([world.md](docs/game/design/world.md#biomes-type--grade))
+- [ ] Universal structural and wood materials everywhere; element-aligned materials gated to their biome ([materials.json](data/tuning/materials.json))
+- [ ] **Load-time coverage validation**: sample the biome field and refuse a world seed where any element is absent from any danger band, or where any band's biome mix falls below a configured floor — the enforced form of "geography never hard-locks a build"
+- [ ] Test: the field is deterministic and identical across Go and TypeScript for a fixed seed; a deliberately degenerate seed is refused with a named reason
+
+### 3.2 Terrain, friction, and traversal
+
+The 5-minute target lives here. A straight-line 2:53 becomes a 5-minute journey only if the
+straight line does not exist.
+
+- [ ] Per-biome terrain archetypes in [entities.json](data/tuning/entities.json): ridges, boulder fields, ruins, chasms, thickets, ice shelves, lava flows — each declaring its own `occludes_vision` / `visible_in_shadow` attributes ([architecture.md](docs/architecture.md#line-of-sight))
+- [ ] Macro structure: impassable formations with authored-feeling passes, so radial travel is funnelled through chokepoints rather than crossing open ground
+- [ ] Routes as the traversal reward: cleared lanes between outposts that are faster and more exposed, so speed and safety trade against each other
+- [ ] Density and placement rules per region parameter set, generated per chunk and reproducible from seed
+- [ ] Test: sampled pathfinding over N routes from the hub to the rim reports a median on-foot journey of ≥ 5 minutes, and the world contains no straight radial corridor — this is the executable form of the traversal target
+- [ ] Test: generated terrain never seals a region, strands an outpost, or encloses a spawn point
+
+### 3.3 Outposts, safety, and travel
+
+- [ ] Populate [outposts.json](data/tuning/outposts.json) with rows across the Fringe and Frontier and none in the Deadlands ([world.md](docs/game/design/world.md#outposts-and-travel)); the per-character unlocked list already round-trips and needs only a trigger
+- [ ] Discovery trigger on proximity, awarding the `discovery` XP source already priced in [progression.json](data/tuning/progression.json) and persisting the unlock immediately, as loadout commits do
+- [ ] Per-outpost no-PvP radius replacing radius-from-origin protection; the safe-zone gate on `World.SetLoadout`, `World.Craft`, and `World.CraftAmmunition` resolves against the nearest outpost instead of the origin ([world.md](docs/game/design/world.md#outpost-safety))
+- [ ] Outpost services declared per row — loadout, crafting, respawn — so a forward outpost can offer less than the hub
+- [ ] Exit invulnerability on `Player`, granted on leaving a no-PvP radius and broken by the player's own hostile action, with a protocol field so attackers see it too
+- [ ] Mounts as a movement state, not a vehicle entity: a speed multiplier (~1.8×, rim trip ≈ 1:36) that is broken by damage and cannot be entered in combat
+- [ ] No fast travel while carrying raw materials; respawn is not an exception, since dying already forfeits the haul
+- [ ] Recall and respawn destinations resolve against discovered outposts, replacing today's always-the-hub fallback (`World.recallDestination`)
+- [ ] Test: protection follows outposts rather than the origin, exit invulnerability ends on the protected player's own hostile action, a Deadlands death recalls to a Frontier outpost, and a loaded player cannot fast travel
+
+### 3.4 Map editor and the map document
+
+- [ ] Versioned map-document schema: world seed, region parameter sets, danger-band radii, outposts, POIs, routes, and authored fixtures — references and parameters only, never materialised substrate
+- [ ] `POST /api/admin/map/export` and `/import` behind the existing admin wrapper, with import validating the full document — including biome coverage — before anything is applied ([administration.md](docs/administration.md))
+- [ ] Admin map editor as a new Field-menu surface: a zoomed-out world view with biome field preview, band rings, and placement/selection of outposts, POIs, routes, and fixtures, reusing the existing pointer spawn/select/edit/delete tooling ([game-menu.md](docs/game/ui/game-menu.md))
+- [ ] Seed re-roll with live coverage validation, so a refused seed is visibly refused in the editor rather than at server start
+- [ ] Live reload of an imported map without a process restart, re-materialising chunks and re-validating every placed body's position against the new geometry
+- [ ] Test: export → import round-trips to an identical world; a document failing coverage or geometry validation is refused atomically with a named reason
+
+### 3.5 Layered environment rendering
+
+Amends [visual-direction.md](docs/game/design/visual-direction.md), which currently says atmosphere
+comes from palette *rather than* detail. The replacement rule is a **layered detail budget**:
+detail lives below the gameplay layer, contrast lives in it.
+
+- [ ] Amend [visual-direction.md](docs/game/design/visual-direction.md) with the layer model and the readability floor, keeping the procedural boundary (no bitmap art in the play space) intact
+- [ ] **L0 ground** — multi-octave noise fragment shader on one quad: biome-blended colour, macro variation, flow, cracks, moisture. Replaces the flat fill and grid at [view.ts:86-94](web/src/game/view.ts#L86-L94)
+- [ ] **L1 decals** — procedural scatter (tufts, drifts, fractures, roots) as instanced sprites off runtime-generated shared textures, batching into a single draw. Use the technique the Phase 2.6 smoke fix established; never emit per-instance `Graphics`
+- [ ] **L2 terrain** — the 3.2 colliders, drawn with the existing flat-fill-plus-outline vocabulary
+- [ ] **L3 gameplay** — actors, projectiles, telegraphs, unchanged and at maximum contrast
+- [ ] **L4 overhead** — parallax canopy, cloud shadows, and per-biome ambient particles (embers, snow, dust) at partial alpha, above the shadow veil
+- [ ] Ambient palette shift by biome and danger across all three channels — background value/tint, grid colour/opacity, ambient saturation ([visual-direction.md](docs/game/design/visual-direction.md#palette))
+- [ ] **Readability floor**: L0–L1 clamped to a bounded value and saturation range so L3 always wins contrast, enforced as a checked invariant rather than an art guideline
+- [ ] Distinct safe-zone ambient so the loadout-lock boundary is *seen*, not just stated
+- [ ] Test: the readability floor holds for every biome × danger combination; environment layer count and draw calls stay bounded as detail density rises; frame budget holds at maximum density with a full AOI of entities
+
+### 3.6 World information and HUD
+
+- [ ] Location readout: region name, biome, and danger band, updating on crossing rather than continuously ([game-view-and-hud.md](docs/game/ui/game-view-and-hud.md#safety-and-danger))
+- [ ] Visible no-PvP boundary around the nearest outpost, and exit-invulnerability self state with remaining duration
+- [ ] Boundary-crossing announcements that teach once and condense to persistent state (shared with Phase 7)
+- [ ] ⚠ **Resolve the minimap/compass decision** ([ui/open-decisions.md](docs/game/ui/open-decisions.md)) — deferred while the world was 11 seconds across; at radius 45,000 a player cannot navigate or find a discovered outpost without it, so it now blocks this section
+- [ ] Discovered-outpost markers, with undiscovered outposts never rendered as locked rows ([system-interfaces.md](docs/game/ui/system-interfaces.md#death-and-respawn))
+
+Phase 4.1 harvest nodes and Phase 4.3 mob placement consume 3.1's field and 3.2's chokepoints
+directly; both are what make a 1,104-screen world feel inhabited rather than empty, so neither
+should be tuned against the old arena scale. Phase 6 inherits L0–L4 as the layer contract its
+palette module and scatter props fill in.
 
 ---
 
@@ -349,11 +443,12 @@ Phase 2.7 uses prototype Signature parts, a Signature prism/stave, an Aegis crys
 
 ## Phase 8 — Scale & operations
 
-- [ ] Spatial hash or quadtree replacing the O(players + projectiles + telegraphs + world items) per-client snapshot path ([snapshot.go](server/internal/game/snapshot.go))
 - [ ] Snapshot deltas and an enforced bandwidth budget
-- [ ] Load test against the 100+ concurrent design target ([world.md](docs/game/design/world.md))
+- [ ] Priority tiers so a dense fight degrades by relevance rather than uniformly
 - [ ] Versioned welcome/tuning message so simulation constants can move without desyncing client prediction
 - [ ] Rate-limit authentication endpoints; document the trusted-origin policy for split-host deployments
+
+The spatial index and the 100+ concurrent load test moved to [Phase 3.0](#30-scale-substrate--prerequisites-pulled-forward-from-phase-8): at radius 45,000 the linear per-client scan cannot survive terrain density, so they became prerequisites rather than scaling work.
 
 ---
 
@@ -365,7 +460,7 @@ Blocking work is tracked with **⚠** above. Resolve each in its owning document
 |---|---|---|
 | Colourblind-validated palette | [design/open-decisions.md](docs/game/design/open-decisions.md) | Phase 6 palette module — ship it swappable and unblock |
 | Guest play, character slots, naming, first-time class choice | [ui/open-decisions.md](docs/game/ui/open-decisions.md) | Home play panel |
-| Minimap, compass, and permissible world information | [ui/open-decisions.md](docs/game/ui/open-decisions.md) | Phase 3 HUD location module |
+| Minimap, compass, and permissible world information | [ui/open-decisions.md](docs/game/ui/open-decisions.md) | **⚠ Phase 3.6** — now blocking: a radius-45,000 world is not navigable without it |
 | Floating combat text and target inspection | [ui/open-decisions.md](docs/game/ui/open-decisions.md) | Phase 6 feedback |
 | Logout/recall *presentation* — the rule itself is settled in [economy-death-and-pve.md](docs/game/design/economy-death-and-pve.md#logging-out) | [ui/open-decisions.md](docs/game/ui/open-decisions.md) | Phase 7 exit and reconnect |
 | Mobile orientation, touch model, assistance limits | [ui/open-decisions.md](docs/game/ui/open-decisions.md) | Phase 7 mobile |
