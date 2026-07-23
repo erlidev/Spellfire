@@ -485,7 +485,7 @@ func (e *Engine) loadoutMessageLocked(playerID string, set model.Loadout, err er
 	message := protocol.ServerEnvelope{
 		Kind: protocol.ServerLoadout, ServerTick: e.world.tick,
 		ServerTimeMS: uint64(time.Now().UnixMilli()), PlayerID: playerID,
-		Loadout: &protocol.Loadout{Weapon: set.Weapon, Gadgets: set.Gadgets, Spells: set.Spells, Keystones: set.Keystones},
+		Loadout: &protocol.Loadout{Weapon: set.Weapon, Gadgets: set.Gadgets, Spells: set.Spells},
 	}
 	if err != nil {
 		message.Error = err.Error()

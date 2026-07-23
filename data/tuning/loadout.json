@@ -2,6 +2,5 @@
   "weapon_slots": 1,
   "gadget_slots": 5,
   "spell_slots": 6,
-  "keystone_slots": 1,
   "affinity": { "same_element_per_tier": 1 }
 }

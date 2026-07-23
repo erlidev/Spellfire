@@ -80,10 +80,9 @@ type Input struct {
 // fields are positional and encode empty slots as empty strings, because a
 // slot's index is its binding.
 type Loadout struct {
-	Weapon    string
-	Gadgets   []string
-	Spells    []string
-	Keystones []string
+	Weapon  string
+	Gadgets []string
+	Spells  []string
 }
 
 // CraftRequest is one requested build. Weapon is the client's preview and
@@ -358,7 +357,7 @@ func decodeLoadout(data []byte) (Loadout, error) {
 		}
 		data = data[n:]
 		switch num {
-		case 1, 2, 3, 4:
+		case 1, 2, 3:
 			v, m := protowire.ConsumeString(data)
 			if m < 0 {
 				return out, errors.New("invalid loadout slot")
@@ -370,8 +369,6 @@ func decodeLoadout(data []byte) (Loadout, error) {
 				out.Gadgets = append(out.Gadgets, v)
 			case 3:
 				out.Spells = append(out.Spells, v)
-			case 4:
-				out.Keystones = append(out.Keystones, v)
 			}
 			data = data[m:]
 		default:
@@ -548,9 +545,6 @@ func encodeLoadout(set Loadout) []byte {
 	}
 	for _, id := range set.Spells {
 		out = appendSlot(out, 3, id)
-	}
-	for _, id := range set.Keystones {
-		out = appendSlot(out, 4, id)
 	}
 	return out
 }

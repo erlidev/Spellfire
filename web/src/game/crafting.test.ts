@@ -75,7 +75,7 @@ describe("crafted weapons on the bar", () => {
   });
 
   it("puts the instance in the weapon slot and stock rows first in the menu", () => {
-    const slots = bar("gunslinger", { weapon: item.id, gadgets: [], spells: [], keystones: [] }, [item]);
+    const slots = bar("gunslinger", { weapon: item.id, gadgets: [], spells: [] }, [item]);
     expect(slots[0]!.kind).toBe("weapon");
     expect(slots[0]!.name).toBe(weapons[gun]!.name);
     const options = equippable("gunslinger", everything, "weapon", [item]);

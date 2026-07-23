@@ -20,7 +20,7 @@ and keyboard activation.
 | Section | Contents | Availability |
 |---|---|---|
 | Character | Name, class, level, XP, unlock summary | Always |
-| Loadout | Weapon, gadgets/spells, keystones, effects, lock reason | View always; edit in safety |
+| Loadout | Weapon, gadgets/spells, effects, lock reason | View always; edit in safety |
 | Inventory & materials | Items, raw materials, type/grade, death risk | Always |
 | Crafting | Blueprint slots, parts, cost, result, validation | Safe zones |
 | World | Outposts, biome/danger, spawn/travel | View always; actions follow design rules |

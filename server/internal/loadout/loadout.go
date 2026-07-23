@@ -23,10 +23,9 @@ import (
 // Mage's is spell slots, with its staff cast through whichever spell is
 // selected. Both lay out to the same width, which the tables validate.
 const (
-	KindWeapon   = "weapon"
-	KindGadget   = "gadget"
-	KindSpell    = "spell"
-	KindKeystone = "keystone"
+	KindWeapon = "weapon"
+	KindGadget = "gadget"
+	KindSpell  = "spell"
 )
 
 // Slot is one selectable position on the action bar, resolved against the
@@ -112,10 +111,9 @@ func spellSlot(tables *tuning.Tables, staff tuning.Weapon, item model.CraftedIte
 func Default(tables *tuning.Tables, class model.Class, inventory crafting.Inventory) model.Loadout {
 	table := tables.Loadout
 	set := model.Loadout{
-		Gadgets:   make([]string, table.GadgetSlots),
-		Spells:    make([]string, table.SpellSlots),
-		Keystones: make([]string, table.KeystoneSlots),
-		Version:   tables.Manifest.Version,
+		Gadgets: make([]string, table.GadgetSlots),
+		Spells:  make([]string, table.SpellSlots),
+		Version: tables.Manifest.Version,
 	}
 	set.Weapon = defaultWeapon(tables, class, inventory)
 	if class == model.Gunslinger {
@@ -123,7 +121,6 @@ func Default(tables *tuning.Tables, class model.Class, inventory crafting.Invent
 	} else {
 		fill(set.Spells, Equippable(tables, class, inventory, KindSpell))
 	}
-	fill(set.Keystones, Equippable(tables, class, inventory, KindKeystone))
 	dropIllegal(tables, class, &set)
 	return set
 }
@@ -156,20 +153,16 @@ func Resolve(tables *tuning.Tables, class model.Class, inventory crafting.Invent
 	}
 	table := tables.Loadout
 	set := model.Loadout{
-		Weapon:    resolveWeapon(tables, class, inventory, saved.Weapon),
-		Gadgets:   resize(saved.Gadgets, table.GadgetSlots),
-		Spells:    resize(saved.Spells, table.SpellSlots),
-		Keystones: resize(saved.Keystones, table.KeystoneSlots),
-		Version:   tables.Manifest.Version,
+		Weapon:  resolveWeapon(tables, class, inventory, saved.Weapon),
+		Gadgets: resize(saved.Gadgets, table.GadgetSlots),
+		Spells:  resize(saved.Spells, table.SpellSlots),
+		Version: tables.Manifest.Version,
 	}
 	for index, id := range set.Gadgets {
 		set.Gadgets[index] = owned(tables, inventory, KindGadget, id)
 	}
 	for index, id := range set.Spells {
 		set.Spells[index] = owned(tables, inventory, KindSpell, id)
-	}
-	for index, id := range set.Keystones {
-		set.Keystones[index] = owned(tables, inventory, KindKeystone, id)
 	}
 	dropIllegal(tables, class, &set)
 	changed := saved.Version != tables.Manifest.Version || !equal(saved, set)
@@ -218,12 +211,6 @@ func dropIllegal(tables *tuning.Tables, class model.Class, set *model.Loadout) {
 	}
 	deduplicate(set.Gadgets)
 	deduplicate(set.Spells)
-	deduplicate(set.Keystones)
-	for index, id := range set.Keystones {
-		if id != "" && tables.Keystones[id].Class != string(class) {
-			set.Keystones[index] = ""
-		}
-	}
 	for pass := 0; pass < len(set.Spells); pass++ {
 		index := worstAffinity(tables, set.Spells)
 		if index < 0 {
@@ -304,9 +291,6 @@ func Validate(tables *tuning.Tables, class model.Class, inventory crafting.Inven
 	if len(set.Spells) > table.SpellSlots {
 		return fmt.Errorf("a loadout holds %d spell slots, not %d", table.SpellSlots, len(set.Spells))
 	}
-	if len(set.Keystones) > table.KeystoneSlots {
-		return fmt.Errorf("a loadout holds %d keystone slots, not %d", table.KeystoneSlots, len(set.Keystones))
-	}
 	if class == model.Mage && filled(set.Gadgets) > 0 {
 		return fmt.Errorf("a Mage equips spells, not gadgets")
 	}
@@ -322,12 +306,6 @@ func Validate(tables *tuning.Tables, class model.Class, inventory crafting.Inven
 	if err := checkSlots(ledger, set.Spells, "spell", func(id string) (string, bool) {
 		spell, ok := tables.Spells[id]
 		return spell.Name, ok
-	}); err != nil {
-		return err
-	}
-	if err := checkSlots(ledger, set.Keystones, "keystone", func(id string) (string, bool) {
-		keystone, ok := tables.Keystones[id]
-		return keystone.Name, ok && keystone.Class == string(class)
 	}); err != nil {
 		return err
 	}
@@ -401,12 +379,6 @@ func Equippable(tables *tuning.Tables, class model.Class, inventory crafting.Inv
 		}
 		for id := range tables.Spells {
 			if ledger.Has(id) {
-				ids = append(ids, id)
-			}
-		}
-	case KindKeystone:
-		for id, keystone := range tables.Keystones {
-			if keystone.Class == string(class) && ledger.Has(id) {
 				ids = append(ids, id)
 			}
 		}
@@ -486,8 +458,7 @@ func filled(ids []string) int {
 func equal(a, b model.Loadout) bool {
 	return a.Weapon == b.Weapon &&
 		key(a.Gadgets) == key(b.Gadgets) &&
-		key(a.Spells) == key(b.Spells) &&
-		key(a.Keystones) == key(b.Keystones)
+		key(a.Spells) == key(b.Spells)
 }
 
 func key(ids []string) string {

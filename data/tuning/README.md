@@ -110,7 +110,6 @@ Rules, from [`invariants.md`](../../docs/game/design/invariants.md) and
 | `world.json` | World radius, spawn radius, danger bands, procedural tree parameters, fixed fixtures |
 | `combat.json` | Role and dodge-vector vocabularies, player movement/resources, universal dash, weight classes, damage bands |
 | `loadout.json` | Slot counts per kind and the Mage affinity multiplier |
-| `keystones.json` | Class-locked passive loadout tradeoffs and their behavior parameters |
 | `progression.json` | XP curve, the XP each source awards, the starter-kit draw size, the crafted-item capacity, and the developer-mode level-grant bound |
 | `elements.json` | The five Mage elements and their roles |
 | `abilities.json` | What every action costs, how often it may be used, how it is dodged, what it delivers, and what it applies |

@@ -119,18 +119,18 @@ through the authorization wrapper; client visibility alone never grants access.
 remaining slots stay empty, and an empty slot performs nothing rather than erroring. A Mage's slot one falls back to
 its staff's declared spell, so a set emptied by a content withdrawal can still fight. Loadouts cannot
 be edited outside the world at all — there is no HTTP mutation path — so logging out in the Deadlands
-is not a way to respec. The Phase 2.7 keystone is a separate class-locked slot outside the bar. The equippable set is narrowed from "every
+is not a way to respec. The equippable set is narrowed from "every
 live row" to "what this character owns" by the Phase 2.2 unlock ledger.
 
 ### 2.2 Unlock ledger & starter kit
-- [x] Flat permanent unlock ledger for gun parts, spells, and keystone IDs — sorted content IDs on the character record, never shortened ([model.go](server/internal/model/model.go), [progression.go](server/internal/progression/progression.go), [architecture.md](docs/architecture.md#progression-and-unlocks))
+- [x] Flat permanent unlock ledger for gun parts and spells — sorted content IDs on the character record, never shortened ([model.go](server/internal/model/model.go), [progression.go](server/internal/progression/progression.go), [architecture.md](docs/architecture.md#progression-and-unlocks))
 - [x] XP sources and a level → unlock mapping: [progression.json](data/tuning/progression.json) prices the sources and holds the curve, while each weapon/spell/gadget row declares its own `unlock_level`, so `Tables.UnlocksThrough` derives the mapping with no second table to keep in step
 - [x] Starter kit on creation: one random basic class weapon + a random draw of low-tier unlocks, seeded from the character ID ([progression-and-crafting.md](docs/game/design/progression-and-crafting.md#starter-kit), `progression.StarterKit`, [api.go](server/internal/api/api.go))
 - [x] Level now drives something: `World.creditKill` awards `player_kill` XP to the [damage-credited](docs/architecture.md#damage-attribution-and-combat-log) killer, `progression.Advance` grants what the levels crossed unlock, and the engine persists and pushes the change as `SERVER_PROGRESS`
 - [x] `loadout.Equippable`/`Validate`/`Resolve` intersect with the ledger, so unowned content is refused on the mutation path rather than merely hidden by the menu
 - [x] Test: a zero-material character can fill a coherent loadout immediately ([progression_test.go](server/internal/progression/progression_test.go)), plus starter-kit stability/randomness, level grants, ledger-gated validation, and the separate progression save path
 
-Only `player_kill` has a trigger: mob kills, harvesting, and outpost discovery are priced in the table and awarded by Phases 4.3, 4.1, and 3, and Phase 4.4 tunes the curve against the pacing targets. Keystone IDs share the ledger and unlock at level 9. Phase 2.4 widened the Gunslinger's basic set to four categories and its gadget pool to the riot shield, smoke, and flashbangs without touching the draw; a developer-mode level grant now reaches the rest of the ledger before mob XP lands; Phase 2.5 widened the Mage's draw to the five tier-1 spells, one per element, which is a legal six-slot set on its own because tier 1 needs no same-element company.
+Only `player_kill` has a trigger: mob kills, harvesting, and outpost discovery are priced in the table and awarded by Phases 4.3, 4.1, and 3, and Phase 4.4 tunes the curve against the pacing targets. Phase 2.4 widened the Gunslinger's basic set to four categories and its gadget pool to the riot shield, smoke, and flashbangs without touching the draw; a developer-mode level grant now reaches the rest of the ledger before mob XP lands; Phase 2.5 widened the Mage's draw to the five tier-1 spells, one per element, which is a legal six-slot set on its own because tier 1 needs no same-element company.
 
 ### 2.3 Recipe-blueprint crafting
 - [x] Generic blueprints + independently costed component recipes + authoritative finished-weapon recipes; a complete arrangement resolves the result and ambiguous recipes fail tuning validation ([components.json](data/tuning/components.json), [crafting.go](server/internal/crafting/crafting.go), [progression-and-crafting.md](docs/game/design/progression-and-crafting.md#recipe-blueprint-crafting))
@@ -209,6 +209,7 @@ controlled player ran ahead of the server and was snapped back twenty times a se
 - [x] GPU-computed client shadow wedges derived from snapshot colliders, with `occludes_vision` and `visible_in_shadow` entity attributes separating sight blockers from landmarks/decorations that remain readable beneath the 27% veil ([game-view-and-hud.md](docs/game/ui/game-view-and-hud.md#camera))
 - [x] Rework: occlusion tests the whole silhouette (any part visible) rather than the centre; smoke casts a shadow like terrain with an inside-cloud reveal circle and rim peek instead of pure containment; area fields (firestorm/blizzard/cinder) and smoke are exempt from occlusion and always sent; the client fades entities in and out of sight instead of blinking them; occluders are collected once per send ([visibility.go](server/internal/game/visibility.go), [shadow.ts](web/src/game/shadow.ts), [view.ts](web/src/game/view.ts))
 - [x] Fix: circular occluders — every smoke cloud and stone wall — cast no shadow on drivers where Pixi's default `mediump` fragment precision is fp16, because the quadratic disc test overflowed to a NaN that read as "no hit" while box terrain kept working. The veil shader now declares `precision highp float;` and measures the segment-to-centre distance instead of a discriminant ([shadow.ts](web/src/game/shadow.ts), [architecture.md](docs/architecture.md#line-of-sight))
+- [x] Fix: fields were pinned in sight on the client, and the fade is the only collection path, so every cloud a player had ever seen leaked into the scene graph — invisible at the opacity its last delete frame left, still animated and re-batched every frame, which is what degraded the frame rate (and with it the measured ping) after repeated placements. Fields now follow the same present set as everything else, a sample buffer gone quiet far longer than the fade is collected outright as a backstop, and a puff is a tinted sprite off one shared disc texture so every field on screen batches into a single draw ([view.ts](web/src/game/view.ts), [architecture.md](docs/architecture.md#line-of-sight))
 
 LOS is authoritative absence rather than a client mask: dynamic entities behind
 solid cover are omitted from the viewer's snapshot, while terrain and every field
@@ -222,16 +223,15 @@ feedback only. The client veils the hidden wedges and, inside smoke, the ground
 past the reveal radius, and fades an entity out of sight rather than dropping it
 outright — but authoritative absence remains the rule.
 
-### 2.7 Roles, keystones, and band enforcement
-- [x] Cover the seven combat roles across both classes, declared on weapons, spells, gadgets, and keystones and enforced by tuning validation ([combat.md](docs/game/design/combat.md#shared-combat-roles))
-- [x] Keystones: Volatile focus empowers mana casts at a larger mana premium; Thermal cycle replaces magazines/reloads with heat, lockout, and cooling
+### 2.7 Roles and band enforcement
+- [x] Cover the seven combat roles across both classes, declared on weapons, spells, and gadgets and enforced by tuning validation ([combat.md](docs/game/design/combat.md#shared-combat-roles))
 - [x] Add the sustained / burst / heavy-burst damage bands to [combat.json](data/tuning/combat.json), each owning both its damage anchor and cadence ([combat.md](docs/game/design/combat.md#damage-bands))
 - [x] Damage/DPS resolver computing per-hit damage, DPS, and raw TTK from band plus derived item data (`Tables.ResolveDamage`)
 - [x] Automated Common-tier band test for every damaging weapon and spell ([pillars.md](docs/game/design/pillars.md#p2--vertical-progression-is-real-and-bounded))
 - [x] Rarity tiers on components and materials, using the weakest component tier and applying its bounded multiplier once to the band anchor, never cadence ([progression-and-crafting.md](docs/game/design/progression-and-crafting.md#rarity-tiers))
-- [x] Complete-recipe vertical-budget validation: damage ≤ ×1.45, effective health ≤ ×1.38, combined single-item power ≤ ×4/3, and no item/keystone combination below 2.0 s raw TTK ([progression-and-crafting.md](docs/game/design/progression-and-crafting.md#the-vertical-budget))
+- [x] Complete-recipe vertical-budget validation: damage ≤ ×1.45, effective health ≤ ×1.38, combined single-item power ≤ ×4/3, and no item below 2.0 s raw TTK ([progression-and-crafting.md](docs/game/design/progression-and-crafting.md#the-vertical-budget))
 
-Phase 2.7 uses prototype Signature parts, a Signature prism/stave, an Aegis crystal, and Signature essence as explicit dummy catalog rows so weakest-tier rarity, horizontal modifiers, effective health, full-tier assembly, and boss-material costs are testable before Phase 3/4 acquisition systems land. The keystone slot remains outside the six action bindings and travels in the persisted/wire loadout.
+Phase 2.7 uses prototype Signature parts, a Signature prism/stave, an Aegis crystal, and Signature essence as explicit dummy catalog rows so weakest-tier rarity, horizontal modifiers, effective health, full-tier assembly, and boss-material costs are testable before Phase 3/4 acquisition systems land. Phase 2.7 originally shipped a class-locked keystone slot (Volatile focus and Thermal cycle) outside the six action bindings; it was removed as unnecessary, taking the `keystones.json` table, the wire field, and the heat/overcharge mechanics with it.
 
 ---
 

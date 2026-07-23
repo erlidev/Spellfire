@@ -22,7 +22,7 @@ For guns, the recipe list selects the intended pattern but does not decide the r
 
 Both surfaces also list content the character has *not* unlocked, disabled and labelled with the level that grants it. A kit that hides everything still locked reads as finished rather than as a starting point, and a player has no reason to believe an empty gadget slot will ever fill.
 
-Loadout validates slot limits, Mage affinity, ownership, and the one class-specific keystone before commit. The keystone selector is separate from the six action slots and explains the equipped behavior tradeoff. Leaving a safe zone visibly locks the final set; viewing remains available everywhere.
+Loadout validates slot limits, Mage affinity, and ownership before commit. Leaving a safe zone visibly locks the final set; viewing remains available everywhere.
 
 ## Death and respawn
 

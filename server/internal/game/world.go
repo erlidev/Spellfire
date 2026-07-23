@@ -111,8 +111,6 @@ type Player struct {
 	PreviousButtons                 uint32
 	NextFire, DashReady, ReloadEnds time.Time
 	Ammo                            int
-	Heat                            float64
-	Overheated                      bool
 	// Shot is the position in the equipped weapon's recoil pattern, RecoilPeak
 	// where the last shot left the muzzle in degrees off aim, and LastShot when
 	// that was: the offset decays back to aim over the weapon's recovery window
@@ -609,7 +607,7 @@ func (w *World) SetLoadout(id string, requested model.Loadout, now time.Time) (m
 	// A committed change is a fresh kit: the new weapon arrives loaded and no
 	// ability carries a lockout earned by the one it replaced. Both are only
 	// reachable inside safety, so neither can be used to refresh mid-fight.
-	p.Ammo, p.ReloadEnds, p.Heat, p.Overheated = 0, time.Time{}, 0, false
+	p.Ammo, p.ReloadEnds = 0, time.Time{}
 	if weapon, ok := w.weapon(p); ok {
 		p.Ammo = weapon.MagazineSize
 	}
@@ -847,7 +845,6 @@ func (w *World) Respawn(id string, now time.Time) bool {
 	p.Effects, p.Cooldowns = nil, make(map[string]time.Time)
 	p.ShieldAbility, p.Shield, p.ShieldBroken, p.ShieldHitAt = "", 0, false, time.Time{}
 	p.NextFire, p.ReloadEnds, p.DashReady = now, now, now
-	p.Heat, p.Overheated = 0, false
 	w.combat.resetTarget(id)
 	w.recordHistory(p, now)
 	return true
@@ -977,11 +974,9 @@ func (w *World) stepPlayer(p *Player, now time.Time, dt float64) {
 	if p.Class == model.Mage {
 		p.Mana = math.Min(w.tuning.MaxMana, p.Mana+w.tuning.ManaRegen*dt)
 	}
-	w.stepHeat(p, now, dt)
 	// Magazine size and reload time are weapon properties; a weapon without a
 	// magazine (a staff) never enters the reload path.
-	_, usesHeat := w.heatKeystone(p)
-	if weapon, ok := w.weapon(p); ok && weapon.MagazineSize > 0 && !stunned && !usesHeat {
+	if weapon, ok := w.weapon(p); ok && weapon.MagazineSize > 0 && !stunned {
 		if !p.ReloadEnds.IsZero() && !now.Before(p.ReloadEnds) {
 			p.Ammo, p.ReloadEnds = weapon.MagazineSize, time.Time{}
 		}

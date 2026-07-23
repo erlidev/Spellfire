@@ -48,7 +48,6 @@ describe("shared tuning tables", () => {
   it("meters the resource the equipped weapon actually spends", () => {
     const gun = starterWeapon("gunslinger");
     expect(resourceMax(gun)).toEqual({ label: "Ammo", max: gun.magazine_size, capped: true });
-    expect(resourceMax(gun, "thermal-cycle")).toEqual({ label: "Heat", max: 10, capped: true });
     expect(resourceMax(starterWeapon("mage"))).toEqual({ label: "Mana", max: combat.player.max_mana, capped: true });
     // A weapon that spends crafted ammunition meters what it carries instead of
     // a magazine, so the HUD never shows a reload that will never come.

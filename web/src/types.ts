@@ -14,7 +14,7 @@ export interface InputFrame {
 }
 
 /** The equipped set. Both arrays are positional; an empty slot is "". */
-export interface LoadoutSet { weapon: string; gadgets: string[]; spells: string[]; keystones: string[] }
+export interface LoadoutSet { weapon: string; gadgets: string[]; spells: string[] }
 
 /**
  * A crafted weapon as it is owned: the weapon category it instantiates and the

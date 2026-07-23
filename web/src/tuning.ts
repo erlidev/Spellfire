@@ -11,7 +11,6 @@ import componentsData from "../../data/tuning/components.json";
 import elementsData from "../../data/tuning/elements.json";
 import entitiesData from "../../data/tuning/entities.json";
 import gadgetsData from "../../data/tuning/gadgets.json";
-import keystonesData from "../../data/tuning/keystones.json";
 import loadoutData from "../../data/tuning/loadout.json";
 import manifestData from "../../data/tuning/manifest.json";
 import materialsData from "../../data/tuning/materials.json";
@@ -70,9 +69,8 @@ export interface Weapon { name: string; class: CharacterClass; blueprint: string
 export interface Ammunition { name: string; class: CharacterClass; material: string; count: number; cost: Record<string, number> }
 export interface Spell { name: string; element: string; tier: number; starter?: boolean; unlock_level: number; ability: string; roles: string[] }
 export interface Gadget { name: string; class: CharacterClass; starter?: boolean; unlock_level: number; ability: string; roles: string[] }
-export interface Keystone { name: string; class: CharacterClass; unlock_level: number; behavior: "overcharge" | "overheat"; roles: string[]; damage_multiplier?: number; cost_multiplier?: number; heat_capacity?: number; heat_per_shot?: number; heat_cool_per_second?: number; heat_resume_fraction?: number }
 export interface ProgressionTable { max_level: number; base_xp: number; growth: number; sources: Record<string, number>; crafted_item_capacity: number; starter_kit: { unlocks: number }; admin_grant: AdminField }
-export interface LoadoutTable { weapon_slots: number; gadget_slots: number; spell_slots: number; keystone_slots: number; affinity: { same_element_per_tier: number } }
+export interface LoadoutTable { weapon_slots: number; gadget_slots: number; spell_slots: number; affinity: { same_element_per_tier: number } }
 export interface Blueprint { name: string; summary: string; slots: string[] }
 export interface Component { name: string; blueprint: string; slot: string; kind: "gun_part" | "mana_crystal" | "stave"; tier: number; element?: string; effect: string; cost: Record<string, number>; modifiers: Record<string, number> }
 export interface CraftRecipe { blueprint: string; summary: string; slots: Record<string, string[]> }
@@ -95,7 +93,6 @@ export const effects = effectsData as Record<string, Effect>;
 export const weapons = weaponsData as Record<string, Weapon>;
 export const spells = spellsData as Record<string, Spell>;
 export const gadgets = gadgetsData as Record<string, Gadget>;
-export const keystones = keystonesData as Record<string, Keystone>;
 export const ammunition = ammunitionData as Record<string, Ammunition>;
 export const loadoutTable = loadoutData as LoadoutTable;
 export const progression = progressionData as ProgressionTable;
@@ -165,9 +162,7 @@ function damageBand(band: string): DamageBand {
  * The resource the HUD meters: the equipped magazine, the crafted ammunition a
  * weapon spends instead of one, or mana when it has neither.
  */
-export function resourceMax(weapon: Weapon | undefined, keystoneID = ""): { label: string; max: number; capped: boolean } {
-  const keystone = keystones[keystoneID];
-  if (keystone?.behavior === "overheat") return { label: "Heat", max: keystone.heat_capacity ?? 1, capped: true };
+export function resourceMax(weapon: Weapon | undefined): { label: string; max: number; capped: boolean } {
   if (weapon?.magazine_size) return { label: "Ammo", max: weapon.magazine_size, capped: true };
   const spent = weapon ? specialAmmunition(weapon) : undefined;
   // Crafted ammunition has no magazine to fill: the meter shows what is carried,

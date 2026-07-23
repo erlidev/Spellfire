@@ -42,17 +42,16 @@ type Point struct{ X, Y float64 }
 // is owed the global respec — the set is re-resolved and re-validated on the
 // next join rather than silently carrying an arrangement a patch invalidated.
 type Loadout struct {
-	Weapon    string   `json:"weapon"`
-	Gadgets   []string `json:"gadgets"`
-	Spells    []string `json:"spells"`
-	Keystones []string `json:"keystones"`
-	Version   int      `json:"version"`
+	Weapon  string   `json:"weapon"`
+	Gadgets []string `json:"gadgets"`
+	Spells  []string `json:"spells"`
+	Version int      `json:"version"`
 }
 
 // Empty reports a record that has never had a loadout written — a character
 // created before it chose one, which resolves to the class default.
 func (l Loadout) Empty() bool {
-	return l.Weapon == "" && len(l.Gadgets) == 0 && len(l.Spells) == 0 && len(l.Keystones) == 0
+	return l.Weapon == "" && len(l.Gadgets) == 0 && len(l.Spells) == 0
 }
 
 // Clone copies the slices so a stored loadout cannot be mutated through a
@@ -60,7 +59,6 @@ func (l Loadout) Empty() bool {
 func (l Loadout) Clone() Loadout {
 	l.Gadgets = append([]string(nil), l.Gadgets...)
 	l.Spells = append([]string(nil), l.Spells...)
-	l.Keystones = append([]string(nil), l.Keystones...)
 	return l
 }
 

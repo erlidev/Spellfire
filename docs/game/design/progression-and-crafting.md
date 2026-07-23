@@ -44,9 +44,9 @@ Two consequences follow and are load-bearing:
 
 | Layer | Persistence | Contents | Where it changes |
 |---|---|---|---|
-| Character | Permanent references | Level; part, spell, and keystone unlock ledger | Earned through XP, discovery, and materials |
+| Character | Permanent references | Level; part and spell unlock ledger | Earned through XP, discovery, and materials |
 | Crafting | Permanent items | Guns, staffs, special ammo, consumables | Safe zones only |
-| Loadout | Fluid | One weapon plus equipped gadgets/spells and keystones | Safe zones only; locked outside |
+| Loadout | Fluid | One weapon plus equipped gadgets/spells | Safe zones only; locked outside |
 
 ### Slots
 
@@ -57,7 +57,7 @@ The loadout is one **six-slot action bar**, the same width for both classes so a
 | Gunslinger | Equipped weapon | Five gadgets |
 | Mage | Spell | Five more spells |
 
-A Mage's staff is the delivery device rather than a bar slot: it casts whichever spell is selected. The counts live in [`loadout.json`](../../../data/tuning/loadout.json) and are tunable, but the two arrangements must stay the same width, because a class with bindings the other cannot reach would need its own control scheme. Each class also has one keystone slot outside the action bar.
+A Mage's staff is the delivery device rather than a bar slot: it casts whichever spell is selected. The counts live in [`loadout.json`](../../../data/tuning/loadout.json) and are tunable, but the two arrangements must stay the same width, because a class with bindings the other cannot reach would need its own control scheme.
 
 The open-world loadout lock is the economy's keystone. Players commit before leaving safety and can be countered. Owning more options improves preparation; owning rarer items improves power, but both are committed before the encounter and neither can be swapped in reply to what the fight turns out to be. Both classes can eventually unlock everything.
 
@@ -107,7 +107,7 @@ The UI presents crystal and stave crafting as two deliberate choices, then commi
 
 Components are where the [vertical budget](#the-vertical-budget) is actually spent. A component's tier sets both its material cost and the share of the budget it may draw, and validation caps the total a finished item can reach — the budget is enforced on the assembled weapon, not per part, or five modest parts would stack into an immodest gun.
 
-The loader enumerates every legal complete recipe arrangement, including every accepted alternative in every slot. It rejects assembled damage above ×1.45, effective health above ×1.38, combined single-item power above ×4/3, and any item—or Mage item plus overcharge keystone—that pulls raw player TTK below 2 seconds.
+The loader enumerates every legal complete recipe arrangement, including every accepted alternative in every slot. It rejects assembled damage above ×1.45, effective health above ×1.38, combined single-item power above ×4/3, and any item that pulls raw player TTK below 2 seconds.
 
 Gun parts spend most of their value on handling and reach, and the remainder on the damage multiplier their tier allows. Mana crystals carry the Mage's equivalent: bounded `spell_damage` and `spell_healing` multipliers, general to every spell cast through the staff, which never alter a spell-specific row or the shared damage-band data itself.
 

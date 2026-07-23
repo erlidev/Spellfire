@@ -45,15 +45,6 @@ Balance equivalent roles across classes instead of comparing guns and spells ad 
 
 Fixed equipped slots enforce the role budget: no build covers every role, whatever its gear is worth. Progression adds safe-zone choices and a bounded amount of power inside the roles a player has already committed to.
 
-## Keystones
-
-Keystones occupy one class-locked slot outside the six action bindings. The first two test the full behavior contract:
-
-- **Volatile focus (Mage):** every mana cast deals 6% more damage and costs 50% more mana. The small premium remains meaningful without letting a complete Signature staff cross the absolute 2-second raw-TTK floor.
-- **Thermal cycle (Gunslinger):** magazine ammunition becomes a ten-point heat bar. Shots add heat, sustained fire locks at capacity, cooling starts after a 500 ms quiet window, and fire resumes below 35% heat. Reload is disabled while it is equipped.
-
-Keystones are a build-identity axis rather than another gear tier. Their tradeoffs are authored separately from the assembled item's vertical caps, but the final gear-plus-keystone combination is still tested against the universal TTK floor.
-
 ## Universal dash
 
 Every build has a short dash with a meaningful cooldown and no invulnerability frames. It can dodge one telegraph or adjust position, but cannot reliably escape or kite.

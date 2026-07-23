@@ -34,7 +34,6 @@ func (t *Tables) validate() error {
 	t.validateAbilities(problems)
 	t.validateSpells(problems)
 	t.validateGadgets(problems)
-	t.validateKeystones(problems)
 	t.validateWeapons(problems)
 	t.validateAmmunition(problems)
 	t.validateUnlockIDs(problems)
@@ -343,7 +342,6 @@ func (t *Tables) validateLoadout(r *report) {
 	r.require(l.WeaponSlots == 1, "loadout: weapon_slots is %d; a character carries exactly one weapon", l.WeaponSlots)
 	r.require(l.GadgetSlots > 0, "loadout: gadget_slots must be positive")
 	r.require(l.SpellSlots > 0, "loadout: spell_slots must be positive")
-	r.require(l.KeystoneSlots == 1, "loadout: keystone_slots is %d; each class equips exactly one keystone tradeoff", l.KeystoneSlots)
 	r.require(l.WeaponSlots+l.GadgetSlots == l.SpellSlots,
 		"loadout: weapon_slots %d plus gadget_slots %d must equal spell_slots %d, or the two classes fill action bars of different widths",
 		l.WeaponSlots, l.GadgetSlots, l.SpellSlots)
@@ -403,9 +401,6 @@ func (t *Tables) validateUnlockIDs(r *report) {
 	}
 	for _, id := range sortedKeys(t.Gadgets) {
 		claim("gadgets", id, t.Gadgets[id].UnlockLevel)
-	}
-	for _, id := range sortedKeys(t.Keystones) {
-		claim("keystones", id, t.Keystones[id].UnlockLevel)
 	}
 }
 
@@ -934,34 +929,6 @@ func (t *Tables) validateGadgets(r *report) {
 	}
 }
 
-func (t *Tables) validateKeystones(r *report) {
-	for _, id := range sortedKeys(t.Keystones) {
-		keystone := t.Keystones[id]
-		r.require(keystone.Name != "", "keystones: %q has no name", id)
-		r.require(keystone.Class == "gunslinger" || keystone.Class == "mage", "keystones: %q has unknown class %q", id, keystone.Class)
-		t.validateRoles(r, "keystones", id, keystone.Roles)
-		switch keystone.Behavior {
-		case KeystoneOvercharge:
-			r.require(keystone.Class == "mage", "keystones: %q overcharge belongs to %s, want mage", id, keystone.Class)
-			r.require(keystone.DamageMultiplier > 1 && keystone.CostMultiplier > keystone.DamageMultiplier,
-				"keystones: %q overcharge needs a damage benefit and a larger mana-cost tradeoff", id)
-			r.require(keystone.HeatCapacity == 0 && keystone.HeatPerShot == 0 && keystone.HeatCoolPerSecond == 0 && keystone.HeatResumeFraction == 0,
-				"keystones: %q overcharge declares heat fields it does not use", id)
-		case KeystoneOverheat:
-			r.require(keystone.Class == "gunslinger", "keystones: %q overheat belongs to %s, want gunslinger", id, keystone.Class)
-			r.require(keystone.HeatCapacity > 0 && keystone.HeatPerShot > 0 && keystone.HeatPerShot < keystone.HeatCapacity,
-				"keystones: %q overheat needs positive per-shot heat below its capacity", id)
-			r.require(keystone.HeatCoolPerSecond > 0, "keystones: %q overheat never cools", id)
-			r.require(keystone.HeatResumeFraction > 0 && keystone.HeatResumeFraction < 1,
-				"keystones: %q heat_resume_fraction must lie in (0,1)", id)
-			r.require(keystone.DamageMultiplier == 0 && keystone.CostMultiplier == 0,
-				"keystones: %q overheat also declares numeric output; behavior tradeoffs stay outside rarity", id)
-		default:
-			r.addf("keystones: %q has unknown behavior %q", id, keystone.Behavior)
-		}
-	}
-}
-
 func (t *Tables) validateRoles(r *report, table, id string, roles []string) {
 	r.require(len(roles) > 0, "%s: %q declares no combat roles", table, id)
 	seen := map[string]bool{}
@@ -1059,15 +1026,6 @@ func (t *Tables) validateRoleCoverage(r *report) {
 			coverage["mage"][role] = true
 		}
 	}
-	for _, keystone := range t.Keystones {
-		classCoverage, ok := coverage[keystone.Class]
-		if !ok {
-			continue
-		}
-		for _, role := range keystone.Roles {
-			classCoverage[role] = true
-		}
-	}
 	for _, class := range []string{"gunslinger", "mage"} {
 		for _, role := range t.Combat.Roles {
 			r.require(coverage[class][role], "combat: %s content does not cover the %q role", class, role)
@@ -1118,14 +1076,6 @@ func (t *Tables) validateVerticalBudget(r *report) {
 					ability.DamageMultiplier = damage
 					r.require(t.ResolveDamage(ability, t.Entities["player"].MaxHealth).RawTTK.Seconds() >= minimumRawTTKSeconds,
 						"vertical budget: %s pulls %s raw TTK below %.1fs", label, spell.ID, minimumRawTTKSeconds)
-					for _, keystone := range t.Keystones {
-						if keystone.Class != "mage" || keystone.Behavior != KeystoneOvercharge {
-							continue
-						}
-						ability.DamageMultiplier = damage * keystone.DamageMultiplier
-						r.require(t.ResolveDamage(ability, t.Entities["player"].MaxHealth).RawTTK.Seconds() >= minimumRawTTKSeconds,
-							"vertical budget: %s plus %s pulls %s raw TTK below %.1fs", label, keystone.ID, spell.ID, minimumRawTTKSeconds)
-					}
 				}
 			} else if ability, ok := t.Abilities[weapon.Ability]; ok && ability.Damaging() {
 				ability.DamageMultiplier = damage

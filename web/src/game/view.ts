@@ -1,4 +1,4 @@
-import { Application, Container, Graphics, Text } from "pixi.js";
+import { Application, Container, Graphics, Sprite, Text, Texture } from "pixi.js";
 // Install eval-free polyfills so WebGL works under a CSP without 'unsafe-eval'. Side-effect import; must run before the renderer is created.
 import "pixi.js/unsafe-eval";
 import { abilities, deployableByKind, effects, entityDefinitions, projectileByKind, safeRadius, simulation, world } from "../tuning";
@@ -18,7 +18,11 @@ interface ActorView {
   /** Line-of-sight fade, 0..1: ramps up as an entity enters sight and down as it leaves. */
   los: number;
 }
-interface Puff { graphic: Graphics; distance: number; angle: number; radius: number; drift: number }
+// A puff is a tinted sprite off the one shared disc texture rather than its own
+// filled circle: every cloud on screen then batches into a single draw, and a
+// drifting puff re-uploads four vertices instead of a tessellated ring. `scale`
+// is the puff's authored size against that texture, which the breathe multiplies.
+interface Puff { graphic: Sprite; distance: number; angle: number; scale: number; drift: number }
 
 // How a shot reads: the weapon is shoved back along its own axis and a flash
 // sits at the muzzle for the same window. The window is short enough to survive
@@ -40,10 +44,19 @@ const shakeDistance = 6;
 const puffCount = 18;
 const puffCoreCount = 6;
 const puffFadeMS = 320;
+const puffAlpha = .32;
+// The radius the shared disc texture is drawn at. Large enough that the widest
+// authored field scales it down rather than up, so no cloud is drawn from a
+// magnified texture.
+const puffTextureRadius = 128;
 // A body entering or leaving line of sight fades rather than snapping, which is
 // less jarring than a body blinking in and out behind cover. Short enough that a
 // covered opponent does not linger as usable information.
 const losFadeMS = 140;
+// How long a sample buffer may go without a snapshot before its actor is
+// collected regardless of what its fade is doing. It is comfortably longer than
+// the fade plus snapshot jitter, so it never cuts a legitimate fade short.
+const staleSampleMS = 1000;
 
 const colors = {
   ground: 0x16233a, grid: 0x2c405e, safe: 0x7ee1bb, rim: 0x8d5260, self: 0xffffff, hostile: 0xff6f69,
@@ -99,10 +112,16 @@ export class GameView {
   // The scope's camera exception: the view is pushed toward where the weapon is
   // pointed, by a fraction of the reach the server widened the snapshot by.
   private scopeOffset = { x: 0, y: 0 };
+  // One disc every puff of every field is drawn from. Built once the renderer
+  // exists; a field spamming the world then costs sprites rather than geometry.
+  private puffTexture?: Texture;
 
   async init(host: HTMLElement): Promise<void> {
     await this.app.init({ resizeTo: window, antialias: true, backgroundColor: colors.ground, resolution: Math.min(2, devicePixelRatio), autoDensity: true });
     host.replaceChildren(this.app.canvas);
+    const disc = new Graphics().circle(puffTextureRadius, puffTextureRadius, puffTextureRadius).fill(0xffffff);
+    this.puffTexture = this.app.renderer.generateTexture({ target: disc, antialias: true });
+    disc.destroy();
     this.world.addChild(this.ground, this.telegraphLayer, this.entityLayer);
     this.overlayWorld.addChild(this.shadowVisibleLayer, this.fieldLayer, this.fogLayer);
     this.shadow.filters = [this.shadowFilter];
@@ -189,7 +208,9 @@ export class GameView {
 
   destroy(): void {
     if (!this.initialized) return;
-    this.app.destroy(true, { children: true }); this.initialized = false;
+    this.app.destroy(true, { children: true });
+    this.puffTexture?.destroy(true); this.puffTexture = undefined;
+    this.initialized = false;
   }
 
   private renderFrame(): void {
@@ -209,9 +230,16 @@ export class GameView {
     if (local) this.drawEntity({ ...local, x: predictor.x, y: predictor.y, aimX: predictor.aimX, aimY: predictor.aimY }, true, now);
     const renderAt = now - simulation.interpolation_delay_ms;
     for (const [id, samples] of this.samples) {
+      // A buffer that has gone quiet for far longer than the fade window is not a
+      // body held behind cover — the server has stopped sending it entirely — so
+      // it is collected outright. The fade sweep below is the ordinary path; this
+      // is the backstop that keeps a buffer from outliving its actor, because
+      // interpolation past the last sample never reports absence on its own.
+      const last = samples.at(-1);
+      if (!last || now - last.at > staleSampleMS) { this.removeActor(id); continue; }
       const entity = interpolate(samples, renderAt);
       if (entity) this.drawEntity(entity, false, now);
-      else if (!this.latestEntities.has(id)) this.removeActor(id);
+      else this.removeActor(id);
     }
     // Collect any actor that has fully faded out of sight. Until then it keeps
     // being drawn, frozen at its last-seen position.
@@ -302,9 +330,12 @@ export class GameView {
     }
     view.root.position.set(entity.x, entity.y);
     // Step the line-of-sight fade toward present (1) or omitted (0). The local
-    // body and area fields are always in sight; everything else fades with the
-    // authoritative snapshot's present set.
-    const inSight = self || this.visible.has(entity.id) || entity.type === EntityType.Deployable;
+    // body is always in sight; everything else follows the authoritative
+    // snapshot's present set. Fields are exempt from line of sight on the wire —
+    // the server sends them through cover — so a standing field is always in that
+    // set anyway, and pinning it here instead would mean an expired cloud never
+    // faded and therefore was never collected.
+    const inSight = self || this.visible.has(entity.id);
     const step = this.frameDt / losFadeMS;
     view.los = inSight ? Math.min(1, view.los + step) : Math.max(0, view.los - step);
     const base = entity.deleting ? Math.max(0, 1 - entity.deleteProgress) : entity.alive ? entity.lingering ? .62 : 1 : .32;
@@ -390,8 +421,7 @@ export class GameView {
       const angle = puff.angle + (age / 1000) * puff.drift;
       const breathe = 1 + Math.sin(age / 620 + puff.angle) * .07;
       puff.graphic.position.set(Math.cos(angle) * puff.distance, Math.sin(angle) * puff.distance);
-      puff.graphic.scale.set(breathe);
-      puff.graphic.alpha = .32;
+      puff.graphic.scale.set(puff.scale * breathe);
     }
   }
 
@@ -428,7 +458,9 @@ export class GameView {
       for (let index = 0; index < puffCount; index++) {
         const spin = fraction(seed + index * 97), spread = fraction(seed + index * 53);
         const core = index < puffCoreCount;
-        const puff = new Graphics();
+        const puff = new Sprite(this.puffTexture ?? Texture.EMPTY);
+        puff.anchor.set(.5);
+        puff.alpha = puffAlpha;
         // The two groups are sized alike and their bands deliberately run into
         // each other — the core scattered out to .38r and the outer ones sitting
         // anywhere from .44r to .70r — so an outer puff reaches the middle and a
@@ -443,10 +475,10 @@ export class GameView {
           : ((index - puffCoreCount + (spin - .5) * 1.1) / ring) * Math.PI * 2;
         // A field is tinted by what cast it, because a smoke cloud, a burning
         // patch, and a blizzard are the same shape and must never read alike.
-        puff.circle(0, 0, size).fill({ color: elementColors[entity.element] ?? 0xdfe6ef, alpha: 1 });
+        puff.tint = elementColors[entity.element] ?? 0xdfe6ef;
         puffs.push({
           graphic: puff, distance: radius * (core ? .38 * spread : .44 + spread * .26),
-          angle, radius: size, drift: turn + (spin - .5) * (core ? .3 : .05),
+          angle, scale: size / puffTextureRadius, drift: turn + (spin - .5) * (core ? .3 : .05),
         });
         body.addChild(puff);
       }

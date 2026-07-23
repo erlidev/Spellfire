@@ -257,13 +257,6 @@ func TestRarityUsesTheWeakestComponentAndCoversEveryRole(t *testing.T) {
 				}
 			}
 		}
-		for _, keystone := range tables.Keystones {
-			if keystone.Class == class {
-				for _, role := range keystone.Roles {
-					covered[role] = true
-				}
-			}
-		}
 		for _, role := range tables.Combat.Roles {
 			if !covered[role] {
 				t.Errorf("%s does not cover %s", class, role)

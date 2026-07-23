@@ -70,7 +70,6 @@ function encodeLoadout(set: LoadoutSet): Uint8Array {
   writer.string(1, set.weapon);
   for (const id of set.gadgets) writer.slot(2, id);
   for (const id of set.spells) writer.slot(3, id);
-  for (const id of set.keystones) writer.slot(4, id);
   return writer.finish();
 }
 
@@ -79,7 +78,7 @@ export function encodeLoadoutEnvelope(set: LoadoutSet): Uint8Array {
 }
 
 function decodeLoadout(bytes: Uint8Array): LoadoutSet {
-  const value: LoadoutSet = { weapon: "", gadgets: [], spells: [], keystones: [] };
+  const value: LoadoutSet = { weapon: "", gadgets: [], spells: [] };
   const reader = new Reader(bytes);
   while (!reader.done) {
     const tag = reader.varint(), field = tag >>> 3, wire = tag & 7;
@@ -87,7 +86,6 @@ function decodeLoadout(bytes: Uint8Array): LoadoutSet {
       case 1: value.weapon = reader.string(); break;
       case 2: value.gadgets.push(reader.string()); break;
       case 3: value.spells.push(reader.string()); break;
-      case 4: value.keystones.push(reader.string()); break;
       default: reader.skip(wire);
     }
   }

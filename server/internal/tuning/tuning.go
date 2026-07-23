@@ -21,7 +21,7 @@ import (
 // SchemaVersion is the table shape this build understands. Bump it only when a
 // table changes shape, and add the matching forward migration; a plain balance
 // edit bumps Manifest.Version instead and needs no code change.
-const SchemaVersion = 19
+const SchemaVersion = 20
 
 type Manifest struct {
 	// Version is the content revision. Bump it on any balance edit; a change
@@ -769,28 +769,6 @@ type Gadget struct {
 	Roles       []string `json:"roles"`
 }
 
-const (
-	KeystoneOvercharge = "overcharge"
-	KeystoneOverheat   = "overheat"
-)
-
-// Keystone is one safe-zone-committed behavior tradeoff. It never contributes
-// to item rarity or the vertical budget: its benefit and cost are inseparable.
-type Keystone struct {
-	ID                 string   `json:"-"`
-	Name               string   `json:"name"`
-	Class              string   `json:"class"`
-	UnlockLevel        int      `json:"unlock_level"`
-	Behavior           string   `json:"behavior"`
-	Roles              []string `json:"roles"`
-	DamageMultiplier   float64  `json:"damage_multiplier"`
-	CostMultiplier     float64  `json:"cost_multiplier"`
-	HeatCapacity       float64  `json:"heat_capacity"`
-	HeatPerShot        float64  `json:"heat_per_shot"`
-	HeatCoolPerSecond  float64  `json:"heat_cool_per_second"`
-	HeatResumeFraction float64  `json:"heat_resume_fraction"`
-}
-
 // Ammunition is a craftable special round: a recipe that spends materials and
 // yields a carried material of its own, which the ability that fires it spends.
 // It is deliberately not an unlock — the recipe is the launcher's, and what
@@ -883,11 +861,10 @@ type Affinity struct {
 // gadgets, a Mage with spells, and validation keeps the two arrangements the
 // same length so one binding set serves both.
 type Loadout struct {
-	WeaponSlots   int      `json:"weapon_slots"`
-	GadgetSlots   int      `json:"gadget_slots"`
-	SpellSlots    int      `json:"spell_slots"`
-	KeystoneSlots int      `json:"keystone_slots"`
-	Affinity      Affinity `json:"affinity"`
+	WeaponSlots int      `json:"weapon_slots"`
+	GadgetSlots int      `json:"gadget_slots"`
+	SpellSlots  int      `json:"spell_slots"`
+	Affinity    Affinity `json:"affinity"`
 }
 
 // BarSlots is the number of selectable action-bar slots, which the keyboard
@@ -1091,7 +1068,7 @@ type Biome struct {
 
 // RetiredKinds are the tables a retirement may name. A retired ID resolves
 // within its own kind; nothing is ever retired across tables.
-var RetiredKinds = []string{"weapon", "spell", "gadget", "keystone", "ability", "effect", "component", "blueprint", "material", "element", "biome", "mob", "ammunition"}
+var RetiredKinds = []string{"weapon", "spell", "gadget", "ability", "effect", "component", "blueprint", "material", "element", "biome", "mob", "ammunition"}
 
 // maxRetirementHops bounds a replacement chain. Validation rejects cycles, so
 // this only guards a table that somehow reached the resolver unvalidated.
@@ -1126,7 +1103,6 @@ type Tables struct {
 	Weapons     map[string]Weapon
 	Spells      map[string]Spell
 	Gadgets     map[string]Gadget
-	Keystones   map[string]Keystone
 	Ammunition  map[string]Ammunition
 	Components  Components
 	Materials   Materials
@@ -1173,8 +1149,6 @@ func (t *Tables) Live(kind, id string) bool {
 		return t.Spells[id].Name != ""
 	case "gadget":
 		return t.Gadgets[id].Name != ""
-	case "keystone":
-		return t.Keystones[id].Name != ""
 	case "ability":
 		return t.Abilities[id].Name != ""
 	case "effect":
@@ -1290,8 +1264,7 @@ func (t *Tables) ResolveDamage(ability Ability, targetHealth float64) DamageProf
 // UnlockKinds are the tables a permanent unlock ID may name. The ledger is
 // flat, so an ID is unique across all of them — validation enforces it — and a
 // saved entry can be resolved without also storing which table it came from.
-// Keystones join the list when Phase 2.7 settles them.
-var UnlockKinds = []string{"weapon", "spell", "gadget", "keystone"}
+var UnlockKinds = []string{"weapon", "spell", "gadget"}
 
 // StarterWeapons is the basic set of the class: the pool a new character draws
 // its one opening weapon from. Validation guarantees at least one per class.
@@ -1363,11 +1336,6 @@ func (t *Tables) UnlocksThrough(level int) []string {
 			granted = append(granted, id)
 		}
 	}
-	for _, id := range sortedKeys(t.Keystones) {
-		if t.Keystones[id].UnlockLevel <= level {
-			granted = append(granted, id)
-		}
-	}
 	sort.Strings(granted)
 	return granted
 }
@@ -1434,7 +1402,6 @@ func Parse(fsys fs.FS) (*Tables, error) {
 		{"weapons.json", &tables.Weapons},
 		{"spells.json", &tables.Spells},
 		{"gadgets.json", &tables.Gadgets},
-		{"keystones.json", &tables.Keystones},
 		{"ammunition.json", &tables.Ammunition},
 		{"components.json", &tables.Components},
 		{"materials.json", &tables.Materials},
@@ -1498,10 +1465,6 @@ func (t *Tables) stampIDs() {
 	for id, gadget := range t.Gadgets {
 		gadget.ID = id
 		t.Gadgets[id] = gadget
-	}
-	for id, keystone := range t.Keystones {
-		keystone.ID = id
-		t.Keystones[id] = keystone
 	}
 	for id, ammunition := range t.Ammunition {
 		ammunition.ID = id

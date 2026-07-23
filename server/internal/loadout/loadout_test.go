@@ -80,27 +80,6 @@ func TestDefaultIsEquippableForBothClasses(t *testing.T) {
 	}
 }
 
-func TestKeystoneSlotIsClassLockedAndOutsideTheBar(t *testing.T) {
-	tables := shipped(t)
-	inventory := everything(tables)
-	set := loadout.Default(tables, model.Mage, inventory)
-	set.Keystones = []string{"volatile-focus"}
-	if err := loadout.Validate(tables, model.Mage, inventory, set); err != nil {
-		t.Fatalf("Mage keystone was refused: %v", err)
-	}
-	if got := len(loadout.Bar(tables, model.Mage, inventory, set)); got != tables.Loadout.BarSlots() {
-		t.Fatalf("keystone changed the action bar to %d slots", got)
-	}
-	set.Keystones = []string{"thermal-cycle"}
-	if err := loadout.Validate(tables, model.Mage, inventory, set); err == nil {
-		t.Fatal("Mage equipped the Gunslinger keystone")
-	}
-	set.Keystones = []string{"volatile-focus", "volatile-focus"}
-	if err := loadout.Validate(tables, model.Mage, inventory, set); err == nil {
-		t.Fatal("loadout accepted more than one keystone")
-	}
-}
-
 func TestBarLaysClassesOutOverTheSameBindings(t *testing.T) {
 	tables := shipped(t)
 	gunslinger := loadout.Bar(tables, model.Gunslinger, kit(tables, model.Gunslinger), loadout.Default(tables, model.Gunslinger, kit(tables, model.Gunslinger)))

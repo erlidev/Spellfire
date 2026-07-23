@@ -262,8 +262,6 @@ func TestLoadoutWirePreservesEmptySlots(t *testing.T) {
 		set = protowire.AppendTag(set, 3, protowire.BytesType)
 		set = protowire.AppendString(set, id)
 	}
-	set = protowire.AppendTag(set, 4, protowire.BytesType)
-	set = protowire.AppendString(set, "volatile-focus")
 	var envelope []byte
 	envelope = protowire.AppendTag(envelope, 1, protowire.VarintType)
 	envelope = protowire.AppendVarint(envelope, ClientLoadout)
@@ -279,9 +277,6 @@ func TestLoadoutWirePreservesEmptySlots(t *testing.T) {
 	if len(decoded.Loadout.Spells) != 3 || decoded.Loadout.Spells[2] != "fire-bolt" || decoded.Loadout.Spells[0] != "" {
 		t.Fatalf("spell slots = %#v", decoded.Loadout.Spells)
 	}
-	if len(decoded.Loadout.Keystones) != 1 || decoded.Loadout.Keystones[0] != "volatile-focus" {
-		t.Fatalf("keystone slots = %#v", decoded.Loadout.Keystones)
-	}
 }
 
 // The reply must round-trip the same way, and a snapshot must not carry a
@@ -290,14 +285,11 @@ func TestLoadoutWirePreservesEmptySlots(t *testing.T) {
 func TestEncodeServerCarriesLoadoutOnlyWhenSet(t *testing.T) {
 	reply := EncodeServer(ServerEnvelope{
 		Kind: ServerLoadout, PlayerID: "p1", LoadoutEditable: true,
-		Loadout: &Loadout{Weapon: "starter-staff", Spells: []string{"", "fire-bolt"}, Keystones: []string{"volatile-focus"}},
+		Loadout: &Loadout{Weapon: "starter-staff", Spells: []string{"", "fire-bolt"}},
 	})
 	snapshot := EncodeServer(ServerEnvelope{Kind: ServerSnapshot, PlayerID: "p1"})
 	if !bytes.Contains(reply, []byte("fire-bolt")) {
 		t.Fatalf("reply lost the equipped set: %x", reply)
-	}
-	if !bytes.Contains(reply, []byte("volatile-focus")) {
-		t.Fatalf("reply lost the keystone: %x", reply)
 	}
 	for _, field := range []protowire.Number{9, 10, 11} {
 		if hasField(snapshot, field) {
