@@ -44,6 +44,24 @@
       "summary": "T3 · Full PvP · high insurance"
     }
   ],
+  "field": {
+    "seed": 2676017207,
+    "region_cell": 9000,
+    "region_jitter": 0.72,
+    "radial_reference": 22500,
+    "warp_cell": 14000,
+    "warp_amplitude": 2600,
+    "blend_width": 0.16,
+    "grade_curve": {
+      "points": [[0, 0], [0.2, 0.055], [0.45, 0.19], [0.7, 0.526], [0.9, 0.83], [1, 1]],
+      "thresholds": [
+        { "grade": "common", "at": 0 },
+        { "grade": "uncommon", "at": 0.055 },
+        { "grade": "rare", "at": 0.526 }
+      ]
+    },
+    "coverage": { "resolution": 256, "minimum_share": 0.06, "minimum_samples": 400 }
+  },
   "terrain": {
     "entity": "tree",
     "seed": 1592614637,

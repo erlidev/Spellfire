@@ -23,7 +23,7 @@ and keyboard activation.
 | Loadout | Weapon, gadgets/spells, effects, lock reason | View always; edit in safety |
 | Inventory & materials | Items, raw materials, type/grade, death risk | Always |
 | Crafting | Blueprint slots, parts, cost, result, validation | Safe zones |
-| World | Outposts, biome/danger, spawn/travel | View always; actions follow design rules |
+| World | Region name and summary, danger band, ground grade, the materials that ground can yield, outposts, spawn/travel | View always; actions follow design rules |
 | Squad | Members, invites, leadership, loot rule | Conditional; social operations Open |
 | Activity | Boss rank/contribution and contextual progress | Conditional |
 | Reference | Combat resources, death, loot, danger, controls | Always |

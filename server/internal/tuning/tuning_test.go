@@ -496,12 +496,68 @@ func TestValidationRejectsBrokenTables(t *testing.T) {
 		},
 		{
 			name: "special ammunition nothing can build", file: "ammunition.json", want: "no ammunition recipe produces it",
-			mutate: func(document map[string]any) { delete(document, "rocket") },
+			// Several recipes now yield a rocket — the elemental ones are what a
+			// biome is worth travelling to — so withdrawing one leaves the round
+			// buildable. Withdrawing every recipe is what makes it unreachable.
+			mutate: func(document map[string]any) {
+				for id := range document {
+					delete(document, id)
+				}
+			},
 		},
 		{
 			name: "a round that pays for itself", file: "ammunition.json", want: "costs the very material it produces",
 			mutate: func(document map[string]any) {
 				document["rocket"].(map[string]any)["cost"] = map[string]any{"rocket": 1.0}
+			},
+		},
+		// The world field. A generated biome map is only trustworthy if a bad
+		// seed is refused rather than shipped and patched around, so each of
+		// these is a way that refusal has to fire.
+		{
+			name: "a seed that hides an element from a band", file: "world.json", want: "re-roll field.seed",
+			mutate: func(document map[string]any) {
+				field := document["field"].(map[string]any)
+				// One region wide: five biomes cannot cover four bands from it.
+				field["region_cell"] = 200000.0
+				field["warp_amplitude"] = 0.0
+			},
+		},
+		{
+			name: "a reward curve that flattens toward the rim", file: "world.json", want: "must stay convex",
+			mutate: func(document map[string]any) {
+				document["field"].(map[string]any)["grade_curve"].(map[string]any)["points"] = []any{
+					[]any{0.0, 0.0}, []any{0.2, 0.6}, []any{1.0, 1.0},
+				}
+			},
+		},
+		{
+			name: "a band whose declared grade the curve disagrees with", file: "world.json", want: "the reward curve yields",
+			mutate: func(document map[string]any) {
+				document["danger_bands"].([]any)[1].(map[string]any)["material_grade"] = "rare"
+			},
+		},
+		{
+			name: "a grade threshold that skips a rarity tier", file: "world.json", want: "one tier at a time",
+			mutate: func(document map[string]any) {
+				thresholds := document["field"].(map[string]any)["grade_curve"].(map[string]any)["thresholds"].([]any)
+				thresholds[2].(map[string]any)["grade"] = "signature"
+			},
+		},
+		{
+			name: "a region site free to leave its own cell", file: "world.json", want: "missed by the lattice search",
+			mutate: func(document map[string]any) { document["field"].(map[string]any)["region_jitter"] = 1.4 },
+		},
+		{
+			name: "two regions claiming one element", file: "biomes.json", want: "each element needs its own region",
+			mutate: func(document map[string]any) {
+				document["rimeshelf"].(map[string]any)["element"] = "fire"
+			},
+		},
+		{
+			name: "a biome with no palette", file: "biomes.json", want: "want a #rrggbb colour",
+			mutate: func(document map[string]any) {
+				document["stonereach"].(map[string]any)["palette"].(map[string]any)["haze"] = "brown"
 			},
 		},
 	}

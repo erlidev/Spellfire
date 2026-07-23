@@ -5,5 +5,19 @@
     "material": "rocket",
     "count": 3,
     "cost": { "salvaged-plate": 6, "tempered-plate": 3 }
+  },
+  "ember-rocket": {
+    "name": "Ember-charged rocket",
+    "class": "gunslinger",
+    "material": "rocket",
+    "count": 6,
+    "cost": { "ember-core": 1, "tempered-plate": 3, "flux-salt": 2 }
+  },
+  "fulgurite-rocket": {
+    "name": "Fulgurite rocket",
+    "class": "gunslinger",
+    "material": "rocket",
+    "count": 5,
+    "cost": { "fulgurite-spine": 3, "storm-shard": 2, "drawn-filament": 2 }
   }
 }

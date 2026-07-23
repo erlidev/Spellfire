@@ -23,7 +23,7 @@ func worldFrom(t *testing.T, files fstest.MapFS) (*World, time.Time) {
 	balance.AOIRadius = 500
 	// The compact test arena testWorld() explains: these tests are about
 	// mechanics, not geography.
-	balance.SafeRadius, balance.PvPRadius = 430, 1000
+	balance.scaleSafety(430, 1000)
 	world := NewWorld(balance)
 	world.setWorldItems()
 	return world, time.Unix(1_700_000_000, 0)

@@ -7,6 +7,7 @@ import { Allegiance, EntityType, ServerKind } from "../types";
 import type { Predictor } from "./prediction";
 import { SightShadowFilter } from "./shadow";
 import { telegraphStyle } from "./telegraph";
+import { biomePalette, mixColour, worldField } from "./worldfield";
 
 interface Sample { at: number; entity: Entity }
 interface ActorView {
@@ -94,6 +95,11 @@ export class GameView {
   private blackout = new Graphics();
   private blindedSince = 0;
   private blindedUntil = 0;
+  // The biome tint currently painted. It starts at the neutral palette so the
+  // very first frame — drawn before any snapshot places the camera — matches
+  // the background the renderer was created with.
+  private groundColor = colors.ground;
+  private gridColor = colors.grid;
   private shakeUntil = 0;
   // Whether the selected slot fires something heavy enough to knock the camera.
   private shakeOnFire = false;
@@ -283,12 +289,33 @@ export class GameView {
     this.blackout.rect(0, 0, width, height).fill({ color: 0xffffff, alpha });
   }
 
+  /**
+   * Paints the biome the camera is standing in. A biome reaches a player
+   * through three channels at once — the material it yields, the terrain that
+   * grows in it, and its ambient palette — and this is the third: a player
+   * should be able to name where they are standing without reading the HUD.
+   *
+   * The blend the field reports is 0 on a border and 1 deep inside a region, so
+   * a crossing arrives as a gradient rather than a seam. Contrast stays well
+   * below the gameplay layer's: this tints the ground, never the actors on it.
+   */
+  private applyBiome(cameraX: number, cameraY: number): void {
+    const sample = worldField.biomeAt(cameraX, cameraY);
+    const here = biomePalette(sample.id);
+    const there = biomePalette(sample.neighbour || sample.id);
+    const share = .5 + .5 * sample.blend;
+    this.groundColor = mixColour(there.ground, here.ground, share);
+    this.gridColor = mixColour(there.accent, here.accent, share);
+    this.app.renderer.background.color = this.groundColor;
+  }
+
   private drawGround(cameraX: number, cameraY: number, width: number, height: number): void {
+    this.applyBiome(cameraX, cameraY);
     const cell = 80, left = cameraX - width / 2 - cell, right = cameraX + width / 2 + cell, top = cameraY - height / 2 - cell, bottom = cameraY + height / 2 + cell;
     this.ground.clear();
     for (let x = Math.floor(left / cell) * cell; x <= right; x += cell) this.ground.moveTo(x, top).lineTo(x, bottom);
     for (let y = Math.floor(top / cell) * cell; y <= bottom; y += cell) this.ground.moveTo(left, y).lineTo(right, y);
-    this.ground.stroke({ color: colors.grid, width: 1, alpha: .62 });
+    this.ground.stroke({ color: this.gridColor, width: 1, alpha: .62 });
     const reach = Math.hypot(width, height) / 2 + cell;
     this.drawRing(safeRadius, colors.safe, 5, .7, cameraX, cameraY, reach);
     this.drawRing(world.radius, colors.rim, 8, .8, cameraX, cameraY, reach);

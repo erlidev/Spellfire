@@ -11,19 +11,31 @@
       "name": "Structural",
       "universal": true,
       "source": "node",
-      "summary": "Common frame and casing stock; available in every biome so geography never hard-locks a build."
-    },
-    "aligned": {
-      "name": "Element-aligned",
-      "universal": false,
-      "source": "mob",
-      "summary": "Biome-gated, element-typed stock for element-specific recipes."
+      "summary": "Frame, casing, and linkage stock; available in every biome so geography never hard-locks a build."
     },
     "wood": {
       "name": "Stave wood",
       "universal": true,
       "source": "node",
       "summary": "Heartwood determines a stave's containment tier; higher-tier staves also require metal bands and magical infusions."
+    },
+    "reagent": {
+      "name": "Reagent",
+      "universal": true,
+      "source": "node",
+      "summary": "Resins, oils, salts, and quicksilver. They bind and temper an assembly rather than forming it, so every biome yields them."
+    },
+    "aligned": {
+      "name": "Element-aligned",
+      "universal": false,
+      "source": "mob",
+      "summary": "Biome-gated, element-typed stock taken from what lives there. It is what an element-specific recipe is actually gated on."
+    },
+    "growth": {
+      "name": "Biome growth",
+      "universal": false,
+      "source": "node",
+      "summary": "Biome-gated stock cut or quarried from the ground itself, so a biome is worth travelling to even when nothing is hunting there."
     },
     "ammunition": {
       "name": "Special ammunition",
@@ -40,16 +52,51 @@
   },
   "materials": {
     "salvaged-plate": { "name": "Salvaged plate", "grade": "common", "kind": "structural" },
+    "scrap-wire": { "name": "Scrap wire", "grade": "common", "kind": "structural" },
     "tempered-plate": { "name": "Tempered plate", "grade": "uncommon", "kind": "structural" },
+    "drawn-filament": { "name": "Drawn filament", "grade": "uncommon", "kind": "structural" },
     "resonant-plate": { "name": "Resonant plate", "grade": "rare", "kind": "structural" },
-    "ember-shard": { "name": "Ember shard", "grade": "uncommon", "kind": "aligned", "biome": "emberlands" },
-    "rime-shard": { "name": "Rime shard", "grade": "uncommon", "kind": "aligned", "biome": "rimeshelf" },
-    "storm-shard": { "name": "Storm shard", "grade": "uncommon", "kind": "aligned", "biome": "stormflats" },
-    "arcane-shard": { "name": "Arcane shard", "grade": "uncommon", "kind": "aligned", "biome": "arcane-hollow" },
-    "stone-shard": { "name": "Stone shard", "grade": "uncommon", "kind": "aligned", "biome": "stonereach" },
+    "lattice-weave": { "name": "Lattice weave", "grade": "rare", "kind": "structural" },
+
     "ash-heartwood": { "name": "Ash heartwood", "grade": "common", "kind": "wood" },
+    "willow-heartwood": { "name": "Bound willow heartwood", "grade": "common", "kind": "wood" },
     "oak-heartwood": { "name": "Runed oak heartwood", "grade": "uncommon", "kind": "wood" },
+    "yew-heartwood": { "name": "Deep yew heartwood", "grade": "uncommon", "kind": "wood" },
     "ironwood-heartwood": { "name": "Resonant ironwood", "grade": "rare", "kind": "wood" },
+    "duskthorn-heartwood": { "name": "Duskthorn heartwood", "grade": "rare", "kind": "wood" },
+
+    "binding-resin": { "name": "Binding resin", "grade": "common", "kind": "reagent" },
+    "quenching-oil": { "name": "Quenching oil", "grade": "uncommon", "kind": "reagent" },
+    "flux-salt": { "name": "Flux salt", "grade": "uncommon", "kind": "reagent" },
+    "void-quicksilver": { "name": "Void quicksilver", "grade": "rare", "kind": "reagent" },
+
+    "ember-cinder": { "name": "Ember cinder", "grade": "common", "kind": "aligned", "biome": "emberlands" },
+    "ember-shard": { "name": "Ember shard", "grade": "uncommon", "kind": "aligned", "biome": "emberlands" },
+    "ember-core": { "name": "Ember core", "grade": "rare", "kind": "aligned", "biome": "emberlands" },
+    "rime-frost": { "name": "Rime frost", "grade": "common", "kind": "aligned", "biome": "rimeshelf" },
+    "rime-shard": { "name": "Rime shard", "grade": "uncommon", "kind": "aligned", "biome": "rimeshelf" },
+    "rime-core": { "name": "Rime core", "grade": "rare", "kind": "aligned", "biome": "rimeshelf" },
+    "storm-static": { "name": "Storm static", "grade": "common", "kind": "aligned", "biome": "stormflats" },
+    "storm-shard": { "name": "Storm shard", "grade": "uncommon", "kind": "aligned", "biome": "stormflats" },
+    "storm-core": { "name": "Storm core", "grade": "rare", "kind": "aligned", "biome": "stormflats" },
+    "arcane-mote": { "name": "Arcane mote", "grade": "common", "kind": "aligned", "biome": "arcane-hollow" },
+    "arcane-shard": { "name": "Arcane shard", "grade": "uncommon", "kind": "aligned", "biome": "arcane-hollow" },
+    "arcane-core": { "name": "Arcane core", "grade": "rare", "kind": "aligned", "biome": "arcane-hollow" },
+    "stone-grit": { "name": "Stone grit", "grade": "common", "kind": "aligned", "biome": "stonereach" },
+    "stone-shard": { "name": "Stone shard", "grade": "uncommon", "kind": "aligned", "biome": "stonereach" },
+    "stone-core": { "name": "Stone core", "grade": "rare", "kind": "aligned", "biome": "stonereach" },
+
+    "scorchbloom-husk": { "name": "Scorchbloom husk", "grade": "common", "kind": "growth", "biome": "emberlands" },
+    "basalt-glass": { "name": "Basalt glass", "grade": "uncommon", "kind": "growth", "biome": "emberlands" },
+    "frostbloom-petal": { "name": "Frostbloom petal", "grade": "common", "kind": "growth", "biome": "rimeshelf" },
+    "glacier-quartz": { "name": "Glacier quartz", "grade": "uncommon", "kind": "growth", "biome": "rimeshelf" },
+    "tempest-reed": { "name": "Tempest reed", "grade": "common", "kind": "growth", "biome": "stormflats" },
+    "fulgurite-spine": { "name": "Fulgurite spine", "grade": "uncommon", "kind": "growth", "biome": "stormflats" },
+    "mirrorbloom-sap": { "name": "Mirrorbloom sap", "grade": "common", "kind": "growth", "biome": "arcane-hollow" },
+    "singing-crystal": { "name": "Singing crystal", "grade": "uncommon", "kind": "growth", "biome": "arcane-hollow" },
+    "deeproot-fiber": { "name": "Deeproot fiber", "grade": "common", "kind": "growth", "biome": "stonereach" },
+    "terrastone-core": { "name": "Terrastone core", "grade": "uncommon", "kind": "growth", "biome": "stonereach" },
+
     "rocket": { "name": "Rocket", "grade": "uncommon", "kind": "ammunition" },
     "signature-essence": { "name": "Prototype signature essence", "grade": "signature", "kind": "boss_reward" }
   }

@@ -227,7 +227,7 @@ func TestLingeringBodyCannotActButCanStillBeKilled(t *testing.T) {
 	balance := DefaultTuning()
 	// The compact test arena testWorld() explains: this is about the logout
 	// window, not about where PvP protection ends.
-	balance.SafeRadius, balance.PvPRadius = 430, 1000
+	balance.scaleSafety(430, 1000)
 	world := NewWorld(balance)
 	world.setWorldItems()
 	now := time.Unix(1_700_000_000, 0)

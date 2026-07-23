@@ -33,7 +33,15 @@ export interface AdminField { attribute: string; label: string; input: "number" 
 export interface EntityDefinition { mass: number; max_health: number; occludes_vision: boolean; visible_in_shadow: boolean; collision_objects: CollisionObject[]; admin: { name: string; spawnable: boolean; fields: AdminField[] } }
 export interface Terrain { entity: string; seed: number; cell: number; fill: number; radius_spread: number; inner_margin: number; outer_margin: number; spacing: number }
 export interface Fixture { id: string; entity: string; position: [number, number] }
-export interface WorldTable { radius: number; spawn_radius: number; chunk_size: number; danger_bands: DangerBand[]; terrain: Terrain; fixtures: Fixture[] }
+export interface GradeThresholdRow { grade: string; at: number }
+export interface GradeCurveTable { points: [number, number][]; thresholds: GradeThresholdRow[] }
+export interface CoverageRule { resolution: number; minimum_share: number; minimum_samples: number }
+export interface WorldFieldTable {
+  seed: number; region_cell: number; region_jitter: number; radial_reference: number;
+  warp_cell: number; warp_amplitude: number; blend_width: number;
+  grade_curve: GradeCurveTable; coverage: CoverageRule;
+}
+export interface WorldTable { radius: number; spawn_radius: number; chunk_size: number; danger_bands: DangerBand[]; field: WorldFieldTable; terrain: Terrain; fixtures: Fixture[] }
 export interface PlayerBody { speed: number; max_mana: number; mana_regen: number }
 export interface Dash { distance: number; duration_ms: number; cooldown_ms: number }
 export interface DamageBand { name: string; damage_per_hit: number; interval_ms: number; target_ttk_seconds: number; ttk_tolerance_seconds: number }
@@ -80,7 +88,8 @@ export interface MaterialKind { name: string; universal: boolean; source: string
 export interface Material { name: string; grade: string; kind: string; biome?: string }
 export interface MaterialsTable { grades: Record<string, Grade>; kinds: Record<string, MaterialKind>; materials: Record<string, Material>; admin_grant: AdminField }
 export interface Mob { name: string; family: string; silhouette: string; damage_band: string; dodge_vector: string; telegraph_shape?: Telegraph["shape"]; turrets: number; behavior: string }
-export interface Biome { name: string; element: string }
+export interface BiomePalette { ground: string; accent: string; haze: string }
+export interface Biome { name: string; element: string; summary: string; palette: BiomePalette }
 export const manifest = manifestData as Manifest;
 export const simulation = simulationData as Simulation;
 export const session = sessionData as SessionTable;
@@ -171,10 +180,16 @@ export function resourceMax(weapon: Weapon | undefined): { label: string; max: n
   return { label: "Mana", max: combat.player.max_mana, capped: true };
 }
 
-/** How many rounds one build of a material yields, and one when nothing does. */
+/**
+ * How many rounds one build of a material yields, and one when nothing does.
+ * Several recipes may yield the same round — the elemental ones are part of
+ * what a biome is worth travelling to — so the meter is scaled against the
+ * largest batch rather than against whichever row happened to be first.
+ */
 function batchSize(material: string): number {
-  for (const recipe of Object.values(ammunition)) if (recipe.material === material) return recipe.count;
-  return 1;
+  let largest = 0;
+  for (const recipe of Object.values(ammunition)) if (recipe.material === material) largest = Math.max(largest, recipe.count);
+  return largest || 1;
 }
 
 /** The carried material a weapon spends per shot, for a weapon that has no magazine. */

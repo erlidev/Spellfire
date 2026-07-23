@@ -16,12 +16,13 @@ import (
 	"time"
 
 	"spellfire/data"
+	"spellfire/server/internal/worldfield"
 )
 
 // SchemaVersion is the table shape this build understands. Bump it only when a
 // table changes shape, and add the matching forward migration; a plain balance
 // edit bumps Manifest.Version instead and needs no code change.
-const SchemaVersion = 21
+const SchemaVersion = 22
 
 type Manifest struct {
 	// Version is the content revision. Bump it on any balance edit; a change
@@ -168,6 +169,47 @@ type Fixture struct {
 	Position [2]float64 `json:"position"`
 }
 
+// GradeThreshold is the richness at which a material grade takes over. It is a
+// threshold on the reward curve rather than a radius, so re-shaping the curve
+// moves every boundary with it.
+type GradeThreshold struct {
+	Grade string  `json:"grade"`
+	At    float64 `json:"at"`
+}
+
+// GradeCurve is the convex reward curve, as vertices of a piecewise-linear
+// function of the fraction of the world radius. It is piecewise linear rather
+// than a power because the client computes the identical value and only
+// +, -, *, / and sqrt are guaranteed to agree between Go and JavaScript.
+type GradeCurve struct {
+	Points     [][2]float64     `json:"points"`
+	Thresholds []GradeThreshold `json:"thresholds"`
+}
+
+// CoverageRule is the load-time check on the generated biome field. It is what
+// turns "geography never hard-locks a build" from a hope about the seed into a
+// refusal at load.
+type CoverageRule struct {
+	Resolution     int     `json:"resolution"`
+	MinimumShare   float64 `json:"minimum_share"`
+	MinimumSamples int     `json:"minimum_samples"`
+}
+
+// WorldField parameterises the deterministic world field: which biome covers a
+// position and what the ground there is worth. The simulation, this loader's
+// coverage check, and the browser all read these same numbers.
+type WorldField struct {
+	Seed            uint32       `json:"seed"`
+	RegionCell      float64      `json:"region_cell"`
+	RegionJitter    float64      `json:"region_jitter"`
+	RadialReference float64      `json:"radial_reference"`
+	WarpCell        float64      `json:"warp_cell"`
+	WarpAmplitude   float64      `json:"warp_amplitude"`
+	BlendWidth      float64      `json:"blend_width"`
+	GradeCurve      GradeCurve   `json:"grade_curve"`
+	Coverage        CoverageRule `json:"coverage"`
+}
+
 type World struct {
 	Radius      float64 `json:"radius"`
 	SpawnRadius float64 `json:"spawn_radius"`
@@ -178,6 +220,7 @@ type World struct {
 	// neighbourhood of chunks.
 	ChunkSize   float64      `json:"chunk_size"`
 	DangerBands []DangerBand `json:"danger_bands"`
+	Field       WorldField   `json:"field"`
 	Terrain     Terrain      `json:"terrain"`
 	Fixtures    []Fixture    `json:"fixtures"`
 }
@@ -1076,10 +1119,23 @@ type Mob struct {
 	Behavior       string `json:"behavior"`
 }
 
+// BiomePalette is the ambient colouring the renderer cross-fades between as a
+// player crosses a border. It is presentation only — nothing in the simulation
+// reads it — but it lives here because a biome's identity reaches a player
+// through its palette as much as through its materials, and the two must be
+// edited in one place.
+type BiomePalette struct {
+	Ground string `json:"ground"`
+	Accent string `json:"accent"`
+	Haze   string `json:"haze"`
+}
+
 type Biome struct {
-	ID      string `json:"-"`
-	Name    string `json:"name"`
-	Element string `json:"element"`
+	ID      string       `json:"-"`
+	Name    string       `json:"name"`
+	Element string       `json:"element"`
+	Summary string       `json:"summary"`
+	Palette BiomePalette `json:"palette"`
 }
 
 // RetiredKinds are the tables a retirement may name. A retired ID resolves
@@ -1125,6 +1181,10 @@ type Tables struct {
 	Mobs        map[string]Mob
 	Biomes      map[string]Biome
 	Retired     map[string]Retirement
+
+	// field is built once from the rows above. It is derived rather than
+	// parsed, so it is unexported and reached through Field().
+	field *worldfield.Field
 }
 
 // Resolution is what a persisted reference resolves to against today's tables:

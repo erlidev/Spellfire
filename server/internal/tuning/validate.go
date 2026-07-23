@@ -23,6 +23,7 @@ func (t *Tables) validate() error {
 	t.validateEntities(problems)
 	t.validateWorld(problems)
 	t.validateOutposts(problems)
+	t.validateField(problems)
 	t.validateCombat(problems)
 	t.validateLoadout(problems)
 	t.validateProgression(problems)
@@ -667,7 +668,41 @@ func (t *Tables) validateBiomes(r *report) {
 		biome := t.Biomes[id]
 		r.require(biome.Name != "", "biomes: %q has no name", id)
 		r.require(t.Elements[biome.Element].Name != "", "biomes: %q references unknown element %q", id, biome.Element)
+		// A player should be able to name the biome they are standing in without
+		// reading the HUD, which world.md makes a requirement rather than a wish:
+		// identity arrives through aligned materials, terrain, and palette at
+		// once, so a biome with no palette is only two thirds of a biome.
+		r.require(biome.Summary != "", "biomes: %q has no summary; the HUD names a region and then has nothing to say about it", id)
+		for label, colour := range map[string]string{"ground": biome.Palette.Ground, "accent": biome.Palette.Accent, "haze": biome.Palette.Haze} {
+			r.require(isHexColour(colour), "biomes: %q palette %s is %q, want a #rrggbb colour", id, label, colour)
+		}
+		// Every element needs somewhere to be farmed, and two biomes sharing one
+		// would leave another element with nowhere at all.
+		for _, other := range sortedKeys(t.Biomes) {
+			r.require(other == id || t.Biomes[other].Element != biome.Element,
+				"biomes: %q and %q are both %s; each element needs its own region or one element has no geography", id, other, biome.Element)
+		}
 	}
+	for _, element := range sortedKeys(t.Elements) {
+		covered := false
+		for _, biome := range t.Biomes {
+			covered = covered || biome.Element == element
+		}
+		r.require(covered, "biomes: no region yields %s material; that element's recipes would be unbuildable", element)
+	}
+}
+
+func isHexColour(value string) bool {
+	if len(value) != 7 || value[0] != '#' {
+		return false
+	}
+	for index := 1; index < len(value); index++ {
+		digit := value[index]
+		if !(digit >= '0' && digit <= '9') && !(digit >= 'a' && digit <= 'f') && !(digit >= 'A' && digit <= 'F') {
+			return false
+		}
+	}
+	return true
 }
 
 // honouredDodgeVectors are the counterplay vectors the simulation actually

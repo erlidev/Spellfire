@@ -46,7 +46,9 @@ fieldset input { width: auto; } fieldset small { display: block; grid-column: 2;
 .game-screen, #canvas-host, canvas { width: 100%; height: 100%; }
 #canvas-host, canvas { touch-action: none; }
 .hud { position: fixed; z-index: 4; pointer-events: none; background: #101829de; border: 1px solid #3d506d; border-radius: 9px; box-shadow: 0 4px 15px #0004; }
-.danger { top: max(14px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); padding: 8px 14px; font-size: .82rem; }
+.danger { top: max(14px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); padding: 8px 14px; font-size: .82rem; text-align: center; }
+.danger .region { display: block; margin-top: 2px; font-size: .72rem; color: #afc7e8; }
+.danger .region:empty { display: none; }
 .menu-button { pointer-events: auto; top: max(14px, env(safe-area-inset-top)); right: max(14px, env(safe-area-inset-right)); font-size: 1.2rem; padding: 6px 11px; }
 .latency { top: max(17px, env(safe-area-inset-top)); right: max(68px, calc(env(safe-area-inset-right) + 68px)); padding: 7px 10px; font-size: .75rem; }
 .vital-panel { bottom: max(76px, calc(env(safe-area-inset-bottom) + 76px)); left: max(15px, env(safe-area-inset-left)); width: min(260px, 40vw); padding: 9px 12px; }

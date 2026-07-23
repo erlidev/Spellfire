@@ -40,7 +40,7 @@ Nothing else in this file can be built cleanly without these. Land them first.
 - [x] Verify the invariant in a test: editing one row changes every dependent item with no character migration ([game/tuning_test.go](server/internal/game/tuning_test.go), [tuning/tuning_test.go](server/internal/tuning/tuning_test.go))
 - [x] Common typed entity base for every materialized world family, with tuning defaults and per-instance overrides; 500-health circular trees and an immovable/undestroyable square wall fixture ([entity.go](server/internal/game/entity.go), [entities.json](data/tuning/entities.json))
 
-Biome-placement rows are intentionally empty until Phase 3.1; component and material rows landed with Phase 2.3. The Sentry row carries its settled contract without the values [economy-death-and-pve.md](docs/game/design/economy-death-and-pve.md#sentry) defers to implementation. Runtime table delivery to a live client stays in Phase 8.
+Biome rows carry their element, summary, and ambient palette since Phase 3.1, which also widened the material table to 43 rows across seven kinds; the remaining component and material rows landed with Phase 2.3. The Sentry row carries its settled contract without the values [economy-death-and-pve.md](docs/game/design/economy-death-and-pve.md#sentry) defers to implementation. Runtime table delivery to a live client stays in Phase 8.
 
 ### 1.2 Persistence & migration
 - [x] Read `schema_version` and run sequential forward migrations — `PRAGMA user_version` for the database schema, `characters.schema_version` for the record shape ([sqlite.go](server/internal/store/sqlite.go), [model.go](server/internal/model/model.go), [architecture.md](docs/architecture.md#persistence-and-migration))
@@ -273,18 +273,26 @@ broad-phase question, and terrain materialises per chunk around bodies
 
 Left for the rest of Phase 3: the terrain scatter is one archetype at a uniform density until
 [3.2](#32-terrain-friction-and-traversal) gives it per-biome archetypes and chokepoints, and the
-chunk generator takes no region parameters until [3.1](#31-world-field--danger-biome-and-grade-by-position)
-produces them.
+chunk generator takes no region parameters, even though [3.1](#31-world-field--danger-biome-and-grade-by-position)
+now produces them.
 
 ### 3.1 World field — danger, biome, and grade by position
 
-- [ ] One shared deterministic world-field module: `DangerAt`, `BiomeAt`, `GradeAt`, and `RegionAt` by position, derived from the world seed and region parameters, with identical Go and TypeScript implementations so the renderer and prediction agree with the simulation
-- [ ] Danger tiers as a first-class lookup replacing radius comparisons scattered through `World` — hub / Fringe T1 / Frontier T2 / Deadlands T3 ([world.md](docs/game/design/world.md#radial-danger))
-- [ ] Procedural biome regions (noise-warped Voronoi) over the five elements, with blended borders rather than hard seams ([biomes.json](data/tuning/biomes.json))
-- [ ] Material grade by radius on a **convex** reward curve, so middle bands are a route rather than the best farm ([world.md](docs/game/design/world.md#biomes-type--grade))
-- [ ] Universal structural and wood materials everywhere; element-aligned materials gated to their biome ([materials.json](data/tuning/materials.json))
-- [ ] **Load-time coverage validation**: sample the biome field and refuse a world seed where any element is absent from any danger band, or where any band's biome mix falls below a configured floor — the enforced form of "geography never hard-locks a build"
-- [ ] Test: the field is deterministic and identical across Go and TypeScript for a fixed seed; a deliberately degenerate seed is refused with a named reason
+**Shipped.** The world stopped being a set of radius comparisons and became a field
+([architecture.md](docs/architecture.md#the-world-field)).
+
+- [x] One shared deterministic world-field module: `DangerAt`, `BiomeAt`, `GradeAt`, and `RegionAt` by position, derived from the world seed and region parameters, with bit-identical Go and TypeScript implementations checked against one fixture ([worldfield.go](server/internal/worldfield/worldfield.go), [worldfield.ts](web/src/game/worldfield.ts), `testdata/worldfield.json`)
+- [x] Danger tiers as a first-class lookup replacing radius comparisons scattered through `World` — `World.DangerAt`/`Protected`/`Safe` now answer the loadout lock, the crafting gate, the wall placement rule, and both ends of PvP protection ([world.md](docs/game/design/world.md#radial-danger))
+- [x] Procedural biome regions (noise-warped, radially compressed Voronoi) over the five elements, with a border blend the renderer cross-fades an ambient palette across ([biomes.json](data/tuning/biomes.json))
+- [x] Material grade by radius on a **convex** reward curve, validated convex at load and cross-checked against each band's declared grade; its continuous `Richness` is the scalar Phase 4.1 yields will scale with ([world.md](docs/game/design/world.md#biomes-type--grade))
+- [x] Universal structural, wood, and reagent materials everywhere; element-aligned and biome-growth materials gated to their region, with grade a ceiling rather than an equality — `Tables.MaterialsAt` ([materials.json](data/tuning/materials.json))
+- [x] **Load-time coverage validation**: the loader samples the field across every band and refuses a seed that leaves a biome absent from one or below `field.coverage.minimum_share`. The shipped seed clears its 6% floor with a 15% worst case ([validate_field.go](server/internal/tuning/validate_field.go))
+- [x] Test: the field is deterministic and reproduces every golden sample exactly in both languages; a degenerate seed is refused by name with the re-roll it needs
+- [x] Content: 43 material rows across seven kinds, per-element focus and core crystals, reagent- and biome-gated gun parts, three new staves, and elemental rocket recipes — so a biome is worth travelling to and a build has a geography
+
+The renderer tints the ground by biome and the HUD names the region, its band, and what
+the ground yields. The chunk generator still takes no region parameters — per-biome
+terrain archetypes are [3.2](#32-terrain-friction-and-traversal).
 
 ### 3.2 Terrain, friction, and traversal
 

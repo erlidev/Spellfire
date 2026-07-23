@@ -61,7 +61,7 @@ func (w *World) placeable(ability tuning.Ability, at, direction Vec) bool {
 	if !ok {
 		return false
 	}
-	if at.LengthSq() <= w.tuning.SafeRadius*w.tuning.SafeRadius {
+	if w.Safe(at) {
 		return false
 	}
 	shape := newEntity("", ability.Wall.Kind, Vec{}, definition, EntityOverrides{})

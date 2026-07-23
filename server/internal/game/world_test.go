@@ -18,7 +18,7 @@ func testWorld() (*World, time.Time) {
 	// rather than about geography, so they run in a compact arena — the same
 	// deliberate override AOIRadius already gets here. The scale itself is
 	// covered by the tuning suite and by the world-scale tests.
-	tuning.SafeRadius, tuning.PvPRadius = 430, 1000
+	tuning.scaleSafety(430, 1000)
 	world := NewWorld(tuning)
 	world.setWorldItems()
 	return world, time.Unix(1_700_000_000, 0)

@@ -1,7 +1,32 @@
 {
-  "emberlands": { "name": "Emberlands", "element": "fire" },
-  "rimeshelf": { "name": "Rimeshelf", "element": "frost" },
-  "stormflats": { "name": "Stormflats", "element": "storm" },
-  "arcane-hollow": { "name": "Arcane Hollow", "element": "arcane" },
-  "stonereach": { "name": "Stonereach", "element": "earth" }
+  "emberlands": {
+    "name": "Emberlands",
+    "element": "fire",
+    "summary": "Ash plains and slow lava seams under a burning haze. The ground itself smoulders.",
+    "palette": { "ground": "#2b1512", "accent": "#7d3018", "haze": "#ff7a3c" }
+  },
+  "rimeshelf": {
+    "name": "Rimeshelf",
+    "element": "frost",
+    "summary": "Fractured ice shelves over frozen meltwater — bright, flat, and offering no cover.",
+    "palette": { "ground": "#111d2a", "accent": "#2f6f8c", "haze": "#8fd6ff" }
+  },
+  "stormflats": {
+    "name": "Stormflats",
+    "element": "storm",
+    "summary": "Open salt flats beneath a standing thunderhead, cut by fulgurite spines.",
+    "palette": { "ground": "#191a2b", "accent": "#4a3f8c", "haze": "#c0a8ff" }
+  },
+  "arcane-hollow": {
+    "name": "Arcane Hollow",
+    "element": "arcane",
+    "summary": "Sunken basins of mirrored stone where the light seems to arrive a moment late.",
+    "palette": { "ground": "#141f22", "accent": "#2f7f74", "haze": "#7cf0d8" }
+  },
+  "stonereach": {
+    "name": "Stonereach",
+    "element": "earth",
+    "summary": "Terraced bedrock and boulder fields — the most defensible ground in the world.",
+    "palette": { "ground": "#1e1c15", "accent": "#6b5a2f", "haze": "#d8c07a" }
+  }
 }

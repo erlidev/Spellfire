@@ -5,7 +5,8 @@ import { Predictor } from "./game/prediction";
 import { joystickVector, movementButtons } from "./game/touch";
 import { GameView } from "./game/view";
 import { GameSocket } from "./net/socket";
-import { abilities, ammunition as ammunitionTable, damageBandFor, dangerBandAt, entityDefinitions, handlingScale, materials as materialsTable, movementStatus, progression as progressionTable, resourceMax, safeRadius, session, specialAmmunition, weapons, weightOf, world, xpToNext, type AdminField, type EntityDefinition, type Guard, type Weapon } from "./tuning";
+import { abilities, ammunition as ammunitionTable, biomes, damageBandFor, entityDefinitions, handlingScale, materials as materialsTable, movementStatus, progression as progressionTable, resourceMax, session, specialAmmunition, weapons, weightOf, world, xpToNext, type AdminField, type EntityDefinition, type Guard, type Weapon } from "./tuning";
+import { biomeName, gradeName, materialsAt, worldField } from "./game/worldfield";
 import { Buttons, ServerKind, type Character, type CharacterClass, type CraftedItem, type Entity, type LoadoutSet, type ServerMessage } from "./types";
 
 function element<T extends HTMLElement>(id: string): T {
@@ -28,6 +29,7 @@ class SpellFire {
   private aim = { x: 1, y: 0 };
   private noticeTimer = 0;
   private lastBand = "";
+  private lastBiome = "";
   private localEntity?: Entity;
   private activeCharacter?: Character;
   private adminMode: "off" | "spawn" | "select" | "delete" = "off";
@@ -502,12 +504,23 @@ class SpellFire {
       element("shield-bar").style.width = `${left * 100}%`;
       shieldTrack.classList.toggle("broken", left <= 0);
     }
-    const distance = Math.hypot(entity.x, entity.y), band = dangerBandAt(distance);
+    // The zone readout comes from the world field rather than from a radius
+    // comparison of its own, so the client and the server are answering the
+    // same question with the same code.
+    const region = worldField.regionAt(entity.x, entity.y), band = region.danger;
     element("danger-text").textContent = `${band.name} · ${band.summary}`; element("danger-shape").textContent = band.shape;
     if (band.name !== this.lastBand && this.lastBand) this.notice(`${band.name}: ${band.summary}`); this.lastBand = band.name;
+    // Biome names the material type, grade names its quality: the two axes the
+    // world is built on, stated where a player is standing on them.
+    const biome = biomeName(region.biome.id);
+    element("region-text").textContent = region.grade.id
+      ? `${biome} · ${gradeName(region.grade.id)} ground`
+      : biome;
+    if (region.biome.id !== this.lastBiome && this.lastBiome) this.notice(`${biome}. ${biomes[region.biome.id]?.summary ?? ""}`.trim());
+    this.lastBiome = region.biome.id;
     // Crossing out of safety locks the equipped set. Warn at the crossing, not
     // only when the player later opens the menu and finds the controls dead.
-    const safe = distance <= safeRadius;
+    const safe = worldField.safeAt(entity.x, entity.y);
     if (safe !== this.inSafety) {
       this.notice(safe ? "Safe zone: loadout unlocked." : "You left the safe zone. Your loadout is locked until you return.");
       this.refreshOpenMenu();
@@ -555,13 +568,34 @@ class SpellFire {
     const local = this.localEntity;
     switch (this.menuTab) {
       case "character": return JSON.stringify([this.level, this.xp, this.xpNext, this.ledger.size, local && Math.ceil(local.health), local && Math.ceil(local.maxHealth), local && Math.floor(local.mana), local?.alive]);
-      case "world": return this.lastBand;
+      case "world": return `${this.lastBand}|${this.lastBiome}|${local ? Math.round(Math.hypot(local.x, local.y) / 500) : ""}`;
       case "loadout": return JSON.stringify([this.inSafety, this.loadout, this.draft, this.respecOwed, this.loadoutStatus, this.items]);
       case "crafting": return JSON.stringify([this.inSafety, this.materials, this.items, this.craftWeapon, this.craftChoices, this.craftStatus, this.ledger.size]);
       case "inventory": return JSON.stringify([this.materials, this.items, this.loadout.weapon]);
       case "admin": return JSON.stringify([this.adminMode, this.adminSpawnID, this.adminSpawnConfig, this.adminSelected, this.adminEditDraft, this.adminSearch, this.adminMaterialID, this.adminMaterialCount, this.adminLevel, this.adminPositionPick]);
       default: return this.menuTab;
     }
+  }
+
+  /**
+   * The world section states the two axes a player is standing on: the biome
+   * decides which materials the ground can yield, the radius decides their
+   * grade. Both come from the shared field, so what this lists is exactly what
+   * the server will hand out when Phase 4.1 puts nodes on that ground.
+   */
+  private renderWorldSection(): string {
+    const local = this.localEntity;
+    if (!local) return "<h3>Known world</h3><p>Synchronizing…</p>";
+    const region = worldField.regionAt(local.x, local.y);
+    const biome = biomes[region.biome.id];
+    const yielded = materialsAt(region.biome.id, region.grade.tier)
+      .map((id) => `${escapeHTML(materialsTable.materials[id]?.name ?? id)} <small>(${escapeHTML(materialsTable.grades[materialsTable.materials[id]?.grade ?? ""]?.name ?? "")})</small>`);
+    return `<h3>Known world</h3>
+      <p><strong>${escapeHTML(biome?.name ?? region.biome.id)}</strong> · ${escapeHTML(this.lastBand || "")}${region.grade.id ? ` · ${escapeHTML(gradeName(region.grade.id))} ground` : ""}</p>
+      <p>${escapeHTML(biome?.summary ?? "")}</p>
+      <p>${world.danger_bands.map((band) => escapeHTML(band.name)).join(" → ")}. Biome decides which material this ground yields; distance from the hub decides its grade, on a curve that rewards the rim disproportionately.</p>
+      <p>This ground can yield: ${yielded.length ? yielded.join(", ") : "nothing — the hub is worked stone"}.</p>
+      <p><small>Harvesting arrives with Phase 4.1; the ground already knows what it holds.</small></p>`;
   }
 
   private renderMenu(tab: string): void {
@@ -579,7 +613,7 @@ class SpellFire {
     const equipped = resolvedWeapon(this.loadout.weapon, this.items);
     const pages: Record<string, string> = {
       character: `<h3>${escapeHTML(character?.name ?? "Character")}</h3><p>${titleCase(character?.class ?? "gunslinger")} · Level ${this.level}</p><p>${this.xpNext ? `${this.xp} / ${this.xpNext} XP to level ${this.level + 1}` : "Level cap reached"} · ${this.ledger.size} unlock${this.ledger.size === 1 ? "" : "s"} owned</p>${this.localEntity ? `<p>Health ${Math.ceil(this.localEntity.health)} / ${Math.ceil(this.localEntity.maxHealth)} · Resource ${Math.floor(this.localEntity.mana)}</p>` : ""}<p>Progression unlocks options, never raw combat power.</p>`,
-      world: `<h3>Known world</h3><p>Current area: ${escapeHTML(this.lastBand || "Synchronizing…")}</p><p>${world.danger_bands.map((band) => escapeHTML(band.name)).join(" → ")}. The circular world is contiguous; trees are authoritative static cover.</p>`,
+      world: this.renderWorldSection(),
       reference: `<h3>Field reference</h3><p>WASD/Arrows move · pointer aims · primary pointer fires · Shift or the secondary pointer button scopes a weapon that has a scope · 1–6 or the wheel select an equipped slot · Space dashes · R reloads · E interacts. Every gun kicks in a fixed pattern and spreads while you move; a raised shield covers a frontal arc, slows you, and locks fire. The hub is safe. Combat is server-authoritative and raw time-to-kill is about ${equipped ? damageBandFor(equipped).target_ttk_seconds : 3} seconds.</p>`,
       settings: "<h3>Settings</h3><p>Accessibility and interface-scale controls remain available on Home. Opening this menu does not pause the shared world.</p>",
     };
@@ -1146,7 +1180,7 @@ class SpellFire {
   private selectedCharacter(): Character | undefined { const id = element<HTMLSelectElement>("character-select").value; return this.characters.find((character) => character.id === id); }
 
   private exitGame(): void {
-    window.clearInterval(this.inputTimer); this.socket?.close(); this.socket = undefined; this.view?.destroy(); this.view = undefined; this.predictor = undefined; this.heldInputs.clear(); this.lastBand = "";
+    window.clearInterval(this.inputTimer); this.socket?.close(); this.socket = undefined; this.view?.destroy(); this.view = undefined; this.predictor = undefined; this.heldInputs.clear(); this.lastBand = ""; this.lastBiome = "";
     this.draft = undefined; this.selectedSlot = 0; this.inSafety = true; this.respecOwed = false; this.loadoutStatus = "";
     this.items = []; this.materials = {}; this.craftWeapon = ""; this.craftChoices = {}; this.craftStatus = "";
     this.ledger = ledgerOf([]); this.level = 1; this.xp = 0; this.xpNext = 0; this.localEntity = undefined; this.cooldowns = {};

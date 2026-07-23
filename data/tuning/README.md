@@ -84,6 +84,32 @@ Rules, from [`invariants.md`](../../docs/game/design/invariants.md) and
 - **One telegraph grammar.** Windups emit an authoritative telegraph entity
   whose circle, cone, line, or ring geometry and phase durations come from the
   ability row. Owner type never changes the wire or renderer path.
+- **The world field is data, and a bad seed is refused.** `world.field` holds
+  the seed and the lattice that decide which biome covers a position and what
+  the ground there is worth, and both the server and the browser build the same
+  field from it (`server/internal/worldfield`, `web/src/game/worldfield.ts`).
+  Two shapes matter. `grade_curve.points` is a piecewise-linear reward curve
+  over the fraction of the world radius, validated **convex** — every segment at
+  least as steep as the one before it — because that is what makes the rim
+  disproportionately worth reaching and the middle bands a route rather than the
+  best farm; `grade_curve.thresholds` names the material grade each stretch of
+  that curve yields, climbing one rarity tier at a time from Common, and each
+  danger band's own `material_grade` must agree with the curve at its outer
+  edge. `coverage` is the load-time check: the loader samples the field across
+  every band and **refuses a seed** that leaves a biome absent from one, or
+  whose share falls below `minimum_share`. A refused seed is re-rolled; it is
+  never shipped and patched around. `region_jitter` must stay below 1, or a
+  region site could leave its own cell and be missed by the lattice search.
+- **Biome decides type, radius decides grade.** A `materials.json` row is either
+  a *universal* kind — structural stock, stave wood, reagents — available in
+  every biome so geography never hard-locks a build, or a biome-gated kind that
+  names the `biome` it comes from: `aligned` stock is taken from what lives
+  there, `growth` stock is cut or quarried from the ground, so a biome is worth
+  travelling to whether or not anything is hunting in it. Grade is a *ceiling*
+  rather than an equality, so walking outward adds options instead of trading
+  them. A `biomes.json` row owes a `summary` and a three-colour `palette`: a
+  biome's identity reaches a player through its materials, its terrain, and its
+  ambient colour together, and each element must have exactly one region.
 - **One entity contract.** `entities.json` supplies typed mass, maximum health,
   and local circle/box collision defaults. Runtime instances copy those values
   and may override mutable state or geometry without mutating the table. `-1`
@@ -107,7 +133,7 @@ Rules, from [`invariants.md`](../../docs/game/design/invariants.md) and
 | `simulation.json` | Tick/send rates, AOI radius, rewind window, interpolation delay |
 | `session.json` | Logout linger window and saved-position expiry |
 | `entities.json` | Common entity defaults, vision-occlusion/shadow-visibility attributes, spawnability, and generic admin-field/input metadata |
-| `world.json` | World radius, spawn radius, chunk size, danger bands, procedural terrain density, fixed fixtures |
+| `world.json` | World radius, spawn radius, chunk size, danger bands, the deterministic world field (seed, biome lattice, convex reward curve, coverage rule), procedural terrain density, fixed fixtures |
 | `combat.json` | Role and dodge-vector vocabularies, player movement/resources, universal dash, weight classes, damage bands |
 | `loadout.json` | Slot counts per kind and the Mage affinity multiplier |
 | `progression.json` | XP curve, the XP each source awards, the starter-kit draw size, the crafted-item capacity, and the developer-mode level-grant bound |
@@ -119,9 +145,9 @@ Rules, from [`invariants.md`](../../docs/game/design/invariants.md) and
 | `spells.json` | The 5 × 4 spell grid: element, tier, unlock level, and the ability each spell casts |
 | `gadgets.json` | Gadgets: the Gunslinger's slot content, its unlock level, and the ability each performs |
 | `components.json` | Blueprint slot layouts, and the components that fill them: material cost, behaviour modifiers, and the plain-language effect the crafting UI shows |
-| `materials.json` | Material grades, kinds, rows, and the bounded admin grant input |
+| `materials.json` | Material grades, kinds (universal structural/wood/reagent, biome-gated aligned/growth, crafted ammunition, boss reward), rows, and the bounded admin grant input |
 | `mobs.json` | Mob contracts |
-| `biomes.json` | Biomes and the element they align to |
+| `biomes.json` | Biomes: the element they align to, the summary the HUD shows, and the ambient palette the renderer tints the ground with |
 | `outposts.json` | Recall destinations: outpost names and world positions |
 | `retired.json` | Withdrawn IDs and the replacement or refund each resolves to |
 

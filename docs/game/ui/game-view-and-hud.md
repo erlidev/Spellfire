@@ -62,6 +62,8 @@ Combat feedback covers damage, healing/shields, status, unavailable cooldown/man
 
 - Show current danger and PvP state without opening a menu.
 - Announce boundary crossings briefly, then persist the new state.
+- Name the biome and the grade of the ground beside the danger band, because those are the [two axes](../design/world.md#biomes-type--grade) a player is standing on: the biome decides which material the ground can yield and the distance from the hub decides its grade. Announce a biome crossing the way a band crossing is announced, then persist it.
+- Colour the ground by the biome, cross-fading across a border rather than switching at a line, so a player can name where they are standing without reading the readout. That tint stays well below the gameplay layer's contrast: it colours the ground, never the actors on it.
 - Warn before leaving safety locks the loadout.
 - Explain material loss/insurance when carrying value into higher danger.
 - Show when safe-zone crafting, loadout, and travel services become available.

@@ -38,6 +38,8 @@ Biome regions are generated procedurally from the world seed rather than authore
 
 A biome's identity reaches gameplay through three channels at once: which aligned materials it yields, which terrain archetypes generate in it, and its ambient palette. A player should be able to name the biome they are standing in without reading the HUD.
 
+Biome-gated stock comes from two sources, so a region is worth travelling to whether or not anything is hunting in it: **aligned** material is taken from what lives there, and **growth** material is cut or quarried from the ground itself. Everything universal — structural stock, stave wood, and reagents — is available in every region, which is the concrete form of "geography never hard-locks a build". Grade is a **ceiling** rather than an equality: ground that yields Rare also yields everything below it, so walking outward adds options instead of trading them, and the reward curve's continuous value within a grade is what makes the outer reaches of a band worth more than its inner edge.
+
 ## Outposts and travel
 
 Multiple safe outposts provide services and respawn points. Reaching an outpost once unlocks it for respawn. This is a navigation and survival gate, not a level gate.

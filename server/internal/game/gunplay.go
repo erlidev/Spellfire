@@ -404,8 +404,7 @@ func (w *World) hostileReach(owner *Player, target Vec) bool {
 	if owner == nil {
 		return false
 	}
-	limit := w.tuning.PvPRadius * w.tuning.PvPRadius
-	return owner.Position.LengthSq() > limit && target.LengthSq() > limit
+	return !w.Protected(owner.Position) && !w.Protected(target)
 }
 
 // hazardReach is hostileReach for something standing in the world on its own —
@@ -414,8 +413,7 @@ func (w *World) hostileReach(owner *Player, target Vec) bool {
 // does not exist.
 func (w *World) hazardReach(owner *Player, ownerID string, target Vec) bool {
 	if ownerID == "" {
-		limit := w.tuning.PvPRadius * w.tuning.PvPRadius
-		return target.LengthSq() > limit
+		return !w.Protected(target)
 	}
 	return w.hostileReach(owner, target)
 }

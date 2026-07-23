@@ -14,6 +14,7 @@ import (
 	"spellfire/server/internal/progression"
 	"spellfire/server/internal/protocol"
 	"spellfire/server/internal/tuning"
+	"spellfire/server/internal/worldfield"
 )
 
 const (
@@ -39,10 +40,19 @@ const (
 type Tuning struct {
 	Tables *tuning.Tables
 
+	// Field answers what the world is at a position — danger band, biome, and
+	// material grade. It is the single lookup those questions go through: no
+	// rule in the simulation compares a radius of its own, so Phase 3.3 can
+	// re-resolve safety against the nearest outpost by rebuilding the field
+	// rather than by finding every comparison.
+	Field *worldfield.Field
+
 	TickRate, SendRate int
 	AOIRadius          float64
 	MaxRewind          time.Duration
 
+	// SafeRadius and PvPRadius remain as the derived scalars terrain margins and
+	// the spawn ring are laid out against. Zone *decisions* go through Field.
 	WorldRadius, SafeRadius, PvPRadius float64
 	PlayerRadius, PlayerSpeed          float64
 	DashDistance                       float64
@@ -56,6 +66,7 @@ func FromTables(tables *tuning.Tables) Tuning {
 	player := newEntity("", "player", Vec{}, tables.Entities["player"], EntityOverrides{})
 	return Tuning{
 		Tables:   tables,
+		Field:    tables.Field(),
 		TickRate: tables.Simulation.TickRate, SendRate: tables.Simulation.SendRate,
 		AOIRadius: tables.Simulation.AOIRadius, MaxRewind: tables.Simulation.MaxRewind(),
 		WorldRadius: tables.World.Radius, SafeRadius: tables.World.SafeRadius(), PvPRadius: tables.World.PvPRadius(),
@@ -67,6 +78,30 @@ func FromTables(tables *tuning.Tables) Tuning {
 }
 
 func DefaultTuning() Tuning { return FromTables(tuning.MustLoad()) }
+
+// scaleSafety shrinks the safe centre and the PvP-protected radius for a
+// compact test arena. It rebuilds the field rather than only moving the
+// scalars, because the field is what every zone decision now goes through: two
+// statements of where safety ends could otherwise disagree.
+func (t *Tuning) scaleSafety(safe, pvp float64) {
+	t.SafeRadius, t.PvPRadius = safe, pvp
+	params := t.Field.Params()
+	bands := append([]worldfield.Band(nil), params.Bands...)
+	protected := true
+	for index := range bands {
+		switch {
+		case bands[index].Safe():
+			bands[index].OuterRadius = safe
+		case protected && bands[index].Protected():
+			bands[index].OuterRadius = pvp
+		default:
+			protected = false
+			bands[index].OuterRadius = math.Max(bands[index].OuterRadius, pvp+1)
+		}
+	}
+	params.Bands = bands
+	t.Field = worldfield.New(params)
+}
 
 type Vec struct{ X, Y float64 }
 
@@ -627,11 +662,34 @@ var ErrLoadoutLocked = errors.New("Your loadout is locked outside a safe zone. R
 // lingering after a disconnect.
 var ErrLoadoutUnavailable = errors.New("You cannot change your loadout right now.")
 
-// InSafety reports whether the body stands where loadout and crafting services
-// are available. Phase 3.3 replaces radius-from-origin with per-outpost radii.
-func (w *World) InSafety(p *Player) bool {
-	return p.Position.LengthSq() <= w.tuning.SafeRadius*w.tuning.SafeRadius
+// DangerAt, Protected, and Safe are the world's zone vocabulary. Every rule
+// that used to compare a distance against a radius asks one of these instead,
+// so there is one answer to "what is this position" rather than a comparison
+// per call site. Phase 3.3 replaces the radial field with per-outpost radii by
+// rebuilding the field, and nothing below has to change.
+func (w *World) DangerAt(at Vec) worldfield.Band { return w.tuning.Field.DangerAt(at.X, at.Y) }
+
+// Protected reports whether PvP damage is refused at a position, and Safe
+// whether the full service set — loadout, crafting, respawn — is available.
+func (w *World) Protected(at Vec) bool { return w.tuning.Field.Protected(at.X, at.Y) }
+func (w *World) Safe(at Vec) bool      { return w.tuning.Field.Safe(at.X, at.Y) }
+
+// RegionAt is the whole field at a position: danger, biome, and material grade.
+// It is what the HUD reads and what harvesting will ask.
+func (w *World) RegionAt(at Vec) worldfield.Region { return w.tuning.Field.RegionAt(at.X, at.Y) }
+
+// MaterialsAt lists what the ground at a position can yield: universal stock
+// everywhere, the biome's own aligned rows, up to the grade the radius has
+// earned. Nothing harvests yet — Phase 4.1 owns the nodes — but the rule that
+// decides what a node there could hold is the field's, not the node's.
+func (w *World) MaterialsAt(at Vec) []string {
+	region := w.RegionAt(at)
+	return w.tuning.Tables.MaterialsAt(region.Biome.ID, region.Grade.Tier)
 }
+
+// InSafety reports whether the body stands where loadout and crafting services
+// are available.
+func (w *World) InSafety(p *Player) bool { return w.Safe(p.Position) }
 
 // SetLoadout commits a requested set. Respec is free — nothing is charged and
 // nothing is consumed — so the only gates are the safe-zone lock and the

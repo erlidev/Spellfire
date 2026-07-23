@@ -72,7 +72,7 @@ func damageDealt(t *testing.T, tables *tuning.Tables, shooter, target model.Char
 	balance.AOIRadius = 500
 	// The compact test arena testWorld() explains: these tests are about
 	// mechanics, not geography.
-	balance.SafeRadius, balance.PvPRadius = 430, 1000
+	balance.scaleSafety(430, 1000)
 	world := NewWorld(balance)
 	world.setWorldItems()
 	now := time.Unix(1_700_000_000, 0)
