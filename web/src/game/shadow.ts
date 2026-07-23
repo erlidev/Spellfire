@@ -18,7 +18,12 @@ void main(void) {
   vTextureCoord = aPosition;
 }`;
 
-const glFragment = `
+// Pixi prepends `precision mediump float;` to a fragment source that does not
+// declare one of its own, and a driver that honours mediump as fp16 caps every
+// intermediate at 65504 — well below the square of a screen coordinate. Asking
+// for highp keeps this shader in fp32; the tests below keep every intermediate
+// at coordinate scale so it stays correct even where highp is unavailable.
+export const glFragment = `precision highp float;
 in vec2 vTextureCoord;
 out vec4 finalColor;
 uniform vec4 uOccluders[${maxOccluders}];
@@ -28,17 +33,17 @@ uniform float uOpacity;
 uniform int uCount;
 uniform float uReveal;
 
+// The segment reaches the disc when the closest point on it is within the
+// radius. Measuring along a normalised direction keeps every intermediate at
+// coordinate scale, unlike the quadratic's discriminant, which squares a screen
+// coordinate twice and overflows to a NaN that reads as "no hit".
 bool circleHit(vec2 origin, vec2 delta, vec3 circle) {
-  vec2 offset = origin - circle.xy;
-  float a = dot(delta, delta);
-  float b = 2.0 * dot(offset, delta);
-  float c = dot(offset, offset) - circle.z * circle.z;
-  float discriminant = b * b - 4.0 * a * c;
-  if (discriminant < 0.0 || a < 0.0001) return false;
-  float root = sqrt(discriminant);
-  float near = (-b - root) / (2.0 * a);
-  float far = (-b + root) / (2.0 * a);
-  return far > 0.001 && near < 0.999;
+  float span = length(delta);
+  if (span < 0.001) return false;
+  vec2 direction = delta / span;
+  vec2 toCircle = circle.xy - origin;
+  float along = clamp(dot(toCircle, direction), 0.0, span);
+  return length(toCircle - direction * along) <= circle.z;
 }
 
 bool boxHit(vec2 origin, vec2 delta, vec4 box) {
@@ -64,7 +69,7 @@ void main(void) {
   vec2 delta = point - uOrigin;
   // Inside smoke the viewer sees only a small circle around itself: everything
   // past the reveal radius is shadowed regardless of what stands there.
-  bool blocked = uReveal > 0.0 && dot(delta, delta) > uReveal * uReveal;
+  bool blocked = uReveal > 0.0 && length(delta) > uReveal;
   for (int index = 0; index < ${maxOccluders}; index++) {
     if (blocked || index >= uCount) break;
     vec4 shape = uOccluders[index];
@@ -98,17 +103,14 @@ struct VSOutput { @builtin(position) position: vec4<f32>, @location(0) uv: vec2<
   return VSOutput(vec4(position, 0.0, 1.0), aPosition);
 }
 
+// The same closest-point test the GL path runs, so both backends answer alike.
 fn circleHit(origin: vec2<f32>, delta: vec2<f32>, circle: vec3<f32>) -> bool {
-  let offset = origin - circle.xy;
-  let a = dot(delta, delta);
-  let b = 2.0 * dot(offset, delta);
-  let c = dot(offset, offset) - circle.z * circle.z;
-  let discriminant = b * b - 4.0 * a * c;
-  if (discriminant < 0.0 || a < 0.0001) { return false; }
-  let root = sqrt(discriminant);
-  let near = (-b - root) / (2.0 * a);
-  let far = (-b + root) / (2.0 * a);
-  return far > 0.001 && near < 0.999;
+  let span = length(delta);
+  if (span < 0.001) { return false; }
+  let direction = delta / span;
+  let toCircle = circle.xy - origin;
+  let along = clamp(dot(toCircle, direction), 0.0, span);
+  return length(toCircle - direction * along) <= circle.z;
 }
 
 fn boxHit(origin: vec2<f32>, delta: vec2<f32>, box: vec4<f32>) -> bool {
@@ -139,7 +141,7 @@ fn boxHit(origin: vec2<f32>, delta: vec2<f32>, box: vec4<f32>) -> bool {
   let point = uv * shadow.uSize;
   let delta = point - shadow.uOrigin;
   // Inside smoke the viewer sees only a small circle around itself.
-  var blocked = shadow.uReveal > 0.0 && dot(delta, delta) > shadow.uReveal * shadow.uReveal;
+  var blocked = shadow.uReveal > 0.0 && length(delta) > shadow.uReveal;
   for (var index = 0; index < ${maxOccluders}; index++) {
     if (blocked || index >= shadow.uCount) { break; }
     let shape = shadow.uOccluders[index];
