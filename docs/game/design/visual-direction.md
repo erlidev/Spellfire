@@ -1,6 +1,6 @@
 # Visual and art direction
 
-SpellFire uses a clean, procedural visual language inspired by Diep.io and extended for classes, elements, biomes, danger, and dense multiplayer combat. System shapes are locked here; exact color, size, and density values remain tunable. Renderer choice belongs to [`../../architecture.md`](../../architecture.md).
+SpellFire uses a procedural visual language: a dense, intricately detailed environment beneath a clean, flat combat layer whose readability is never negotiable. Its shape grammar is inspired by Diep.io and extended for classes, elements, biomes, danger, and dense multiplayer combat; its environment aims at the depth a top-down world can carry without a single painted asset. System shapes are locked here; exact color, size, and density values remain tunable. Renderer choice belongs to [`../../architecture.md`](../../architecture.md).
 
 ## Visual pillars
 
@@ -9,7 +9,7 @@ These are ordered; earlier rules win conflicts.
 1. **Readability before beauty.** At three-second raw TTK, a crowded fight must be parsed instantly.
 2. **Procedural first, authored by exception.** In-world appearance comes from code, parameters, and math, keeping content coherent and cheap to extend.
 3. **Form encodes function.** Hue, silhouette, projectile shape, and ground shape communicate gameplay.
-4. **Atmosphere comes from palette, not detail.** Mood uses color, value, and grid rather than clutter.
+4. **Detail below, contrast above.** The world is dense and intricate; the gameplay layer that sits on it is flat and loud. Depth is bought in the layers players do not have to parse, never in the layer they do.
 
 ## Primitive vocabulary
 
@@ -32,6 +32,27 @@ Only these outside-the-world assets may be authored:
 | Marketing/splash art | Stores and promotion | Never rendered in play |
 
 When in-world art needs more range, extend the primitive vocabulary or parameters instead of adding a sprite.
+
+## The layer model
+
+The world is expansive and intricately detailed, and it stays readable because detail and contrast are separated by depth rather than traded against each other. Five layers, drawn in order:
+
+| Layer | Contents | Technique |
+|---|---|---|
+| **L0 Ground** | Biome-blended colour, macro variation, flow, cracks, moisture, the grid | One multi-octave noise fragment shader over a single quad |
+| **L1 Decals** | Grass tufts, ash drifts, ice fracture, root networks, scorch, rubble | Instanced sprites off runtime-generated shared textures |
+| **L2 Terrain** | Colliders: ridges, boulders, ruins, thickets, trunks, walls | Flat fill plus outline, the primitive vocabulary above |
+| **L3 Gameplay** | Actors, weapons, projectiles, telegraphs, drops, nodes | Flat fill plus outline, maximum contrast, unchanged |
+| **L4 Overhead** | Canopies, overhangs, cloud shadows, ambient particles | Partial alpha, offset against the camera by notional height |
+
+L0 and L1 are where the impression of an intricate world comes from, and they are close to free: a shader over one quad and a few batched draws, regardless of how dense the result looks. This is the whole reason the procedural boundary survives contact with the ambition — density that would be ruinous as thousands of individual shapes is trivial as one noise field and one instanced texture. **Detail is baked into textures and batched; it is never emitted as per-instance geometry.**
+
+L4 implies vertical extent: a canopy slides against its own trunk as the camera passes it, which is the cheapest cue that the world is not a diagram.
+
+Two rules bound the model, and both are checked rather than left to taste.
+
+- **The readability floor.** L0 and L1 are clamped to a bounded value and saturation range, in every biome and every danger band, so L3 always wins contrast against whatever it stands on. A palette or density change that breaches the floor is a defect, not a style.
+- **L4 never hides an actor.** Line of sight is authoritative absence — the server omits what a player cannot see. An overhead layer that concealed a body the server *did* send would be a vision rule nobody enforces and no player could read, letting a player be killed by an opponent they could not have seen. Canopy alpha stays low enough that an actor beneath it is always legible.
 
 ## Palette
 
@@ -89,7 +110,9 @@ Every hue-coded distinction must also use shape, pattern, outline, ring, icon, o
 
 ## World rendering
 
-The grid remains the ground everywhere. Sparse procedural scatter and ambient tint identify biomes without textures. Safe zones use brighter, calmer ambient and a distinct grid so the loadout-lock boundary is unmistakable. Danger-band transitions use the ambient value ramp defined above.
+The grid remains the ground everywhere, now carried in L0 alongside the biome's own surface rather than drawn over a flat fill. A biome is identified by its ground field, its scatter, its terrain archetypes, and its ambient tint together — a player should be able to name where they are standing without reading the HUD. Safe zones use brighter, calmer ambient and a distinct grid so the loadout-lock boundary is unmistakable. Danger-band transitions use the ambient value ramp defined above, so depth is estimable without UI.
+
+Scatter density is a per-biome parameter and is expected to be high; the readability floor, not restraint, is what keeps it safe.
 
 ## Effects and motion
 
@@ -99,7 +122,7 @@ The rules assume fast per-frame primitive drawing, independent of renderer. Effe
 
 ## Open values
 
-The primitive grammar, outline, procedural boundary, palette model, hue set, channel split, and telegraph system are locked. Exact colors, saturation curves, silhouettes, grid dimensions, and effect density remain open.
+The primitive grammar, outline, procedural boundary, layer model, readability floor, palette model, hue set, channel split, and telegraph system are locked. Exact colors, saturation curves, silhouettes, grid dimensions, scatter density, and effect density remain open.
 
 **Open:** the colorblind-validated palette. Hues are chosen and validated iteratively against real fights rather than picked up front, and the art style itself may shift as the game finds its look. The requirement that survives any style change is the redundant non-color channel above: no distinction may depend on hue alone, so a palette revision can never be the thing that breaks readability.
 
