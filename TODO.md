@@ -239,24 +239,24 @@ Phase 2.7 uses prototype Signature parts, a Signature prism/stave, an Aegis crys
 
 Phase 3 is where the world stops being a 3,000-unit test arena and becomes the expansive,
 detailed environment the design promises. [3.0](#30-scale-substrate--prerequisites-pulled-forward-from-phase-8)
-has shipped the substrate: the world is radius 45,000, indexed and chunked. Four decisions are settled and everything below
+has shipped the substrate: the world is radius 22,500, indexed and chunked. Four decisions are settled and everything below
 follows from them:
 
 | Decision | Settled as |
 |---|---|
-| **Scale** | Radius **45,000** (×15 today). Straight-line foot crossing is 2:53 at 260 u/s; the ~5 minute target is met by a *real journey* — terrain detours, hostile territory, no direct route — not by dividing radius by walk speed. |
+| **Scale** | Radius **22,500** (×7.5 today). Straight-line foot crossing is ~55 s at 390 u/s; the ~5 minute target is met by a *real journey* — terrain detours, hostile territory, no direct route — not by dividing radius by walk speed. |
 | **Detail** | **Layered procedural depth**. No bitmap art enters the play space; detail comes from a shader ground, batched procedural decals, and a parallax overhead layer, all clamped below the gameplay layer's contrast. |
 | **Biomes** | **Procedural regions** from a world seed (noise/Voronoi), with load-time validation refusing any seed that leaves an element absent from a danger band. |
 | **Editing** | Map editor edits the **authored overlay and per-region parameters**; the substrate stays deterministic from seed. The map document is versioned JSON, exported and imported whole. |
 
 Sizing arithmetic, for reference when tuning: one "screen" is the AOI square, 2400 × 2400 =
-5.76 M u². Radius 45,000 is 1,104 screens of area — 22 per player at 50 concurrent, 11 at 100.
+5.76 M u². Radius 22,500 is 276 screens of area — 5.5 per player at 50 concurrent, 2.8 at 100.
 Crampedness is not the risk at this scale; **emptiness is**, so nodes, outposts, routes, and
 mob placement are what concentrate players and are load-bearing rather than decorative.
 
 ### 3.0 Scale substrate — prerequisites pulled forward from Phase 8
 
-**Shipped.** At radius 45,000, MMO-plausible collider density (roughly one per 400 × 400) is tens of
+**Shipped.** At radius 22,500, MMO-plausible collider density (roughly one per 400 × 400) is tens of
 thousands of world items, and the old flat slice was walked by every collision test, projectile step,
 occluder collection, and per-viewer snapshot. Both are gone: one uniform grid answers every
 broad-phase question, and terrain materialises per chunk around bodies
@@ -265,8 +265,8 @@ broad-phase question, and terrain materialises per chunk around bodies
 - [x] Uniform spatial grid (cell ≈ AOI half-extent, = `world.chunk_size`) indexing world items, players, projectiles, telegraphs, and deployables; one index answering collision, snapshot AOI, occluder collection, and target acquisition rather than a second visibility answer ([grid.go](server/internal/game/grid.go))
 - [x] Chunked deterministic world-item generation: a chunk materialises from `(world_seed, chunk_coord)` on demand and is evicted when no body is near, so the world is never fully resident. Placement is a jittered lattice rather than rejection sampling, because a chunk cannot see its neighbours ([chunk.go](server/internal/game/chunk.go))
 - [x] Chunk lifecycle does not violate existing contracts — a chunk holding a damaged or fading item is pinned, destruction leaves a scar that survives eviction, and authored fixtures, Mage walls, and developer spawns are never chunked at all. Chunks load before they can be seen and drop well outside interest, so the rewind window never spans a residency change
-- [x] Raised `world.radius` to 45,000 and re-scaled the danger bands: hub 900, Fringe 9,000, Frontier 31,500, Deadlands 45,000 ([world.json](data/tuning/world.json))
-- [x] Audited every radius-derived constant: spawn ring 600, terrain margins, developer-mode position bounds, and the client's world ring — now drawn as the arc facing the camera. The AOI half-extent deliberately did not move; it is a camera property rather than a world one
+- [x] Raised `world.radius` to 22,500 and re-scaled the danger bands: hub 450, Fringe 4,500, Frontier 15,750, Deadlands 22,500 ([world.json](data/tuning/world.json))
+- [x] Audited every radius-derived constant: spawn ring 300, terrain margins, developer-mode position bounds, and the client's world ring — now drawn as the arc facing the camera. The AOI half-extent deliberately did not move; it is a camera property rather than a world one
 - [x] Load test at 50 and 100 concurrent bodies against the 64 KiB snapshot guardrail at the new terrain density: 11.0 KB and 15.0 KB largest snapshots, plus a spread-population test holding residency bounded per body ([chunk_test.go](server/internal/game/chunk_test.go))
 - [x] [world.md](docs/game/design/world.md) carries the settled scale, the friction-based traversal target, and the procedural biome field
 - [x] Phase 8's spatial-index and load-test entries moved here; deltas/compression and priority tiers remain in Phase 8
@@ -356,7 +356,7 @@ detail lives below the gameplay layer, contrast lives in it.
 - [ ] Location readout: region name, biome, and danger band, updating on crossing rather than continuously ([game-view-and-hud.md](docs/game/ui/game-view-and-hud.md#safety-and-danger))
 - [ ] Visible no-PvP boundary around the nearest outpost, and exit-invulnerability self state with remaining duration
 - [ ] Boundary-crossing announcements that teach once and condense to persistent state (shared with Phase 7)
-- [ ] ⚠ **Resolve the minimap/compass decision** ([ui/open-decisions.md](docs/game/ui/open-decisions.md)) — deferred while the world was 11 seconds across; at radius 45,000 a player cannot navigate or find a discovered outpost without it, so it now blocks this section
+- [ ] ⚠ **Resolve the minimap/compass decision** ([ui/open-decisions.md](docs/game/ui/open-decisions.md)) — deferred while the world was 11 seconds across; at radius 22,500 a player cannot navigate or find a discovered outpost without it, so it now blocks this section
 - [ ] Discovered-outpost markers, with undiscovered outposts never rendered as locked rows ([system-interfaces.md](docs/game/ui/system-interfaces.md#death-and-respawn))
 
 Phase 4.1 harvest nodes and Phase 4.3 mob placement consume 3.1's field and 3.2's chokepoints
@@ -469,7 +469,7 @@ palette module and scatter props fill in.
 - [ ] Versioned welcome/tuning message so simulation constants can move without desyncing client prediction
 - [ ] Rate-limit authentication endpoints; document the trusted-origin policy for split-host deployments
 
-The spatial index and the 100+ concurrent load test moved to [Phase 3.0](#30-scale-substrate--prerequisites-pulled-forward-from-phase-8) and shipped there: at radius 45,000 the linear per-client scan could not survive terrain density, so they were prerequisites rather than scaling work.
+The spatial index and the 100+ concurrent load test moved to [Phase 3.0](#30-scale-substrate--prerequisites-pulled-forward-from-phase-8) and shipped there: at radius 22,500 the linear per-client scan could not survive terrain density, so they were prerequisites rather than scaling work.
 
 ---
 
@@ -481,7 +481,7 @@ Blocking work is tracked with **⚠** above. Resolve each in its owning document
 |---|---|---|
 | Colourblind-validated palette | [design/open-decisions.md](docs/game/design/open-decisions.md) | Phase 6 palette module — ship it swappable and unblock |
 | Guest play, character slots, naming, first-time class choice | [ui/open-decisions.md](docs/game/ui/open-decisions.md) | Home play panel |
-| Minimap, compass, and permissible world information | [ui/open-decisions.md](docs/game/ui/open-decisions.md) | **⚠ Phase 3.6** — now blocking: a radius-45,000 world is not navigable without it |
+| Minimap, compass, and permissible world information | [ui/open-decisions.md](docs/game/ui/open-decisions.md) | **⚠ Phase 3.6** — now blocking: a radius-22,500 world is not navigable without it |
 | Floating combat text and target inspection | [ui/open-decisions.md](docs/game/ui/open-decisions.md) | Phase 6 feedback |
 | Logout/recall *presentation* — the rule itself is settled in [economy-death-and-pve.md](docs/game/design/economy-death-and-pve.md#logging-out) | [ui/open-decisions.md](docs/game/ui/open-decisions.md) | Phase 7 exit and reconnect |
 | Mobile orientation, touch model, assistance limits | [ui/open-decisions.md](docs/game/ui/open-decisions.md) | Phase 7 mobile |
