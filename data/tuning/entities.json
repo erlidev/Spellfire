@@ -357,5 +357,21 @@
         { "attribute": "vitals.max_health", "label": "Maximum health", "input": "number", "scope": "edit", "default": "-1", "min": -1, "max": 10000, "step": 1 }
       ]
     }
+  },
+  "horse": {
+    "mass": 3,
+    "max_health": 220,
+    "occludes_vision": false,
+    "visible_in_shadow": false,
+    "collision_objects": [{ "type": "circle", "radius": 26 }],
+    "admin": { "name": "Warhorse", "spawnable": false, "fields": [] }
+  },
+  "motorcycle": {
+    "mass": 3,
+    "max_health": 200,
+    "occludes_vision": false,
+    "visible_in_shadow": false,
+    "collision_objects": [{ "type": "circle", "radius": 24 }],
+    "admin": { "name": "Motorcycle", "spawnable": false, "fields": [] }
   }
 }

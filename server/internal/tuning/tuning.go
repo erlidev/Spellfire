@@ -22,7 +22,7 @@ import (
 // SchemaVersion is the table shape this build understands. Bump it only when a
 // table changes shape, and add the matching forward migration; a plain balance
 // edit bumps Manifest.Version instead and needs no code change.
-const SchemaVersion = 23
+const SchemaVersion = 24
 
 type Manifest struct {
 	// Version is the content revision. Bump it on any balance edit; a change
@@ -86,6 +86,13 @@ type Session struct {
 	// PositionExpirySeconds is how long an offline character keeps the spot it
 	// logged out at. Past it, the next login recalls it to safety.
 	PositionExpirySeconds int `json:"position_expiry_seconds"`
+	// ExitInvulnSeconds is the brief invulnerability leaving an outpost's no-PvP
+	// radius grants, ended early by the player's own hostile action. It covers
+	// the transition out, never a free approach to a fight.
+	ExitInvulnSeconds int `json:"exit_invuln_seconds"`
+	// MountLockoutSeconds is how long after dealing or taking damage a player is
+	// barred from mounting a ride, so a ride cannot be entered mid-fight.
+	MountLockoutSeconds int `json:"mount_lockout_seconds"`
 }
 
 func (s Session) LogoutLinger() time.Duration {
@@ -96,13 +103,63 @@ func (s Session) PositionExpiry() time.Duration {
 	return time.Duration(s.PositionExpirySeconds) * time.Second
 }
 
-// Outpost is a fixed safe fixture a character can be recalled to. Positions are
-// Phase 3 geography; the table ships empty and every lookup falls back to the
-// central hub until it is filled.
+func (s Session) ExitInvuln() time.Duration {
+	return time.Duration(s.ExitInvulnSeconds) * time.Second
+}
+
+func (s Session) MountLockout() time.Duration {
+	return time.Duration(s.MountLockoutSeconds) * time.Second
+}
+
+// Outpost is a discoverable safe fixture: reaching its discovery radius unlocks
+// it for respawn, and its safe radius is a no-PvP bubble offering the declared
+// services. Positions sit in the walkable annuli between the ridge belts, never
+// in the Deadlands.
 type Outpost struct {
-	ID       string     `json:"-"`
-	Name     string     `json:"name"`
-	Position [2]float64 `json:"position"`
+	ID              string     `json:"-"`
+	Name            string     `json:"name"`
+	Band            string     `json:"band"`
+	Position        [2]float64 `json:"position"`
+	SafeRadius      float64    `json:"safe_radius"`
+	DiscoveryRadius float64    `json:"discovery_radius"`
+	// Services is the subset of loadout/crafting/respawn a row offers, so a
+	// forward outpost can offer less than the hub.
+	Services []string `json:"services"`
+}
+
+// Offers reports whether the outpost provides a service.
+func (o Outpost) Offers(service string) bool {
+	for _, s := range o.Services {
+		if s == service {
+			return true
+		}
+	}
+	return false
+}
+
+// Rideable is a crafted-to-spawn transport entity: a Gunslinger's vehicle or a
+// Mage's summoned mount. Crafting one spends materials and places the entity in
+// the world beside the player rather than adding anything to inventory. It is
+// transport only — no weapons or spells while riding — and a ride ends when the
+// entity is destroyed.
+type Rideable struct {
+	ID        string         `json:"-"`
+	Name      string         `json:"name"`
+	Class     string         `json:"class"`
+	Entity    string         `json:"entity"`
+	RideSpeed float64        `json:"ride_speed"`
+	Cost      map[string]int `json:"cost"`
+}
+
+// RideablesFor lists the rideable recipes a class may build, in stable order.
+func (t *Tables) RideablesFor(class string) []string {
+	ids := make([]string, 0, len(t.Rideables))
+	for _, id := range sortedKeys(t.Rideables) {
+		if t.Rideables[id].Class == class {
+			ids = append(ids, id)
+		}
+	}
+	return ids
 }
 
 type DangerBand struct {
@@ -914,8 +971,8 @@ func (t *Tables) AmmunitionFor(class string) []string {
 // XP sources the simulation knows how to award. A row of any other name would
 // be a value nothing ever reads, so the loader rejects it, and a missing row
 // would leave an award silently worth nothing, so the loader requires them all.
-// Only PlayerKill has a trigger today: mobs are Phase 4.3, harvesting Phase 4.1,
-// and outpost discovery Phase 3.
+// PlayerKill and Discovery have triggers today — a credited kill and reaching an
+// outpost. Mobs are Phase 4.3 and harvesting Phase 4.1.
 const (
 	SourcePlayerKill = "player_kill"
 	SourceMobKill    = "mob_kill"
@@ -1198,7 +1255,7 @@ type Biome struct {
 
 // RetiredKinds are the tables a retirement may name. A retired ID resolves
 // within its own kind; nothing is ever retired across tables.
-var RetiredKinds = []string{"weapon", "spell", "gadget", "ability", "effect", "component", "blueprint", "material", "element", "biome", "mob", "ammunition"}
+var RetiredKinds = []string{"weapon", "spell", "gadget", "ability", "effect", "component", "blueprint", "material", "element", "biome", "mob", "ammunition", "rideable"}
 
 // maxRetirementHops bounds a replacement chain. Validation rejects cycles, so
 // this only guards a table that somehow reached the resolver unvalidated.
@@ -1234,6 +1291,7 @@ type Tables struct {
 	Spells      map[string]Spell
 	Gadgets     map[string]Gadget
 	Ammunition  map[string]Ammunition
+	Rideables   map[string]Rideable
 	Components  Components
 	Materials   Materials
 	Mobs        map[string]Mob
@@ -1301,6 +1359,8 @@ func (t *Tables) Live(kind, id string) bool {
 		return t.Mobs[id].Name != ""
 	case "ammunition":
 		return t.Ammunition[id].Name != ""
+	case "rideable":
+		return t.Rideables[id].Name != ""
 	}
 	return false
 }
@@ -1537,6 +1597,7 @@ func Parse(fsys fs.FS) (*Tables, error) {
 		{"spells.json", &tables.Spells},
 		{"gadgets.json", &tables.Gadgets},
 		{"ammunition.json", &tables.Ammunition},
+		{"rideables.json", &tables.Rideables},
 		{"components.json", &tables.Components},
 		{"materials.json", &tables.Materials},
 		{"mobs.json", &tables.Mobs},
@@ -1603,6 +1664,10 @@ func (t *Tables) stampIDs() {
 	for id, ammunition := range t.Ammunition {
 		ammunition.ID = id
 		t.Ammunition[id] = ammunition
+	}
+	for id, rideable := range t.Rideables {
+		rideable.ID = id
+		t.Rideables[id] = rideable
 	}
 	for id, weight := range t.Combat.WeightClasses {
 		weight.ID = id

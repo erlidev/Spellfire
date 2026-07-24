@@ -71,7 +71,12 @@ describe("shared tuning tables", () => {
   });
 
   it("exposes spawn and edit metadata on entity archetypes", () => {
-    expect(Object.values(entityDefinitions).every((definition) => definition.admin.spawnable)).toBe(true);
+    // Most archetypes are developer-spawnable; the rideables deliberately are
+    // not, because a ride is crafted into the world with an owner rather than
+    // placed as a bare entity. The invariant the server enforces is that anything
+    // marked spawnable carries a name.
+    expect(Object.values(entityDefinitions).some((definition) => definition.admin.spawnable)).toBe(true);
+    expect(Object.values(entityDefinitions).every((definition) => !definition.admin.spawnable || definition.admin.name !== "")).toBe(true);
     for (const definition of Object.values(entityDefinitions)) for (const field of definition.admin.fields) {
       expect(field.attribute).toContain(".");
       expect(["number", "text", "select", "position", "rotation"]).toContain(field.input);

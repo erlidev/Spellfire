@@ -51,7 +51,7 @@ Biome rows carry their element, summary, and ambient palette since Phase 3.1, wh
 - [x] Saved position expires after 30 min offline and recalls to the nearest unlocked outpost or the hub ([outposts.json](data/tuning/outposts.json), `World.recallDestination`)
 - [x] One body per account: a second character's join is refused while the first is in the world, lingering included, so switching characters is not a combat-log escape (`Engine.Join`/`ErrAccountInWorld`, [architecture.md](docs/architecture.md#one-body-per-account))
 
-Unlocked outposts round-trip through the world but nothing mutates them yet — outpost discovery is Phase 3. Carried materials are now spent by Phase 2.3 crafting; harvesting, which is what legitimately produces them, is Phase 4.1. `outposts.json` ships empty, so every recall resolves to the hub until Phase 3 places them. Lingering bodies are now flagged on the wire and rendered as dimmed, offline actors; Phase 7 still owns the surrounding exit and reconnect UX.
+Unlocked outposts are mutated by the Phase 3.3 discovery trigger, which persists the unlock on the tick it happens rather than at the next autosave. Carried materials are now spent by Phase 2.3 crafting; harvesting, which is what legitimately produces them, is Phase 4.1. `outposts.json` carries real geography since 3.3, so a stale-position recall and a death both resolve to the nearest unlocked outpost. Lingering bodies are now flagged on the wire and rendered as dimmed, offline actors; Phase 7 still owns the surrounding exit and reconnect UX.
 
 ### 1.3 Server-side ability/effect framework
 - [x] One authoritative ability system replacing the ad-hoc branches in `stepPlayer`/`tryFire` — `World.ability`/`useAbility`/`spend`/`deliver` ([ability.go](server/internal/game/ability.go), [architecture.md](docs/architecture.md#abilities-and-effects))
@@ -130,7 +130,7 @@ live row" to "what this character owns" by the Phase 2.2 unlock ledger.
 - [x] `loadout.Equippable`/`Validate`/`Resolve` intersect with the ledger, so unowned content is refused on the mutation path rather than merely hidden by the menu
 - [x] Test: a zero-material character can fill a coherent loadout immediately ([progression_test.go](server/internal/progression/progression_test.go)), plus starter-kit stability/randomness, level grants, ledger-gated validation, and the separate progression save path
 
-Only `player_kill` has a trigger: mob kills, harvesting, and outpost discovery are priced in the table and awarded by Phases 4.3, 4.1, and 3, and Phase 4.4 tunes the curve against the pacing targets. Phase 2.4 widened the Gunslinger's basic set to four categories and its gadget pool to the riot shield, smoke, and flashbangs without touching the draw; a developer-mode level grant now reaches the rest of the ledger before mob XP lands; Phase 2.5 widened the Mage's draw to the five tier-1 spells, one per element, which is a legal six-slot set on its own because tier 1 needs no same-element company.
+`player_kill` and `discovery` have triggers — the latter since Phase 3.3 — while mob kills and harvesting are priced in the table and awarded by Phases 4.3 and 4.1, and Phase 4.4 tunes the curve against the pacing targets. Phase 2.4 widened the Gunslinger's basic set to four categories and its gadget pool to the riot shield, smoke, and flashbangs without touching the draw; a developer-mode level grant now reaches the rest of the ledger before mob XP lands; Phase 2.5 widened the Mage's draw to the five tier-1 spells, one per element, which is a legal six-slot set on its own because tier 1 needs no same-element company.
 
 ### 2.3 Recipe-blueprint crafting
 - [x] Generic blueprints + independently costed component recipes + authoritative finished-weapon recipes; a complete arrangement resolves the result and ambiguous recipes fail tuning validation ([components.json](data/tuning/components.json), [crafting.go](server/internal/crafting/crafting.go), [progression-and-crafting.md](docs/game/design/progression-and-crafting.md#recipe-blueprint-crafting))
@@ -271,8 +271,8 @@ broad-phase question, and terrain materialises per chunk around bodies
 - [x] [world.md](docs/game/design/world.md) carries the settled scale, the friction-based traversal target, and the procedural biome field
 - [x] Phase 8's spatial-index and load-test entries moved here; deltas/compression and priority tiers remain in Phase 8
 
-Left for the rest of Phase 3: outposts, travel, the map editor, layered environment rendering, and
-world HUD. The terrain scatter is now per-biome and the world is funnelled through ridge-belt
+Left for the rest of Phase 3: the map editor, layered environment rendering, and world HUD.
+Outposts, safety, and travel landed in [3.3](#33-outposts-safety-and-travel). The terrain scatter is now per-biome and the world is funnelled through ridge-belt
 chokepoints ([3.2](#32-terrain-friction-and-traversal)).
 
 ### 3.1 World field — danger, biome, and grade by position
@@ -300,22 +300,30 @@ straight line does not exist.
 
 - [x] Per-biome terrain archetypes in [entities.json](data/tuning/entities.json): boulders, ridges, thickets, ice shelves/blocks, lava flows, fulgurites, mirror monoliths, cinder spires, salt crags — each declaring its own `occludes_vision` / `visible_in_shadow` attributes; the biome underfoot chooses the scatter and the barrier the ridge belts are built from ([architecture.md](docs/architecture.md#terrain-friction-and-traversal))
 - [x] Macro structure: concentric impassable ridge belts broken by a handful of staggered passes, so radial travel is funnelled through chokepoints rather than crossing open ground — the belts fill a fine lattice with overlapping formations so they seal, and the passes stagger belt-to-belt so no straight radial line is clear ([terrain.go](server/internal/game/terrain.go))
-- [x] Routes as the traversal reward: the scatter thins in each pass mouth so a chokepoint reads as an exposed, cleared lane; the outpost-to-outpost lanes laid along the passes wait on Phase 3.3, which places the outposts to connect
+- [x] Routes as the traversal reward: the scatter thins in each pass mouth so a chokepoint reads as an exposed, cleared lane. Phase 3.3 placed the outposts; the authored lanes that connect one to the next are overlay rather than substrate and move to the 3.4 map document
 - [x] Density and placement rules per biome, generated per chunk from `(seed, chunk_coord)` and reproducible however chunks load and evict ([chunk.go](server/internal/game/chunk.go))
 - [x] Test: shortest-path search across the live walkable grid reports a median on-foot journey to the rim of ≥ 5 minutes (318 s shipped, straight line ~170 s), and no straight radial line is clear from hub to rim ([terrain_test.go](server/internal/game/terrain_test.go))
 - [x] Test: the walkable space is one connected region — every walkable cell, every biome, and the spawn ring are reachable from the hub, so nothing is sealed, stranded, or enclosed ([terrain_test.go](server/internal/game/terrain_test.go))
 
 ### 3.3 Outposts, safety, and travel
 
-- [ ] Populate [outposts.json](data/tuning/outposts.json) with rows across the Fringe and Frontier and none in the Deadlands ([world.md](docs/game/design/world.md#outposts-and-travel)); the per-character unlocked list already round-trips and needs only a trigger
-- [ ] Discovery trigger on proximity, awarding the `discovery` XP source already priced in [progression.json](data/tuning/progression.json) and persisting the unlock immediately, as loadout commits do
-- [ ] Per-outpost no-PvP radius replacing radius-from-origin protection; the safe-zone gate on `World.SetLoadout`, `World.Craft`, and `World.CraftAmmunition` resolves against the nearest outpost instead of the origin ([world.md](docs/game/design/world.md#outpost-safety))
-- [ ] Outpost services declared per row — loadout, crafting, respawn — so a forward outpost can offer less than the hub
-- [ ] Exit invulnerability on `Player`, granted on leaving a no-PvP radius and broken by the player's own hostile action, with a protocol field so attackers see it too
-- [ ] Mounts as a movement state, not a vehicle entity: a speed multiplier (~1.8×, rim trip ≈ 1:36) that is broken by damage and cannot be entered in combat
-- [ ] No fast travel while carrying raw materials; respawn is not an exception, since dying already forfeits the haul
-- [ ] Recall and respawn destinations resolve against discovered outposts, replacing today's always-the-hub fallback (`World.recallDestination`)
-- [ ] Test: protection follows outposts rather than the origin, exit invulnerability ends on the protected player's own hostile action, a Deadlands death recalls to a Frontier outpost, and a loaded player cannot fast travel
+- [x] Populated [outposts.json](data/tuning/outposts.json) with five rows across the Fringe and Frontier and none in the Deadlands, placed in the walkable annuli between the ridge belts and enforced by validation ([world.md](docs/game/design/world.md#outposts-and-travel)); terrain generation defers to each footprint, so an outpost is never sealed inside a belt
+- [x] Discovery trigger on proximity (`World.stepDiscovery`), awarding the `discovery` XP source already priced in [progression.json](data/tuning/progression.json) and persisting the unlock immediately through `World.DrainDirtyState`/`Engine.drainDirtyStateLocked`, as loadout commits do
+- [x] Per-outpost no-PvP radius replacing radius-from-origin protection: `World.Protected`/`Safe` overlay the outpost bubbles on the world field, and the gates on `SetLoadout`, `Craft`, `CraftAmmunition`, and `CraftRideable` resolve through `World.serviceAt` ([outpost.go](server/internal/game/outpost.go), [world.md](docs/game/design/world.md#outpost-safety))
+- [x] Outpost services declared per row — loadout, crafting, respawn — so a forward outpost offers less than the hub, mirrored on the client by [outposts.ts](web/src/game/outposts.ts)
+- [x] Exit invulnerability on `Player`, granted on the protected→unprotected crossing and broken by the player's own hostile use, reported through the existing `Entity.invulnerable` so attackers see it too
+- [x] **Changed from the original plan:** mounts are *rideable entities*, not a movement state. A Mage crafts a summoning crystal that materialises a horse; a Gunslinger crafts a motorcycle. Both appear in the world when crafted, are transport only (no weapons or spells while riding), carry their own health, take the damage aimed at their rider, force a dismount when destroyed, and cannot be mounted for a lockout window after combat ([rideable.go](server/internal/game/rideable.go), [rideables.json](data/tuning/rideables.json))
+- [x] **Changed from the original plan:** fast travel is banned outright rather than only while carrying materials. There is no voluntary teleport between outposts at all, and respawn is a forced relocation rather than a destination menu
+- [x] Recall and respawn destinations resolve against discovered outposts through one shared `nearestUnlockedOutpost`, replacing the always-the-hub fallback. **Changed from the original plan:** a death returns the player to the *nearest* unlocked outpost with no choice, superseding the free-choice respawn menu in [economy-death-and-pve.md](docs/game/design/economy-death-and-pve.md#respawn), which is updated to match. Respawn stays instant; the ~5 s timer remains Phase 4.2
+- [x] Test: protection follows outposts rather than the origin, services gate per row, discovery unlocks and awards exactly once, exit invulnerability covers the crossing and ends on the player's own shot, a Deadlands death respawns at the nearest Frontier outpost, rides are built only at a crafting outpost and replace one another, a mounted body moves at the ride's speed and cannot fight, and destroying a ride dismounts its rider unhurt ([outpost_test.go](server/internal/game/outpost_test.go), [rideable_test.go](server/internal/game/rideable_test.go), [outposts.test.ts](web/src/game/outposts.test.ts))
+
+Three rules were deliberately changed from what this file and the design documents
+originally specified, and the documents were rewritten rather than left to drift:
+mounts/vehicles are entities rather than a movement state, death respawns at the
+nearest unlocked outpost with no menu, and fast travel is banned entirely. The
+Phase 3.2 note about outpost-to-outpost lanes now has its outposts; laying the
+lanes themselves along the pass mouths remains open and moves to 3.4's map
+document, since a route is authored overlay rather than generated substrate.
 
 ### 3.4 Map editor and the map document
 
@@ -372,10 +380,9 @@ palette module and scatter props fill in.
 - [ ] Danger-tier-scaled insurance that never scales with squad size
 - [ ] Ground-drop world entity: 30 s killer-squad exclusivity, then free-for-all, 15 min despawn
 - [ ] Pickup is unrestricted by unlocks; crafting still enforces blueprint requirements
-- [ ] ~5 s respawn timer replacing instant origin respawn ([world.go:134-144](server/internal/game/world.go#L134-L144))
-- [ ] Free destination choice among discovered outposts plus the hub, nearest preselected, timer expiry falls back to it ([economy-death-and-pve.md](docs/game/design/economy-death-and-pve.md#respawn))
-- [ ] Death summary UI: kept gear, insured materials, dropped materials, death location, scannable destination list with distance and danger band, visible countdown ([system-interfaces.md](docs/game/ui/system-interfaces.md#death-and-respawn))
-- [ ] Undiscovered outposts are never rendered as locked rows
+- [ ] ~5 s respawn timer; Phase 3.3 already replaced the origin respawn with a relocation to the nearest unlocked outpost, so only the timer is left
+- [x] Destination resolution: Phase 3.3 settled this as *nearest unlocked outpost, no choice* rather than a free-travel menu, because a destination menu makes dying a routing decision and there is no fast travel ([economy-death-and-pve.md](docs/game/design/economy-death-and-pve.md#respawn))
+- [ ] Death summary UI: kept gear, insured materials, dropped materials, death location, the outpost being returned to with its distance and danger band, and a visible countdown ([system-interfaces.md](docs/game/ui/system-interfaces.md#death-and-respawn))
 
 ### 4.3 Mobs
 - [ ] Mob entity type, AI tick in the world step, and a per-class behaviour contract ([economy-death-and-pve.md](docs/game/design/economy-death-and-pve.md#enemy-classes))

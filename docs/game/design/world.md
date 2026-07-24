@@ -42,18 +42,20 @@ Biome-gated stock comes from two sources, so a region is worth travelling to whe
 
 ## Outposts and travel
 
-Multiple safe outposts provide services and respawn points. Reaching an outpost once unlocks it for respawn. This is a navigation and survival gate, not a level gate.
+Multiple safe outposts provide services and respawn points. Reaching an outpost once unlocks it for respawn. This is a navigation and survival gate, not a level gate. Outposts sit in the walkable annuli between the ridge belts, across the Fringe and Frontier and never in the Deadlands, and each declares which of loadout, crafting, and respawn it offers — a forward outpost may be a respawn point and nothing more, so the hub keeps a reason to exist.
 
-On death a player may choose any unlocked outpost or the central hub, then travels on foot from there; see [`economy-death-and-pve.md`](economy-death-and-pve.md#respawn). Unlocking outposts is therefore what buys redeployment range, which is the concrete reward for exploring.
+On death a player is returned to the unlocked outpost **nearest to where they fell**, or to the central hub when that is closer. There is no destination menu: the walk back out is the penalty, and choosing where to reappear would turn dying into a routing decision. Unlocking outposts is what shortens that walk, which is the concrete reward for exploring.
 
-Mounts are the speed axis for repeat journeys at this scale, and they are a movement state rather than a vehicle: broken by damage and unenterable in combat, so they shorten a trip without removing the exposure that makes it one. Fast travel while carrying raw materials is forbidden because hauling risk cannot be teleportable. Respawn is not an exception to that rule: it is reached only by dying, which already forfeits the haul.
+**There is no fast travel of any kind.** No teleport between outposts, loaded or empty, and no exception for respawn — a respawn is a relocation to the nearest unlocked outpost, not a destination the player picks. Distance is the world's only currency for risk, and a teleport spends it for free.
+
+The speed axis for repeat journeys is therefore **rideable entities**, not a movement state and not a teleport. A Gunslinger crafts a **vehicle** (a motorcycle); a Mage crafts a summoning crystal that materialises a **mount** (a warhorse). Both appear in the world when crafted — they are the product of the craft rather than an inventory item — and both are gated to an outpost that offers crafting, so a ride is prepared before a journey rather than conjured during one. A ride is transport only: no weapons or spells while riding. It has its own health, it takes the damage aimed at its rider, and when it is destroyed the rider is put back on foot. It cannot be mounted for a short window after dealing or taking damage, so it shortens a trip without becoming an escape from a fight. Multi-rider vehicles are future work; today one body rides one ride.
 
 ### Outpost safety
 
 Exit camping is prevented by two locked rules:
 
-- **No-PvP radius.** PvP is disabled inside a radius around every outpost, generously larger than the outpost footprint. Entering it does not protect a player from PvE or from consequences already in flight.
-- **Exit invulnerability.** Leaving an outpost grants brief invulnerability that ends early on the player's own hostile action. It covers the transition out of the no-PvP radius, not a free approach to a fight.
+- **No-PvP radius.** PvP is disabled inside a radius around every outpost, generously larger than the outpost footprint. Entering it does not protect a player from PvE or from consequences already in flight. This radius, not a distance from the origin, is what every safety rule now resolves against: the loadout lock, the crafting gate, the wall-placement rule, and both ends of PvP protection.
+- **Exit invulnerability.** Leaving an outpost grants brief invulnerability that ends early on the player's own hostile action. It covers the transition out of the no-PvP radius, not a free approach to a fight. It is granted on the crossing itself, so standing inside safety never refreshes it and a body already outside cannot re-arm it without going back in.
 
 Both durations and radii are tuning values. They must stay short and small enough that the safe bubble cannot be used offensively — a player cannot heal, reload, or rotate through it to win a fight they are losing outside it.
 

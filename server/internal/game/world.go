@@ -59,6 +59,7 @@ type Tuning struct {
 	DashDuration, DashCooldown         time.Duration
 	MaxHealth, MaxMana, ManaRegen      float64
 	LogoutLinger, PositionExpiry       time.Duration
+	ExitInvuln, MountLockout           time.Duration
 }
 
 func FromTables(tables *tuning.Tables) Tuning {
@@ -74,6 +75,7 @@ func FromTables(tables *tuning.Tables) Tuning {
 		DashDistance: dash.Distance, DashDuration: dash.Duration(), DashCooldown: dash.Cooldown(),
 		MaxHealth: player.MaxHealth, MaxMana: body.MaxMana, ManaRegen: body.ManaRegen,
 		LogoutLinger: tables.Session.LogoutLinger(), PositionExpiry: tables.Session.PositionExpiry(),
+		ExitInvuln: tables.Session.ExitInvuln(), MountLockout: tables.Session.MountLockout(),
 	}
 }
 
@@ -193,7 +195,26 @@ type Player struct {
 	// killable and unable to act, until it passes. Zero means connected.
 	LingerUntil                   time.Time
 	SpeedMultiplier, ViewDistance float64
+	// WasProtected is whether the body was in a no-PvP zone last tick, and
+	// ExitInvulnUntil the brief invulnerability leaving one grants, ended early by
+	// the body's own hostile action. LastCombat is the last time it dealt or took
+	// damage, which is what bars mounting a ride mid-fight.
+	WasProtected    bool
+	ExitInvulnUntil time.Time
+	LastCombat      time.Time
+	// MountID is the rideable the body is currently riding, empty when on foot.
+	// While set, the body drives that entity and cannot dash, fire, or use.
+	MountID string
 }
+
+// exitInvulnerable reports whether the body still holds the brief invulnerability
+// it was granted on leaving a no-PvP bubble.
+func (p *Player) exitInvulnerable(now time.Time) bool {
+	return now.Before(p.ExitInvulnUntil)
+}
+
+// Mounted reports whether the body is currently riding a mount or vehicle.
+func (p *Player) Mounted() bool { return p.MountID != "" }
 
 // Lingering reports whether the body is present only because its owner
 // disconnected. A lingering player takes damage but cannot act.
@@ -275,6 +296,15 @@ type World struct {
 	// caster that raised it, because one wall per caster is the rule and a map
 	// makes it a lookup rather than a scan.
 	walls map[string]*wallGroup
+	// rideables are the crafted-to-spawn transport entities — a Gunslinger's
+	// vehicle or a Mage's summoned mount — keyed by their own ID. One per owner is
+	// the rule, so crafting a new one replaces the old.
+	rideables map[string]*Rideable
+	// outposts is the outpost table as one ID-ordered slice. Safety is asked on
+	// every hostile hit test, on every body every tick, and per candidate site
+	// during terrain generation, so it is ordered once here rather than sorted
+	// per call.
+	outposts []tuning.Outpost
 	// The spatial index is the world's one broad-phase answer, and terrain is the
 	// bucket that made it necessary: at radius 45,000 the flat slice this
 	// replaces would hold tens of thousands of colliders and be walked by every
@@ -286,6 +316,7 @@ type World struct {
 	shots     *spatialGrid[*Projectile]
 	warnings  *spatialGrid[*Telegraph]
 	fieldGrid *spatialGrid[*Deployable]
+	rideGrid  *spatialGrid[*Rideable]
 	// chunkSize is one index cell and one generation chunk: the same coordinate
 	// space, so residency and bucketing can never disagree.
 	chunkSize float64
@@ -312,9 +343,14 @@ type World struct {
 	nextTelegraph   uint64
 	nextDeployable  uint64
 	nextWall        uint64
+	nextRideable    uint64
 	nextAdminPlayer uint64
 	nextAdminEntity uint64
 	combat          *combatLog
+	// stateDirty flags characters whose persisted world state — an unlocked
+	// outpost — changed and must be saved immediately rather than at the next
+	// autosave, the way a loadout commit is.
+	stateDirty map[string]bool
 }
 
 func NewWorld(t Tuning) *World {
@@ -328,7 +364,10 @@ func NewWorld(t Tuning) *World {
 	w := &World{
 		tuning: t, players: make(map[string]*Player), projectiles: make(map[string]*Projectile), telegraphs: make(map[string]*Telegraph),
 		deployables: make(map[string]*Deployable), walls: make(map[string]*wallGroup),
-		history:   make(map[string][]historySample),
+		rideables:  make(map[string]*Rideable),
+		outposts:   orderedOutposts(t.Tables.Outposts),
+		stateDirty: make(map[string]bool),
+		history:    make(map[string][]historySample),
 		occupants: make(map[string]string), combat: newCombatLog(combatEventCapacity),
 		chunkSize: chunkSize,
 		terrain:   newSpatialGrid[*Entity](chunkSize),
@@ -336,6 +375,7 @@ func NewWorld(t Tuning) *World {
 		shots:     newSpatialGrid[*Projectile](chunkSize),
 		warnings:  newSpatialGrid[*Telegraph](chunkSize),
 		fieldGrid: newSpatialGrid[*Deployable](chunkSize),
+		rideGrid:  newSpatialGrid[*Rideable](chunkSize),
 		chunks:    make(map[gridCell]*worldChunk),
 		resident:  make(map[string]*Entity),
 		scars:     make(map[string]bool),
@@ -462,23 +502,11 @@ func (w *World) standable(position Vec) bool {
 }
 
 // recallDestination picks the safe fixture nearest to where the character left
-// off: any outpost it has unlocked, or the central hub. Outposts have no
-// geography until Phase 3.3 fills the table, so today this always resolves to
-// the hub — the fallback the design already guarantees exists.
+// off: any outpost it has unlocked, or the central hub. It is the stale-position
+// recall; a death shares the same nearest-unlocked-outpost rule through the same
+// helper.
 func (w *World) recallDestination(character model.Character, from Vec) Vec {
-	best := w.hubSpawn(character.ID)
-	nearest := best.Sub(from).LengthSq()
-	for _, id := range character.State.Outposts {
-		outpost, ok := w.tuning.Tables.Outposts[id]
-		if !ok {
-			continue
-		}
-		position := Vec{outpost.Position[0], outpost.Position[1]}
-		if distance := position.Sub(from).LengthSq(); distance < nearest && w.standable(position) {
-			best, nearest = position, distance
-		}
-	}
-	return best
+	return w.nearestUnlockedOutpost(character.ID, character.State.Outposts, from)
 }
 
 // hubSpawn is the character's deterministic point on the central spawn ring.
@@ -665,14 +693,22 @@ var ErrLoadoutUnavailable = errors.New("You cannot change your loadout right now
 // DangerAt, Protected, and Safe are the world's zone vocabulary. Every rule
 // that used to compare a distance against a radius asks one of these instead,
 // so there is one answer to "what is this position" rather than a comparison
-// per call site. Phase 3.3 replaces the radial field with per-outpost radii by
-// rebuilding the field, and nothing below has to change.
+// per call site. DangerAt is still the pure radial field — it is what names the
+// band and its material grade — while Protected and Safe now overlay the
+// discoverable outposts on top of it.
 func (w *World) DangerAt(at Vec) worldfield.Band { return w.tuning.Field.DangerAt(at.X, at.Y) }
 
-// Protected reports whether PvP damage is refused at a position, and Safe
-// whether the full service set — loadout, crafting, respawn — is available.
-func (w *World) Protected(at Vec) bool { return w.tuning.Field.Protected(at.X, at.Y) }
-func (w *World) Safe(at Vec) bool      { return w.tuning.Field.Safe(at.X, at.Y) }
+// Protected reports whether PvP damage is refused at a position: inside the
+// hub, the restricted fringe, or any outpost's no-PvP bubble. Safe reports
+// whether a position is a no-PvP service zone at all — the hub or an outpost —
+// as opposed to the merely-restricted fringe, which protects without offering
+// services.
+func (w *World) Protected(at Vec) bool {
+	return w.tuning.Field.Protected(at.X, at.Y) || w.inOutpostBubble(at)
+}
+func (w *World) Safe(at Vec) bool {
+	return w.tuning.Field.Safe(at.X, at.Y) || w.inOutpostBubble(at)
+}
 
 // RegionAt is the whole field at a position: danger, biome, and material grade.
 // It is what the HUD reads and what harvesting will ask.
@@ -702,7 +738,7 @@ func (w *World) SetLoadout(id string, requested model.Loadout, now time.Time) (m
 	if !p.Alive || p.Lingering() {
 		return p.Loadout.Clone(), ErrLoadoutUnavailable
 	}
-	if !w.InSafety(p) {
+	if !w.serviceAt(p.Position, "loadout") {
 		return p.Loadout.Clone(), ErrLoadoutLocked
 	}
 	requested.Version = w.tuning.Tables.Manifest.Version
@@ -754,7 +790,7 @@ func (w *World) Craft(id string, request CraftRequest, itemID string) (model.Cra
 	if !p.Alive || p.Lingering() || p.AdminSpawned {
 		return model.CraftedItem{}, ErrCraftingUnavailable
 	}
-	if !w.InSafety(p) {
+	if !w.serviceAt(p.Position, "crafting") {
 		return model.CraftedItem{}, ErrCraftingLocked
 	}
 	if capacity := w.tuning.Tables.Progression.CraftedItemCapacity; len(p.Items) >= capacity {
@@ -795,7 +831,7 @@ func (w *World) CraftAmmunition(id, recipeID string) (map[string]int, error) {
 	if !p.Alive || p.Lingering() || p.AdminSpawned {
 		return nil, ErrCraftingUnavailable
 	}
-	if !w.InSafety(p) {
+	if !w.serviceAt(p.Position, "crafting") {
 		return nil, ErrCraftingLocked
 	}
 	recipe, err := crafting.ValidateAmmunition(w.tuning.Tables, p.Class, recipeID)
@@ -916,8 +952,10 @@ func (w *World) RemovePlayer(id string) {
 	delete(w.players, id)
 	delete(w.history, id)
 	// A wall outlives its caster's death, but not its caster leaving the world:
-	// nothing would ever take it down again.
+	// nothing would ever take it down again. A rideable is transient the same way
+	// — it goes with the body that owns it.
 	w.dropWall(id, w.stepped)
+	w.reapRideableOf(id)
 	for telegraphID, telegraph := range w.telegraphs {
 		if telegraph.OwnerID == id {
 			w.removeTelegraph(telegraphID)
@@ -943,7 +981,15 @@ func (w *World) Respawn(id string, now time.Time) bool {
 	if p == nil || p.Alive {
 		return false
 	}
-	p.Position, p.Velocity, p.DashDirection, p.DashTicksLeft = Vec{}, Vec{}, Vec{}, 0
+	// Death sends the body to the nearest outpost it has unlocked, chosen from
+	// where it fell — never a menu and never a teleport between outposts. A
+	// Deadlands death has no outpost to land on, so the nearest is always a
+	// Frontier one and the rim walk-back is the penalty on its own.
+	// The dismount runs first: it puts the body where its ride stands, which
+	// would otherwise overwrite the destination chosen below.
+	w.dismount(p, now)
+	destination := w.nearestUnlockedOutpost(id, p.Outposts, p.Position)
+	p.Position, p.Velocity, p.DashDirection, p.DashTicksLeft = destination, Vec{}, Vec{}, 0
 	w.bodies.update(p)
 	w.loadChunksAround(p.Position)
 	p.cancelDelete()
@@ -957,6 +1003,9 @@ func (w *World) Respawn(id string, now time.Time) bool {
 	p.Effects, p.Cooldowns = nil, make(map[string]time.Time)
 	p.ShieldAbility, p.Shield, p.ShieldBroken, p.ShieldHitAt = "", 0, false, time.Time{}
 	p.NextFire, p.ReloadEnds, p.DashReady = now, now, now
+	// It respawns in a safe bubble, so it is treated as protected and carries no
+	// exit invulnerability or combat lockout until it leaves.
+	p.WasProtected, p.ExitInvulnUntil, p.LastCombat = true, time.Time{}, time.Time{}
 	w.combat.resetTarget(id)
 	w.recordHistory(p, now)
 	return true
@@ -1002,6 +1051,11 @@ func (w *World) reapDeleted(now time.Time) {
 			w.removeDeployable(id)
 		}
 	}
+	for id, rideable := range w.rideables {
+		if rideable.deleteComplete(now) {
+			w.removeRideable(id)
+		}
+	}
 	w.reapWorldItems(now)
 	for id, player := range w.players {
 		// Connected characters remain as ordinary dead bodies until respawn.
@@ -1023,6 +1077,10 @@ func (w *World) stepPlayer(p *Player, now time.Time, dt float64) {
 		p.Acknowledged = p.Input.Sequence
 		return
 	}
+	// Leaving a no-PvP bubble grants brief invulnerability; this runs for a
+	// mounted body too, before it may return early below.
+	w.updateExitInvuln(p, now)
+	w.stepDiscovery(p)
 	// The selected bar slot travels with the input, so the server resolves the
 	// use button against the same slot the player was looking at. An
 	// out-of-range index is clamped rather than rejected.
@@ -1047,6 +1105,20 @@ func (w *World) stepPlayer(p *Player, now time.Time, dt float64) {
 		move.X++
 	}
 	move = move.Normalized()
+	// Riding is server-authoritative movement: a mounted body drives its ride and
+	// cannot dash, fire, or use. The interact button toggles the ride — mounting
+	// an owned rideable nearby, or dismounting the one being ridden.
+	interact := p.Input.Buttons&ButtonInteract != 0 && p.PreviousButtons&ButtonInteract == 0
+	if p.Mounted() {
+		w.rideStep(p, move, interact, now, dt)
+		p.PreviousButtons, p.Acknowledged = p.Input.Buttons, p.Input.Sequence
+		return
+	}
+	if interact && w.tryMount(p, now) {
+		p.Velocity, p.DashTicksLeft = Vec{}, 0
+		p.PreviousButtons, p.Acknowledged = p.Input.Buttons, p.Input.Sequence
+		return
+	}
 	// A stun suppresses everything the body does; a root only takes its
 	// movement, leaving it able to aim, reload, and act.
 	stunned, rooted := w.stunned(p), w.rooted(p)
@@ -1249,6 +1321,20 @@ func (w *World) damage(target *Player, amount float64, sourceID string, at time.
 	if !target.Alive || amount <= 0 {
 		return
 	}
+	// Exit invulnerability refuses incoming damage whole for its brief window: it
+	// is what covers the transition out of a no-PvP bubble. It ends on the body's
+	// own hostile action, cleared in useAbility, so it can never be an offensive
+	// tool.
+	if target.exitInvulnerable(at) {
+		return
+	}
+	// A mounted body cannot be hurt directly: its ride takes the hit, and a ride
+	// destroyed is what forces the dismount. The rider therefore never dies while
+	// riding — it is put back on foot first.
+	if target.Mounted() {
+		w.damageRideable(target, amount, sourceID, at)
+		return
+	}
 	// Armor mitigates before a shield absorbs: mitigation is a property of the
 	// body, and a ward should spend its pool on what actually got through.
 	amount *= w.armorScale(target)
@@ -1258,6 +1344,12 @@ func (w *World) damage(target *Player, amount float64, sourceID string, at time.
 	}
 	applied, destroyed := target.TakeDamage(amount)
 	w.combat.recordDamage(at, sourceID, target.ID, applied, destroyed)
+	// Taking or dealing damage marks both parties as in combat, which bars them
+	// from mounting a ride for the lockout window.
+	target.LastCombat = at
+	if source := w.players[sourceID]; source != nil {
+		source.LastCombat = at
+	}
 	if destroyed {
 		target.Velocity, target.Effects, target.DashTicksLeft = Vec{}, nil, 0
 		w.cancelTelegraphs(target.ID, at)

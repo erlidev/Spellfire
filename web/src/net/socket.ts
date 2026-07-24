@@ -1,5 +1,5 @@
 import { ClientKind, ServerKind, type CraftRequest, type InputFrame, type LoadoutSet, type ServerMessage } from "../types";
-import { decodeServer, encodeAmmunitionEnvelope, encodeCraftEnvelope, encodeInputEnvelope, encodeJoin, encodeLoadoutEnvelope, encodeSimple } from "./protobuf";
+import { decodeServer, encodeAmmunitionEnvelope, encodeCraftEnvelope, encodeInputEnvelope, encodeJoin, encodeLoadoutEnvelope, encodeRideableEnvelope, encodeSimple } from "./protobuf";
 
 export interface SocketEvents {
   message(message: ServerMessage): void;
@@ -36,6 +36,8 @@ export class GameSocket {
   craft(request: CraftRequest): boolean { if (this.socket?.readyState !== WebSocket.OPEN) return false; this.socket.send(encodeCraftEnvelope(request)); return true; }
   /** Requests one batch of special ammunition. It answers on the Craft message. */
   craftAmmunition(recipe: string): boolean { if (this.socket?.readyState !== WebSocket.OPEN) return false; this.socket.send(encodeAmmunitionEnvelope(recipe)); return true; }
+  /** Requests one rideable. It answers on the Craft message; the ride arrives in the world. */
+  craftRideable(recipe: string): boolean { if (this.socket?.readyState !== WebSocket.OPEN) return false; this.socket.send(encodeRideableEnvelope(recipe)); return true; }
   close(): void { this.stopped = true; window.clearTimeout(this.pingTimer); this.socket?.close(1000, "player exit"); }
 
   private retry(): void {

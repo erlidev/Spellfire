@@ -1,4 +1,6 @@
 {
   "logout_linger_seconds": 10,
-  "position_expiry_seconds": 1800
+  "position_expiry_seconds": 1800,
+  "exit_invuln_seconds": 3,
+  "mount_lockout_seconds": 5
 }

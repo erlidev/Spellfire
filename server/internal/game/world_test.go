@@ -300,7 +300,9 @@ func TestDeathAndRespawnResetAuthoritativeState(t *testing.T) {
 	if !w.Respawn(target.ID, now.Add(time.Second)) {
 		t.Fatal("respawn rejected")
 	}
-	if !target.Alive || target.Health != w.tuning.MaxHealth || target.Position != (Vec{}) {
+	// With no unlocked outpost, a death respawns at the hub spawn ring rather than
+	// at the origin.
+	if !target.Alive || target.Health != w.tuning.MaxHealth || target.Position != w.hubSpawn(target.ID) {
 		t.Fatalf("respawn state = %#v", target)
 	}
 	if w.Respawn(target.ID, now.Add(2*time.Second)) {

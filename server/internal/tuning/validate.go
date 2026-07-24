@@ -37,6 +37,7 @@ func (t *Tables) validate() error {
 	t.validateGadgets(problems)
 	t.validateWeapons(problems)
 	t.validateAmmunition(problems)
+	t.validateRideables(problems)
 	t.validateUnlockIDs(problems)
 	t.validateMobs(problems)
 	t.validateRetired(problems)
@@ -210,16 +211,46 @@ func (t *Tables) validateSession(r *report) {
 	r.require(s.PositionExpirySeconds > s.LogoutLingerSeconds,
 		"session: position_expiry_seconds %d must exceed logout_linger_seconds %d, or a position expires before the body it belongs to is gone",
 		s.PositionExpirySeconds, s.LogoutLingerSeconds)
+	r.require(s.ExitInvulnSeconds > 0, "session: exit_invuln_seconds must be positive; leaving an outpost must cover the transition out")
+	r.require(s.MountLockoutSeconds > 0, "session: mount_lockout_seconds must be positive; a ride must not be enterable mid-fight")
 }
 
-// validateOutposts keeps every recall destination inside the world. The table
-// ships empty; Phase 3 owns where outposts actually sit.
+// validateOutposts keeps every outpost a legal safe fixture: inside the world,
+// out of the Deadlands, with a no-PvP bubble, a discovery reach at least as wide
+// as it, and a known, non-empty service set.
 func (t *Tables) validateOutposts(r *report) {
+	services := map[string]bool{"loadout": true, "crafting": true, "respawn": true}
 	for _, id := range sortedKeys(t.Outposts) {
 		outpost := t.Outposts[id]
 		r.require(outpost.Name != "", "outposts: %q has no name", id)
 		distance := math.Hypot(outpost.Position[0], outpost.Position[1])
-		r.require(distance <= t.World.Radius, "outposts: %q sits %g from the origin, outside the %g world radius", id, distance, t.World.Radius)
+		r.require(distance+outpost.SafeRadius <= t.World.Radius, "outposts: %q sits %g from the origin, outside the %g world radius", id, distance, t.World.Radius)
+		r.require(outpost.SafeRadius > 0, "outposts: %q needs a positive safe_radius", id)
+		r.require(outpost.DiscoveryRadius >= outpost.SafeRadius, "outposts: %q discovery_radius must be at least its safe_radius", id)
+		r.require(len(outpost.Services) > 0, "outposts: %q offers no services", id)
+		for _, service := range outpost.Services {
+			r.require(services[service], "outposts: %q offers unknown service %q", id, service)
+		}
+		band := t.World.BandAt(distance)
+		r.require(band.PvP != "full", "outposts: %q sits in the Deadlands (%q), which has no safe outposts", id, band.ID)
+	}
+}
+
+// validateRideables keeps every rideable recipe buildable: a known class, a
+// concrete entity archetype, a speed that actually helps, and a real material
+// cost.
+func (t *Tables) validateRideables(r *report) {
+	for _, id := range sortedKeys(t.Rideables) {
+		rideable := t.Rideables[id]
+		r.require(rideable.Name != "", "rideables: %q has no name", id)
+		r.require(rideable.Class == "gunslinger" || rideable.Class == "mage", "rideables: %q has unknown class %q", id, rideable.Class)
+		r.require(t.Entities[rideable.Entity].MaxHealth > 0, "rideables: %q references entity %q, which must have positive health", id, rideable.Entity)
+		r.require(rideable.RideSpeed > 1, "rideables: %q ride_speed must exceed 1 to be worth summoning", id)
+		r.require(len(rideable.Cost) > 0, "rideables: %q has no material cost", id)
+		for material, amount := range rideable.Cost {
+			r.require(t.Materials.Materials[material].Name != "", "rideables: %q costs unknown material %q", id, material)
+			r.require(amount > 0, "rideables: %q material %q amount must be positive", id, material)
+		}
 	}
 }
 

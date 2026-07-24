@@ -209,6 +209,20 @@ func ValidateAmmunition(tables *tuning.Tables, class model.Class, id string) (tu
 	return recipe, nil
 }
 
+// ValidateRideable reports why a requested rideable may not be built. Like
+// ammunition it is not gated by the unlock ledger: the recipe belongs to the
+// class, and building it spends materials in a safe zone.
+func ValidateRideable(tables *tuning.Tables, class model.Class, id string) (tuning.Rideable, error) {
+	recipe, ok := tables.Rideables[id]
+	if !ok {
+		return tuning.Rideable{}, fmt.Errorf("%q is not something you can build", id)
+	}
+	if recipe.Class != string(class) {
+		return tuning.Rideable{}, fmt.Errorf("%s is a %s ride", recipe.Name, recipe.Class)
+	}
+	return recipe, nil
+}
+
 // Shortfall is what is still missing to pay a cost from a carried inventory, and
 // is empty when the craft is affordable. The crafting UI shows it per material
 // rather than as one refusal, because "you need three more" is actionable and

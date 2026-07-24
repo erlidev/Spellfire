@@ -19,6 +19,10 @@ const (
 	// on ServerCraft like any other build, because what it changes is the same
 	// carried inventory.
 	ClientAmmunition uint64 = 7
+	// ClientRideable builds one rideable — a vehicle or a mount — which appears in
+	// the world beside the player. It answers on ServerCraft like any other build,
+	// because what it changes is the same carried inventory.
+	ClientRideable uint64 = 8
 
 	ServerWelcome  uint64 = 1
 	ServerSnapshot uint64 = 2
@@ -49,6 +53,7 @@ const (
 	EntityDeployable uint64 = 7
 	EntityBoss       uint64 = 8
 	EntityWorldItem  uint64 = 9
+	EntityMount      uint64 = 10
 )
 
 const (
@@ -121,6 +126,7 @@ type ClientEnvelope struct {
 	Loadout      Loadout
 	Craft        CraftRequest
 	Ammunition   string
+	Rideable     string
 }
 
 type Entity struct {
@@ -161,6 +167,9 @@ type Entity struct {
 	// spent from. Both are zero for everything that is not holding one.
 	Shield    float32
 	MaxShield float32
+	// Mounted is set on a player riding a mount or vehicle, so the client draws
+	// it astride its ride rather than standing.
+	Mounted bool
 }
 
 type Collider struct {
@@ -288,6 +297,13 @@ func DecodeClient(data []byte) (ClientEnvelope, error) {
 				return out, errors.New("invalid ammunition request")
 			}
 			out.Ammunition = v
+			data = data[m:]
+		case 9:
+			v, m := protowire.ConsumeString(data)
+			if m < 0 {
+				return out, errors.New("invalid rideable request")
+			}
+			out.Rideable = v
 			data = data[m:]
 		default:
 			m := protowire.ConsumeFieldValue(num, typ, data)
@@ -630,6 +646,9 @@ func encodeEntity(e Entity) []byte {
 	out = appendVarint(out, 37, e.Shots)
 	out = appendFloat(out, 38, e.Shield)
 	out = appendFloat(out, 39, e.MaxShield)
+	if e.Mounted {
+		out = appendVarint(out, 40, 1)
+	}
 	return out
 }
 

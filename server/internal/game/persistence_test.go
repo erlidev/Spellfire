@@ -475,8 +475,8 @@ func TestEngineAutosavesWhileConnectedAndSurvivesAFailedWrite(t *testing.T) {
 func tablesWithOutposts(t *testing.T) *tuning.Tables {
 	t.Helper()
 	files := edit(t, shipped(t), "outposts.json", func(document map[string]any) {
-		document["ridge"] = map[string]any{"name": "Ridge Station", "position": []any{2500.0, 0.0}}
-		document["hollow"] = map[string]any{"name": "Hollow Post", "position": []any{-2500.0, 0.0}}
+		document["ridge"] = map[string]any{"name": "Ridge Station", "band": "fringe", "position": []any{2500.0, 0.0}, "safe_radius": 650.0, "discovery_radius": 900.0, "services": []any{"loadout", "crafting", "respawn"}}
+		document["hollow"] = map[string]any{"name": "Hollow Post", "band": "fringe", "position": []any{-2500.0, 0.0}, "safe_radius": 650.0, "discovery_radius": 900.0, "services": []any{"loadout", "crafting", "respawn"}}
 	})
 	tables, err := tuning.Parse(files)
 	if err != nil {

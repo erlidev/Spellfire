@@ -42,14 +42,15 @@ export class Predictor {
    * slowed body predicted at full speed runs ahead of the server and is snapped
    * back by every reconciliation, which is the stutter a slow used to cause.
    */
-  step(buttons: number, aimX: number, aimY: number, selectedSlot: number, now: number, handling = 1, status: MovementStatus = noMovementStatus): InputFrame {
+  step(buttons: number, aimX: number, aimY: number, selectedSlot: number, now: number, handling = 1, status: MovementStatus = noMovementStatus, ride = 0): InputFrame {
     const aimLength = Math.hypot(aimX, aimY);
     if (aimLength > 0.001) { this.aimX = aimX / aimLength; this.aimY = aimY / aimLength; }
     let dx = Number(Boolean(buttons & Buttons.Right)) - Number(Boolean(buttons & Buttons.Left));
     let dy = Number(Boolean(buttons & Buttons.Down)) - Number(Boolean(buttons & Buttons.Up));
     const moveLength = Math.hypot(dx, dy);
     if (moveLength) { dx /= moveLength; dy /= moveLength; }
-    if ((buttons & Buttons.Dash) && !(this.previousButtons & Buttons.Dash) && now >= this.dashReadyAt && this.mass >= 0 && !status.immobile) {
+    // A ride cannot dash: it is transport, and the server refuses the spend too.
+    if ((buttons & Buttons.Dash) && !(this.previousButtons & Buttons.Dash) && now >= this.dashReadyAt && this.mass >= 0 && !status.immobile && ride === 0) {
       this.dashDirX = moveLength ? dx : this.aimX; this.dashDirY = moveLength ? dy : this.aimY;
       this.dashTicksLeft = dashTicks;
       this.dashReadyAt = now + dashCooldownMS;
@@ -65,6 +66,12 @@ export class Predictor {
       motion = { x: 0, y: 0 }; this.dashTicksLeft = 0;
     } else if (status.immobile) {
       motion = { x: 0, y: 0 }; this.dashTicksLeft = 0;
+    } else if (ride > 0) {
+      // Riding drives the mount at its own speed. Weapon handling does not apply
+      // — the weapon is stowed — but statuses still do, exactly as on the server,
+      // so a slowed rider is slowed here too.
+      motion = { x: dx * speed * ride * status.scale / tickRate, y: dy * speed * ride * status.scale / tickRate };
+      this.dashTicksLeft = 0;
     } else if (this.dashTicksLeft > 0) {
       motion = { x: this.dashDirX * dashSpeed / tickRate, y: this.dashDirY * dashSpeed / tickRate };
       this.dashTicksLeft--;

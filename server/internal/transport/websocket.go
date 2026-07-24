@@ -114,6 +114,8 @@ func (h *WebSocket) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			})
 		case protocol.ClientAmmunition:
 			h.engine.CraftAmmunition(client.PlayerID, message.Ammunition)
+		case protocol.ClientRideable:
+			h.engine.CraftRideable(client.PlayerID, message.Rideable)
 		}
 	}
 }

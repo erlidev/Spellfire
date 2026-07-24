@@ -108,6 +108,7 @@ message Entity {
     DEPLOYABLE = 7;
     BOSS = 8;
     WORLD_ITEM = 9;
+    MOUNT = 10;
   }
   enum Allegiance {
     ALLEGIANCE_UNKNOWN = 0;
@@ -172,6 +173,8 @@ message Entity {
   // and defender have to be able to see it running out.
   float shield = 38;
   float max_shield = 39;
+  // Set on a player riding a mount or vehicle, so it is drawn astride its ride.
+  bool mounted = 40;
 }
 
 message CollisionObject {

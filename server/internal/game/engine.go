@@ -98,6 +98,10 @@ func (e *Engine) Run(ctx context.Context) {
 			// clock: a level-up is a deliberate grant, and it is announced to its
 			// owner on the same pass that persists it.
 			pending = append(pending, e.drainProgressLocked()...)
+			// An outpost unlock is a deliberate, persisted event like a loadout
+			// commit, so it is saved on the tick it happens rather than at the next
+			// autosave.
+			pending = append(pending, e.drainDirtyStateLocked(now)...)
 			if e.persist != nil && now.Sub(lastSave) >= e.saveEvery {
 				pending, lastSave = append(pending, e.statesLocked(now)...), now
 			}
@@ -156,6 +160,21 @@ func (e *Engine) progressMessageLocked(playerID string, progress model.Progress)
 		XPToNext: uint64(e.world.tuning.Tables.Progression.XPToNext(progress.Level)),
 		Unlocks:  progress.Unlocks,
 	}
+}
+
+// drainDirtyStateLocked persists the characters whose world state changed this
+// tick — an outpost unlock — without waiting for the autosave clock.
+func (e *Engine) drainDirtyStateLocked(now time.Time) []characterSave {
+	if e.persist == nil {
+		return nil
+	}
+	var pending []characterSave
+	for _, id := range e.world.DrainDirtyState() {
+		if state, ok := e.world.StateOf(id, now); ok {
+			pending = append(pending, characterSave{id: id, state: &state})
+		}
+	}
+	return pending
 }
 
 func (e *Engine) statesLocked(now time.Time) []characterSave {
@@ -452,6 +471,27 @@ func (e *Engine) CraftAmmunition(playerID, recipeID string) {
 	e.enqueue(pending)
 }
 
+// CraftRideable builds one rideable and answers the client on the same reply an
+// ordinary craft uses: what it changes is the carried inventory, and the ride
+// itself appears in the world through the next snapshot.
+func (e *Engine) CraftRideable(playerID, recipeID string) {
+	now := time.Now()
+	e.mu.Lock()
+	_, err := e.world.CraftRideable(playerID, recipeID, now)
+	var pending []characterSave
+	if err == nil {
+		if state, ok := e.world.StateOf(playerID, now); ok {
+			pending = append(pending, characterSave{id: playerID, state: &state})
+		}
+	}
+	reply := e.craftMessageLocked(playerID, err)
+	if client := e.clients[playerID]; client != nil {
+		e.queue(client, protocol.EncodeServer(reply))
+	}
+	e.mu.Unlock()
+	e.enqueue(pending)
+}
+
 // craftMessageLocked reports what the character owns and carries after a craft
 // attempt. The caller holds the engine lock.
 func (e *Engine) craftMessageLocked(playerID string, err error) protocol.ServerEnvelope {
@@ -491,7 +531,7 @@ func (e *Engine) loadoutMessageLocked(playerID string, set model.Loadout, err er
 		message.Error = err.Error()
 	}
 	if p := e.world.players[playerID]; p != nil {
-		message.LoadoutEditable = p.Alive && !p.Lingering() && e.world.InSafety(p)
+		message.LoadoutEditable = p.Alive && !p.Lingering() && e.world.serviceAt(p.Position, "loadout")
 		message.RespecOwed = p.RespecOwed
 	}
 	return message

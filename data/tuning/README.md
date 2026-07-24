@@ -131,7 +131,7 @@ Rules, from [`invariants.md`](../../docs/game/design/invariants.md) and
 | `manifest.json` | Content and schema versions |
 | `admins.json` | Normalized account emails granted administrator authorization |
 | `simulation.json` | Tick/send rates, AOI radius, rewind window, interpolation delay |
-| `session.json` | Logout linger window and saved-position expiry |
+| `session.json` | Logout linger window, saved-position expiry, exit-invulnerability window, and the post-combat mount lockout |
 | `entities.json` | Common entity defaults, vision-occlusion/shadow-visibility attributes, spawnability, and generic admin-field/input metadata |
 | `world.json` | World radius, spawn radius, chunk size, danger bands, the deterministic world field (seed, biome lattice, convex reward curve, coverage rule), per-biome terrain (scatter archetypes/fill, barrier archetype), the ridge-belt macro structure (radii, thickness, staggered passes) and route clearing, fixed fixtures |
 | `combat.json` | Role and dodge-vector vocabularies, player movement/resources, universal dash, weight classes, damage bands |
@@ -148,7 +148,8 @@ Rules, from [`invariants.md`](../../docs/game/design/invariants.md) and
 | `materials.json` | Material grades, kinds (universal structural/wood/reagent, biome-gated aligned/growth, crafted ammunition, boss reward), rows, and the bounded admin grant input |
 | `mobs.json` | Mob contracts |
 | `biomes.json` | Biomes: the element they align to, the summary the HUD shows, and the ambient palette the renderer tints the ground with |
-| `outposts.json` | Recall destinations: outpost names and world positions |
+| `outposts.json` | Outposts: name, band, world position, no-PvP `safe_radius`, `discovery_radius`, and the `services` (`loadout`/`crafting`/`respawn`) each offers |
+| `rideables.json` | Crafted-to-spawn rides: the class that builds one, the entity archetype it materialises, its speed multiplier, and its material cost |
 | `retired.json` | Withdrawn IDs and the replacement or refund each resolves to |
 
 ## Deliberately empty and deliberately absent
@@ -207,8 +208,16 @@ Rows are populated only where a design document has settled them.
   defers those to implementation and playtesting; writing numbers now would be
   false precision.
 - `biomes` carry no placement. Biome geography is Phase 3.
-- `outposts` is empty. Outpost geography is Phase 3; the recall search is
-  written against the table and resolves to the central hub until it has rows.
+- `outposts` carries the Phase 3.3 geography: rows across the Fringe and
+  Frontier, placed in the walkable annuli between the ridge belts and never in
+  the Deadlands, which validation enforces. Each row's `safe_radius` is a no-PvP
+  bubble that overlays the radial field, `discovery_radius` is what unlocks it,
+  and `services` is what it actually offers — a forward outpost may offer only
+  `respawn`. Terrain generation defers to the footprint, so an outpost never
+  materialises inside a ridge belt.
+- `rideables` carries one row per class: a Gunslinger's motorcycle and a Mage's
+  warhorse crystal. Crafting one spends materials and spawns the entity beside
+  the player instead of producing an inventory item, and there is one per owner.
 - `retired` is empty because nothing has been withdrawn yet. It is the only
   correct way to remove content once a save can name it.
 

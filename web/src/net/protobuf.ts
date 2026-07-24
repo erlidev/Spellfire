@@ -117,6 +117,15 @@ export function encodeAmmunitionEnvelope(recipe: string): Uint8Array {
   const writer = new Writer(); writer.uint(1, 7); writer.string(8, recipe); return writer.finish();
 }
 
+/**
+ * One rideable — a vehicle or a mount. It answers on the Craft reply too, because
+ * what it changes on the character is the same carried inventory; the ride itself
+ * arrives in the world through the next snapshot.
+ */
+export function encodeRideableEnvelope(recipe: string): Uint8Array {
+  const writer = new Writer(); writer.uint(1, 8); writer.string(9, recipe); return writer.finish();
+}
+
 function decodeComponentSlot(bytes: Uint8Array): [string, string] {
   let slot = "", component = "";
   const reader = new Reader(bytes);
@@ -183,7 +192,7 @@ export function encodeSimple(kind: 3 | 4, clientTimeMS = 0): Uint8Array {
 }
 
 function decodeEntity(bytes: Uint8Array): Entity {
-  const value: Entity = { type: 0, id: "", name: "", className: "", x: 0, y: 0, vx: 0, vy: 0, aimX: 0, aimY: 0, health: 0, maxHealth: 0, mana: 0, acknowledgedInput: 0, alive: false, ownerID: "", element: "", squadID: "", allegiance: 0, telegraphState: 0, invulnerable: false, telegraphShape: "", radius: 0, length: 0, width: 0, angleDegrees: 0, telegraphProgress: 0, abilityID: "", lingering: false, effectIDs: [], mass: 0, deleting: false, deleteProgress: 0, scoped: false, guarding: false, recoilDegrees: 0, shots: 0, shield: 0, maxShield: 0 };
+  const value: Entity = { type: 0, id: "", name: "", className: "", x: 0, y: 0, vx: 0, vy: 0, aimX: 0, aimY: 0, health: 0, maxHealth: 0, mana: 0, acknowledgedInput: 0, alive: false, ownerID: "", element: "", squadID: "", allegiance: 0, telegraphState: 0, invulnerable: false, telegraphShape: "", radius: 0, length: 0, width: 0, angleDegrees: 0, telegraphProgress: 0, abilityID: "", lingering: false, effectIDs: [], mass: 0, deleting: false, deleteProgress: 0, scoped: false, guarding: false, recoilDegrees: 0, shots: 0, shield: 0, maxShield: 0, mounted: false };
   const reader = new Reader(bytes);
   while (!reader.done) {
     const tag = reader.varint(), field = tag >>> 3, wire = tag & 7;
@@ -208,6 +217,7 @@ function decodeEntity(bytes: Uint8Array): Entity {
       case 34: value.scoped = reader.varint() !== 0; break; case 35: value.guarding = reader.varint() !== 0; break;
       case 36: value.recoilDegrees = reader.fixed32(); break; case 37: value.shots = reader.varint(); break;
       case 38: value.shield = reader.fixed32(); break; case 39: value.maxShield = reader.fixed32(); break;
+      case 40: value.mounted = reader.varint() !== 0; break;
       default: reader.skip(wire);
     }
   }

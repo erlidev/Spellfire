@@ -2,6 +2,7 @@ import { Application, Container, Graphics, Sprite, Text, Texture } from "pixi.js
 // Install eval-free polyfills so WebGL works under a CSP without 'unsafe-eval'. Side-effect import; must run before the renderer is created.
 import "pixi.js/unsafe-eval";
 import { abilities, deployableByKind, effects, entityDefinitions, projectileByKind, safeRadius, simulation, world } from "../tuning";
+import { outpostList } from "./outposts";
 import type { Collider, Entity, ServerMessage } from "../types";
 import { Allegiance, EntityType, ServerKind } from "../types";
 import type { Predictor } from "./prediction";
@@ -100,6 +101,8 @@ export class GameView {
   private overlayWorld = new Container();
   private ground = new Graphics();
   private telegraphLayer = new Container();
+  // Rides draw beneath actors so a rider always sits on top of its mount.
+  private mountLayer = new Container();
   private entityLayer = new Container();
   // A low-opacity veil covers terrain the local sightline cannot reach. Static
   // landmarks explicitly marked visible_in_shadow render in the layer above it.
@@ -151,7 +154,7 @@ export class GameView {
     const disc = new Graphics().circle(puffTextureRadius, puffTextureRadius, puffTextureRadius).fill(0xffffff);
     this.puffTexture = this.app.renderer.generateTexture({ target: disc, antialias: true });
     disc.destroy();
-    this.world.addChild(this.ground, this.telegraphLayer, this.entityLayer);
+    this.world.addChild(this.ground, this.telegraphLayer, this.mountLayer, this.entityLayer);
     this.overlayWorld.addChild(this.shadowVisibleLayer, this.fieldLayer, this.fogLayer);
     this.shadow.filters = [this.shadowFilter];
     this.app.stage.addChild(this.world, this.shadow, this.overlayWorld, this.blackout);
@@ -342,6 +345,24 @@ export class GameView {
     const reach = Math.hypot(width, height) / 2 + cell;
     this.drawRing(safeRadius, colors.safe, 5, .7, cameraX, cameraY, reach);
     this.drawRing(world.radius, colors.rim, 8, .8, cameraX, cameraY, reach);
+    this.drawOutposts(cameraX, cameraY, reach);
+  }
+
+  /**
+   * Every outpost's no-PvP boundary, drawn where the camera can reach it, so the
+   * safe bubble the loadout lock and PvP protection resolve against is seen
+   * rather than only stated. These are small circles, so unlike the world rim
+   * they are drawn whole — culled by distance instead of by arc.
+   */
+  private drawOutposts(cameraX: number, cameraY: number, reach: number): void {
+    for (const outpost of outpostList()) {
+      const distance = Math.hypot(cameraX - outpost.x, cameraY - outpost.y);
+      if (distance > reach + outpost.safeRadius) continue;
+      this.ground.moveTo(outpost.x + outpost.safeRadius, outpost.y);
+      this.ground.circle(outpost.x, outpost.y, outpost.safeRadius).stroke({ color: colors.safe, width: 5, alpha: .7 });
+      this.ground.moveTo(outpost.x + 26, outpost.y);
+      this.ground.circle(outpost.x, outpost.y, 26).stroke({ color: colors.safe, width: 3, alpha: .5 });
+    }
   }
 
   /**
@@ -421,7 +442,18 @@ export class GameView {
       view.health.clear().roundRect(-27, -39, 54, 7, 3).fill(colors.outline).roundRect(-25, -37, 50 * Math.max(0, entity.health / Math.max(1, entity.maxHealth)), 3, 2).fill(entity.health > 30 ? 0x65d89d : 0xff7f73);
       view.label.text = entity.lingering ? `${entity.name} · offline` : entity.name;
       if (entity.invulnerable) view.health.circle(0, 0, 27).stroke({ color: colors.safe, width: 3, alpha: .9 });
+      // A rider is drawn sitting a little high on its ride and holding nothing:
+      // riding is transport only, so a stowed weapon is the honest silhouette.
+      view.body.position.set(0, entity.mounted ? -10 : 0);
+      view.weapon.visible = !entity.mounted;
       this.drawStance(view.stance, entity);
+    } else if (entity.type === EntityType.Mount) {
+      const ratio = Math.max(0, entity.health / Math.max(1, entity.maxHealth));
+      view.health.clear();
+      if (ratio < 1) view.health.roundRect(-27, -44, 54, 7, 3).fill(colors.outline).roundRect(-25, -42, 50 * ratio, 3, 2).fill(ratio > .3 ? 0x65d89d : 0xff7f73);
+      // A ride faces where it is travelling, so a body crossing the world reads
+      // as going somewhere rather than sliding sideways.
+      if (entity.vx || entity.vy) view.body.rotation = Math.atan2(entity.vy, entity.vx);
     } else if (entity.type === EntityType.WorldItem && entity.maxHealth > 0) {
       const ratio = Math.max(0, entity.health / entity.maxHealth);
       view.health.clear();
@@ -441,6 +473,7 @@ export class GameView {
    */
   private layerFor(entity: Entity): Container {
     if (entity.type === EntityType.Telegraph) return this.telegraphLayer;
+    if (entity.type === EntityType.Mount) return this.mountLayer;
     if (entityDefinitions[entity.className]?.visible_in_shadow) return this.shadowVisibleLayer;
     if (entity.type !== EntityType.Deployable) return this.entityLayer;
     // Concealing smoke draws on top of everything; an area field draws above the
@@ -559,6 +592,21 @@ export class GameView {
       }
     } else if (entity.type === EntityType.Boss) {
       body.moveTo(0, -42).lineTo(38, -18).lineTo(32, 34).lineTo(-32, 34).lineTo(-38, -18).closePath().fill(0x657186).stroke({ color: outline, width: 7 });
+    } else if (entity.type === EntityType.Mount) {
+      // Two rides, drawn apart at a glance: a horse is a long body on legs, a
+      // motorcycle a frame between two wheels. Both point along their travel.
+      const radius = entity.radius || 26;
+      if (entity.className === "horse") {
+        body.ellipse(0, 0, radius * 1.5, radius * .72).fill(0x8a6a4b).stroke({ color: outline, width: 4 });
+        body.ellipse(radius * 1.35, -radius * .5, radius * .42, radius * .34).fill(0x8a6a4b).stroke({ color: outline, width: 3 });
+        body.moveTo(-radius * .8, radius * .5).lineTo(-radius * .9, radius * 1.1)
+          .moveTo(radius * .7, radius * .5).lineTo(radius * .8, radius * 1.1).stroke({ color: 0x5d4630, width: 5 });
+        body.moveTo(-radius * 1.45, -radius * .2).lineTo(-radius * 1.9, radius * .45).stroke({ color: 0x5d4630, width: 5 });
+      } else {
+        body.roundRect(-radius * 1.1, -radius * .38, radius * 2.2, radius * .76, 6).fill(0x4c5563).stroke({ color: outline, width: 4 });
+        body.circle(-radius * 1.05, radius * .3, radius * .46).circle(radius * 1.05, radius * .3, radius * .46).fill(0x23282f).stroke({ color: outline, width: 3 });
+        body.moveTo(radius * .4, -radius * .35).lineTo(radius * .95, -radius * .8).stroke({ color: 0x8d98a6, width: 5 });
+      }
     } else if (entity.type === EntityType.WorldItem && entity.className === "tree") {
       const radius = entity.radius;
       body.rect(-6, 4, 12, radius).fill(colors.trunk).stroke({ color: colors.outline, width: 4 });

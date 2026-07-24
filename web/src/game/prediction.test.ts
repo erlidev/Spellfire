@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { combat, effects, entityDefinitions, movementStatus, simulation } from "../tuning";
+import { combat, effects, entityDefinitions, movementStatus, rideSpeedFor, simulation } from "../tuning";
 import { Buttons, type Entity } from "../types";
 import { Predictor } from "./prediction";
 
@@ -20,6 +20,8 @@ function effectOfKind(kind: string): string {
 }
 const slowID = effectOfKind("slow");
 const slowScale = effects[slowID]!.speed_multiplier!;
+// The neutral status, spelled out so a mounted step can be tested without one.
+const noStatus = movementStatus([]);
 
 function entity(overrides: Partial<Entity> = {}): Entity {
   return {
@@ -27,7 +29,7 @@ function entity(overrides: Partial<Entity> = {}): Entity {
     health: 100, maxHealth: 100, mana: 10, acknowledgedInput: 0, alive: true, ownerID: "",
     element: "", squadID: "", allegiance: 1, telegraphState: 0, invulnerable: false, telegraphShape: "",
     radius: 0, length: 0, width: 0, angleDegrees: 0, telegraphProgress: 0, abilityID: "", lingering: false, effectIDs: [],
-    mass: 1, deleting: false, deleteProgress: 0, scoped: false, guarding: false, recoilDegrees: 0, shots: 0, shield: 0, maxShield: 0,
+    mass: 1, deleting: false, deleteProgress: 0, scoped: false, guarding: false, recoilDegrees: 0, shots: 0, shield: 0, maxShield: 0, mounted: false,
     ...overrides,
   };
 }
@@ -128,5 +130,26 @@ describe("client prediction", () => {
     // The cancelled dash does not resume once the knockback ends.
     predictor.step(Buttons.Right, 1, 0, 0, 2 * tickMS);
     expect(predictor.x - dashed).toBeCloseTo(speed / tickRate);
+  });
+
+  // Riding is server-authoritative movement the client mirrors: the ride's own
+  // speed, no dash, and statuses still applying.
+  it("predicts a mounted step at the ride's speed and refuses to dash", () => {
+    const ride = rideSpeedFor("horse");
+    expect(ride).toBeGreaterThan(1);
+    const predictor = new Predictor(); predictor.initialize(entity());
+    predictor.step(Buttons.Right | Buttons.Dash, 1, 0, 0, 0, 1, noStatus, ride);
+    expect(predictor.x).toBeCloseTo(speed * ride / tickRate);
+    // The dash was refused rather than spent, so dismounting leaves it ready.
+    predictor.step(0, 1, 0, 0, tickMS);
+    predictor.step(Buttons.Right | Buttons.Dash, 1, 0, 0, 2 * tickMS);
+    expect(predictor.x).toBeCloseTo(speed * ride / tickRate + dashDistance / dashTicks);
+  });
+
+  it("still slows a mounted body, so control effects are not shaken off by riding", () => {
+    const ride = rideSpeedFor("horse");
+    const predictor = new Predictor(); predictor.initialize(entity());
+    predictor.step(Buttons.Right, 1, 0, 0, 0, 1, movementStatus([slowID]), ride);
+    expect(predictor.x).toBeCloseTo(speed * ride * slowScale / tickRate);
   });
 });

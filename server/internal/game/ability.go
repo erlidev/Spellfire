@@ -85,8 +85,21 @@ func (w *World) useAbility(p *Player, now time.Time) bool {
 	if ability.CooldownMS > 0 {
 		p.Cooldowns[ability.ID] = now.Add(ability.Cooldown())
 	}
+	// A hostile use is the body's own action that ends its exit invulnerability
+	// and marks it in combat: exit safety cannot be a free approach to a fight.
+	if hostileAbility(ability) {
+		p.ExitInvulnUntil, p.LastCombat = time.Time{}, now
+	}
 	w.deliver(p, ability, now)
 	return true
+}
+
+// hostileAbility reports whether an ability can harm another player, which is
+// what breaks exit invulnerability and counts as entering combat. A pure
+// self-buff or a defensive placement does not.
+func hostileAbility(ability tuning.Ability) bool {
+	return ability.Projectile != nil || ability.Blast != nil || ability.Cleanse != nil ||
+		(ability.Deployable != nil && ability.Deployable.DamageBand != "")
 }
 
 // spend charges the ability's declared cost and reports whether it could be

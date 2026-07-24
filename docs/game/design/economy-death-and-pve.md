@@ -20,26 +20,19 @@ Crafted gear surviving death is what keeps [vertical progression](progression-an
 
 The respawn timer is roughly five seconds — long enough to register the loss, short enough that dying is not a break from playing. It does not scale with danger tier, gear, or killstreak; the walk back already scales with depth.
 
-Respawn is a free-travel menu: the player picks any unlocked outpost or the central hub, with the nearest outpost to the death location offered as the default. Undiscovered outposts are never listed, so [reaching an outpost](world.md#outposts-and-travel) remains the only way to earn it as a destination and exploration keeps its reward.
-
-| Choice | Purpose |
-|---|---|
-| Nearest unlocked outpost (default) | Return to the area, contest the drop, resume the trip |
-| Any other unlocked outpost | Redeploy to a different biome or band without the overland walk |
-| Central hub | Full reset: craft, restock, change loadout, pick a new direction |
+Respawn is not a menu. The player is returned to the **unlocked outpost nearest to where they fell**, or to the central hub when that is closer. [Reaching an outpost](world.md#outposts-and-travel) is still the only way to earn it as a destination, so exploration keeps its reward — what it buys is a shorter walk back to where you died, not a choice of where to reappear.
 
 Respawning is free. There is no durability, XP, currency, or material cost on top of the drop — death already transfers the haul, and stacking a second penalty would punish the players least able to absorb it.
 
-Rim deaths need no special rule: the [Deadlands has no outposts](world.md#radial-danger), so no choice puts a player back on the rim.
+Rim deaths need no special rule: the [Deadlands has no outposts](world.md#radial-danger), so the nearest unlocked destination is always a Frontier one and no death puts a player back on the rim.
 
 ### Death is not a travel route
 
-Free-choice respawn makes dying the fastest way to cross the map, which brushes against the [no fast travel while carrying raw materials](world.md#outposts-and-travel) rule. The cost structure, not a special case, is what contains it:
+A free-choice respawn menu would make dying the fastest way to cross the map. Nearest-only respawn closes that off by construction rather than by a countervailing rule: dying moves you toward where you already were, never toward where you would rather be. Combined with the [total ban on fast travel](world.md#outposts-and-travel) — there is no voluntary teleport between outposts at all — the only way to be somewhere is to travel there, on foot or on a ride.
 
-- **Respawn selection requires death.** There is no voluntary teleport between outposts. Suicide to relocate pays the full material loss, so a loaded player who uses death as transit destroys the haul they were moving.
-- **The insured share is small enough to be a consolation, not a shipment.** Insurance is tuned to soften a loss, not to make a death-teleport a profitable delivery. If players start dying deliberately to move goods, insurance is too generous at that tier — fix the rate, not the respawn menu.
+The remaining pressure is a player deliberately dying to shortcut a walk *back* to their nearest outpost. That is contained by cost rather than by a special case: dying pays the full material loss, so a loaded player who uses it as transit destroys the haul they were moving, and the insured share is tuned to soften a loss rather than to make a death-relocation a profitable delivery. If players start dying deliberately to move goods, insurance is too generous at that tier — fix the rate.
 
-A player carrying nothing may treat death as transit. That is acceptable: an empty-handed player carries nothing the economy protects, and the five-second timer plus the walk out from the chosen outpost keeps it from being frictionless.
+A player carrying nothing may treat death as a shortcut home. That is acceptable: an empty-handed player carries nothing the economy protects, and the timer plus the walk back out keeps it from being frictionless.
 
 ## Logging out
 
@@ -47,7 +40,7 @@ Disconnecting is not an escape. The body stays in the world for ten seconds afte
 
 An account fields one character at a time. A second character cannot be brought in beside the first, and cannot be brought in while the first is still lingering — otherwise switching characters would be the escape that disconnecting is not. The wait is the logout window and nothing more.
 
-The position a character logs out at is honoured for thirty minutes. Past that, the next login recalls it to the nearest safe fixture — an [unlocked outpost](world.md#outposts-and-travel), or the central hub when that is closer. The haul is untouched by the recall: a stale position costs the walk back out, never the materials, which keeps this a convenience rule rather than a second death penalty.
+The position a character logs out at is honoured for thirty minutes. Past that, the next login recalls it to the nearest safe fixture — an [unlocked outpost](world.md#outposts-and-travel), or the central hub when that is closer. This is the same nearest-unlocked rule a death resolves through, so logging out is never a way to reach somewhere a death would not have. The haul is untouched by the recall: a stale position costs the walk back out, never the materials, which keeps this a convenience rule rather than a second death penalty.
 
 ## Dropped materials
 

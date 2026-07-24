@@ -5,9 +5,10 @@ import { Predictor } from "./game/prediction";
 import { joystickVector, movementButtons } from "./game/touch";
 import { GameView } from "./game/view";
 import { GameSocket } from "./net/socket";
-import { abilities, ammunition as ammunitionTable, biomes, damageBandFor, entityDefinitions, handlingScale, materials as materialsTable, movementStatus, progression as progressionTable, resourceMax, session, specialAmmunition, weapons, weightOf, world, xpToNext, type AdminField, type EntityDefinition, type Guard, type Weapon } from "./tuning";
+import { abilities, ammunition as ammunitionTable, biomes, damageBandFor, entityDefinitions, handlingScale, materials as materialsTable, movementStatus, outposts as outpostTable, progression as progressionTable, resourceMax, rideSpeedFor, rideables as rideableTable, session, specialAmmunition, weapons, weightOf, world, xpToNext, type AdminField, type EntityDefinition, type Guard, type Weapon } from "./tuning";
 import { biomeName, gradeName, materialsAt, worldField } from "./game/worldfield";
-import { Buttons, ServerKind, type Character, type CharacterClass, type CraftedItem, type Entity, type LoadoutSet, type ServerMessage } from "./types";
+import { nearestOutpost, safeAt, serviceAt } from "./game/outposts";
+import { Buttons, EntityType, ServerKind, type Character, type CharacterClass, type CraftedItem, type Entity, type LoadoutSet, type ServerMessage } from "./types";
 
 function element<T extends HTMLElement>(id: string): T {
   const value = document.getElementById(id);
@@ -31,6 +32,7 @@ class SpellFire {
   private lastBand = "";
   private lastBiome = "";
   private localEntity?: Entity;
+  private localMount?: Entity;
   private activeCharacter?: Character;
   private adminMode: "off" | "spawn" | "select" | "delete" = "off";
   private adminSpawnID = Object.keys(entityDefinitions).filter((id) => entityDefinitions[id]!.admin.spawnable).sort()[0] ?? "";
@@ -61,6 +63,13 @@ class SpellFire {
   // never a gate: the input is sent regardless and the server decides.
   private cooldowns: Record<string, number> = {};
   private inSafety = true;
+  // Service availability tracks the outpost overlay: the hub offers everything,
+  // a forward outpost may offer less, and the server refuses either way.
+  private canEditLoadout = true;
+  private canCraft = true;
+  // discovered mirrors the outposts this session has reached, for the location
+  // toast. Persistence is the server's; this is display only.
+  private discovered = new Set<string>();
   private respecOwed = false;
   private loadoutStatus = "";
   private menuTab = "character";
@@ -332,6 +341,9 @@ class SpellFire {
     const local = message.entities.find((entity) => entity.id === message.playerID);
     if (!local || !this.predictor) return;
     this.localEntity = local;
+    // The ride the local body is on, kept so prediction can step at its speed and
+    // the HUD can prompt for the interact key when one is standing nearby.
+    this.localMount = message.entities.find((entity) => entity.type === EntityType.Mount && entity.ownerID === message.playerID);
     this.applyCooldowns(message);
     this.updateAdminSelectedFromSnapshot(message.entities);
     if (message.kind === ServerKind.Welcome) this.predictor.initialize(local); else this.predictor.reconcile(local);
@@ -356,10 +368,25 @@ class SpellFire {
     const shielded = !guard || !this.localEntity || this.localEntity.maxShield <= 0 || this.localEntity.shield > 0;
     const guarding = Boolean(guard) && shielded && !status.stunned && (buttons & Buttons.Fire) !== 0;
     if (!scoped) buttons &= ~Buttons.Scope;
-    const input = this.predictor.step(buttons, this.aim.x, this.aim.y, this.selectedSlot, performance.now(), handlingScale(weapon, guard, scoped, guarding), status);
+    // Riding is transport only: the fire and scope bits are dropped before they
+    // are sent, so a held trigger does not queue a shot the server refuses, and
+    // movement is predicted at the ride's own speed instead of the body's.
+    const ride = this.localRideSpeed();
+    if (ride > 0) buttons &= ~(Buttons.Fire | Buttons.Scope | Buttons.Dash | Buttons.Reload);
+    const input = this.predictor.step(buttons, this.aim.x, this.aim.y, this.selectedSlot, performance.now(), handlingScale(weapon, guard, scoped, guarding), status, ride);
     this.socket?.sendInput(input);
     this.setScopeView(scoped, weapon?.scope?.view_bonus ?? 0);
     this.view?.setHeavyRecoil(this.firesExplosive(weapon));
+  }
+
+  /**
+   * The speed multiplier the local body is currently riding at, or zero on foot.
+   * It is resolved from the ride's own archetype, so prediction and the server
+   * scale the same step by the same table value.
+   */
+  private localRideSpeed(): number {
+    if (!this.localEntity?.mounted || !this.localMount) return 0;
+    return rideSpeedFor(this.localMount.className);
   }
 
   /**
@@ -520,12 +547,15 @@ class SpellFire {
     this.lastBiome = region.biome.id;
     // Crossing out of safety locks the equipped set. Warn at the crossing, not
     // only when the player later opens the menu and finds the controls dead.
-    const safe = worldField.safeAt(entity.x, entity.y);
+    const safe = safeAt(entity.x, entity.y);
     if (safe !== this.inSafety) {
-      this.notice(safe ? "Safe zone: loadout unlocked." : "You left the safe zone. Your loadout is locked until you return.");
+      this.notice(safe ? "Safe zone: services available." : "You left the safe zone. Your loadout is locked until you return.");
       this.refreshOpenMenu();
     }
     this.inSafety = safe;
+    this.canEditLoadout = serviceAt(entity.x, entity.y, "loadout");
+    this.canCraft = serviceAt(entity.x, entity.y, "crafting");
+    this.reportDiscovery(entity.x, entity.y);
     // The bar carries the gadget cooldown readout, so it is redrawn on every
     // snapshot rather than only when the equipped set changes.
     this.renderAbilityBar();
@@ -568,7 +598,7 @@ class SpellFire {
     const local = this.localEntity;
     switch (this.menuTab) {
       case "character": return JSON.stringify([this.level, this.xp, this.xpNext, this.ledger.size, local && Math.ceil(local.health), local && Math.ceil(local.maxHealth), local && Math.floor(local.mana), local?.alive]);
-      case "world": return `${this.lastBand}|${this.lastBiome}|${local ? Math.round(Math.hypot(local.x, local.y) / 500) : ""}`;
+      case "world": return `${this.lastBand}|${this.lastBiome}|${this.discovered.size}|${local ? Math.round(Math.hypot(local.x, local.y) / 500) : ""}`;
       case "loadout": return JSON.stringify([this.inSafety, this.loadout, this.draft, this.respecOwed, this.loadoutStatus, this.items]);
       case "crafting": return JSON.stringify([this.inSafety, this.materials, this.items, this.craftWeapon, this.craftChoices, this.craftStatus, this.ledger.size]);
       case "inventory": return JSON.stringify([this.materials, this.items, this.loadout.weapon]);
@@ -595,7 +625,19 @@ class SpellFire {
       <p>${escapeHTML(biome?.summary ?? "")}</p>
       <p>${world.danger_bands.map((band) => escapeHTML(band.name)).join(" → ")}. Biome decides which material this ground yields; distance from the hub decides its grade, on a curve that rewards the rim disproportionately.</p>
       <p>This ground can yield: ${yielded.length ? yielded.join(", ") : "nothing — the hub is worked stone"}.</p>
+      <p>${this.outpostReadout(local)}</p>
       <p><small>Harvesting arrives with Phase 4.1; the ground already knows what it holds.</small></p>`;
+  }
+
+  /**
+   * Where the nearest discovered outpost is. Reaching one is what earns it as a
+   * respawn destination — there is no fast travel, so this is the walk back, not
+   * a menu you can jump from.
+   */
+  private outpostReadout(local: Entity): string {
+    const nearest = nearestOutpost(local.x, local.y, this.discovered);
+    if (!nearest) return "No outpost discovered yet. Reach one to unlock it as your respawn point.";
+    return `Nearest discovered outpost: <strong>${escapeHTML(nearest.name)}</strong>, ${Math.round(nearest.distance)} units away. Dying returns you to whichever unlocked outpost is closest.`;
   }
 
   private renderMenu(tab: string): void {
@@ -825,7 +867,7 @@ class SpellFire {
     if (!character) { content.innerHTML = "<h3>Loadout</h3><p>No character selected.</p>"; return; }
     const set = this.draft ?? this.loadout;
     const slots = bar(character.class, set, this.items);
-    const editable = this.inSafety;
+    const editable = this.canEditLoadout;
     const problem = loadoutProblem(character.class, this.ledger, set, this.items);
     content.replaceChildren();
     content.append(heading("Loadout"));
@@ -888,10 +930,10 @@ class SpellFire {
     content.append(heading("Crafting"));
 
     const lock = document.createElement("p");
-    lock.className = this.inSafety ? "status good" : "warning";
-    lock.textContent = this.inSafety
-      ? "You are inside a safe zone. Crafting spends the materials you are carrying."
-      : "Locked: crafting is only available inside a safe zone. Haul your materials back to spend them.";
+    lock.className = this.canCraft ? "status good" : "warning";
+    lock.textContent = this.canCraft
+      ? "You are at an outpost with a workbench. Crafting spends the materials you are carrying."
+      : "Locked: crafting is only available at an outpost that offers it. Haul your materials back to spend them.";
     content.append(lock);
 
     if (!this.craftWeapon) {
@@ -932,7 +974,7 @@ class SpellFire {
       const value = document.createElement("span"); value.textContent = selected ? `${selected.name} · T${selected.tier}` : "Drop a compatible part here";
       if (selected) drop.classList.add("filled");
       drop.addEventListener("dragover", (event) => {
-        if (this.inSafety) event.preventDefault();
+        if (this.canCraft) event.preventDefault();
       });
       drop.addEventListener("drop", (event) => {
         event.preventDefault();
@@ -941,7 +983,7 @@ class SpellFire {
       });
       if (selected) {
         const clear = document.createElement("button"); clear.className = "craft-clear"; clear.textContent = "Remove";
-        clear.disabled = !this.inSafety;
+        clear.disabled = !this.canCraft;
         clear.addEventListener("click", () => { delete this.craftChoices[slot]; this.craftStatus = ""; this.renderMenu("crafting"); });
         drop.append(label, value, clear);
       } else drop.append(label, value);
@@ -985,8 +1027,8 @@ class SpellFire {
       for (const id of fitting(this.craftWeapon, slot, this.craftChoices)) {
         const part = componentOf(id)!;
         const price = Object.keys(part.cost).sort().map((material) => `${part.cost[material]} ${materialName(material)}`).join(", ");
-        const button = document.createElement("button"); button.className = "craft-part"; button.draggable = this.inSafety;
-        button.disabled = !this.inSafety;
+        const button = document.createElement("button"); button.className = "craft-part"; button.draggable = this.canCraft;
+        button.disabled = !this.canCraft;
         button.innerHTML = `<strong>${part.name} · T${part.tier}</strong><small>${part.effect}</small><small class="craft-part-cost">Recipe: ${price}</small>`;
         button.addEventListener("dragstart", (event) => event.dataTransfer?.setData("text/plain", id));
         button.addEventListener("click", () => choosePart(slot, id));
@@ -1029,11 +1071,12 @@ class SpellFire {
     const build = document.createElement("button");
     build.className = "primary";
     build.textContent = Object.keys(required).length ? "Craft — spend materials" : "Craft (no materials required)";
-    build.disabled = !this.inSafety || full || !result || result !== this.craftWeapon || Object.keys(missing).length > 0;
+    build.disabled = !this.canCraft || full || !result || result !== this.craftWeapon || Object.keys(missing).length > 0;
     build.addEventListener("click", () => this.commitCraft(required));
     content.append(build);
 
     this.renderAmmunitionSection(content, character.class);
+    this.renderRideableSection(content, character.class);
   }
 
   /**
@@ -1059,7 +1102,7 @@ class SpellFire {
       if (Object.keys(missing).length) summary.className = "error";
       const button = document.createElement("button");
       button.className = "secondary"; button.textContent = `Build ${recipe.count}`;
-      button.disabled = !this.inSafety || Object.keys(missing).length > 0;
+      button.disabled = !this.canCraft || Object.keys(missing).length > 0;
       button.addEventListener("click", () => this.commitAmmunition(id));
       row.append(summary, button);
       content.append(row);
@@ -1072,6 +1115,61 @@ class SpellFire {
       this.craftStatus = "Not connected. Nothing was spent."; this.renderMenu("crafting"); return;
     }
     this.craftStatus = "Building ammunition…"; this.renderMenu("crafting");
+  }
+
+  /**
+   * Rides: a Gunslinger builds a vehicle, a Mage crafts a summoning crystal, and
+   * either way the thing appears in the world beside you rather than in your
+   * inventory. There is one per character, so building a second replaces the
+   * first. Riding is transport only — no weapons or spells while mounted — and a
+   * ride ends when it is destroyed. There is no fast travel; this is the only
+   * way to shorten a journey.
+   */
+  private renderRideableSection(content: HTMLElement, characterClass: CharacterClass): void {
+    const recipes = Object.keys(rideableTable).filter((id) => rideableTable[id]!.class === characterClass).sort();
+    if (!recipes.length) return;
+    const title = document.createElement("h4"); title.textContent = characterClass === "mage" ? "Mounts" : "Vehicles";
+    content.append(title);
+    const explain = document.createElement("p");
+    explain.textContent = "Built here and left standing beside you. Press E next to it to ride, E again to dismount. You cannot fight while riding, and you cannot mount just after a fight.";
+    content.append(explain);
+    for (const id of recipes) {
+      const recipe = rideableTable[id]!;
+      const missing = shortfall(recipe.cost, this.materials);
+      const row = document.createElement("div"); row.className = "loadout-slot";
+      const summary = document.createElement("span");
+      const price = Object.keys(recipe.cost).sort().map((material) => `${recipe.cost[material]} ${materialName(material)}`).join(", ");
+      summary.textContent = `${recipe.name} — ${price} · ${recipe.ride_speed.toFixed(1)}× speed`;
+      if (Object.keys(missing).length) summary.className = "error";
+      const button = document.createElement("button");
+      button.className = "secondary"; button.textContent = "Build";
+      button.disabled = !this.canCraft || Object.keys(missing).length > 0;
+      button.addEventListener("click", () => this.commitRideable(id));
+      row.append(summary, button);
+      content.append(row);
+    }
+  }
+
+  /** Sends one ride build. It answers on the same reply an ordinary craft does. */
+  private commitRideable(recipe: string): void {
+    if (!this.socket?.craftRideable(recipe)) {
+      this.craftStatus = "Not connected. Nothing was spent."; this.renderMenu("crafting"); return;
+    }
+    this.craftStatus = "Building…"; this.renderMenu("crafting");
+  }
+
+  /**
+   * Names an outpost the first time this session reaches it. The unlock itself is
+   * the server's and is persisted there; this is the readout.
+   */
+  private reportDiscovery(x: number, y: number): void {
+    for (const [id, outpost] of Object.entries(outpostTable)) {
+      if (this.discovered.has(id)) continue;
+      const dx = x - outpost.position[0], dy = y - outpost.position[1];
+      if (dx * dx + dy * dy > outpost.discovery_radius * outpost.discovery_radius) continue;
+      this.discovered.add(id);
+      this.notice(`${outpost.name} discovered. You will respawn here if it is the nearest outpost.`);
+    }
   }
 
   /** Owned and required materials side by side, with the shortfall named. */

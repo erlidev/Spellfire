@@ -15,7 +15,9 @@ import loadoutData from "../../data/tuning/loadout.json";
 import manifestData from "../../data/tuning/manifest.json";
 import materialsData from "../../data/tuning/materials.json";
 import mobsData from "../../data/tuning/mobs.json";
+import outpostsData from "../../data/tuning/outposts.json";
 import progressionData from "../../data/tuning/progression.json";
+import rideablesData from "../../data/tuning/rideables.json";
 import sessionData from "../../data/tuning/session.json";
 import simulationData from "../../data/tuning/simulation.json";
 import spellsData from "../../data/tuning/spells.json";
@@ -24,7 +26,9 @@ import worldData from "../../data/tuning/world.json";
 import type { CharacterClass } from "./types";
 
 export interface Manifest { version: number; schema_version: number }
-export interface SessionTable { logout_linger_seconds: number; position_expiry_seconds: number }
+export interface SessionTable { logout_linger_seconds: number; position_expiry_seconds: number; exit_invuln_seconds: number; mount_lockout_seconds: number }
+export interface Outpost { name: string; band: string; position: [number, number]; safe_radius: number; discovery_radius: number; services: string[] }
+export interface Rideable { name: string; class: CharacterClass; entity: string; ride_speed: number; cost: Record<string, number> }
 export interface Simulation { tick_rate: number; send_rate: number; aoi_radius: number; max_rewind_ms: number; interpolation_delay_ms: number }
 export interface DangerBand { id: string; name: string; tier: number; outer_radius: number; material_grade: string; pvp: string; shape: string; summary: string }
 export interface CollisionObject { type: "circle" | "box"; offset_x?: number; offset_y?: number; radius?: number; width?: number; height?: number }
@@ -107,6 +111,8 @@ export const weapons = weaponsData as Record<string, Weapon>;
 export const spells = spellsData as Record<string, Spell>;
 export const gadgets = gadgetsData as Record<string, Gadget>;
 export const ammunition = ammunitionData as Record<string, Ammunition>;
+export const outposts = outpostsData as unknown as Record<string, Outpost>;
+export const rideables = rideablesData as Record<string, Rideable>;
 export const loadoutTable = loadoutData as LoadoutTable;
 export const progression = progressionData as ProgressionTable;
 export const components = componentsData as ComponentsTable;
@@ -200,6 +206,16 @@ function batchSize(material: string): number {
 export function specialAmmunition(weapon: Weapon): string | undefined {
   const ability = weapon.ability ? abilities[weapon.ability] : undefined;
   return ability?.cost.kind === "material" ? ability.cost.material : undefined;
+}
+
+/**
+ * The speed multiplier a ride carries, resolved from the entity archetype the
+ * snapshot names. Prediction needs it to step a mounted body at the same speed
+ * the server does; a kind that is not a ride scales nothing.
+ */
+export function rideSpeedFor(entityKind: string): number {
+  for (const rideable of Object.values(rideables)) if (rideable.entity === entityKind) return rideable.ride_speed;
+  return 1;
 }
 
 function materialLabel(id: string): string { return materials.materials[id]?.name ?? id; }

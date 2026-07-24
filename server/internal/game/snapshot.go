@@ -89,6 +89,25 @@ func (w *World) SnapshotFor(playerID string, now time.Time, kind uint64) protoco
 			Scoped: p.Scoped, Guarding: p.Guarding,
 			RecoilDegrees: float32(w.recoilDegrees(p, now)), Shots: p.Fired,
 			Shield: float32(w.guardHealth(p)), MaxShield: float32(w.guardDurability(p)),
+			Invulnerable: p.exitInvulnerable(now), Mounted: p.Mounted(),
+		})
+	}
+	// Rideables — a Gunslinger's vehicle or a Mage's mount — are ordinary bodies
+	// for line of sight: one behind a wall is hidden exactly as a player is.
+	for _, r := range interest(w.rideGrid, viewer.Position, viewDistance) {
+		if !r.Alive && !r.Deleting {
+			continue
+		}
+		if hidden(r.Position, r.OwnerID, r.circleRadius()) {
+			continue
+		}
+		message.Entities = append(message.Entities, protocol.Entity{
+			Type: protocol.EntityMount, ID: r.ID, ClassName: r.Kind, OwnerID: r.OwnerID,
+			X: float32(r.Position.X), Y: float32(r.Position.Y), VX: float32(r.Velocity.X), VY: float32(r.Velocity.Y),
+			Health: float32(r.Health), MaxHealth: float32(r.MaxHealth), Alive: r.Alive,
+			Mass: float32(r.Mass), Radius: float32(r.circleRadius()),
+			Allegiance: ownerAllegiance(viewer, w.players[r.OwnerID]),
+			Deleting:   r.Deleting, DeleteProgress: float32(r.deleteProgress(now)),
 		})
 	}
 	for _, p := range interest(w.shots, viewer.Position, viewDistance) {

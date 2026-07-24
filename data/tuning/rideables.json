@@ -1,0 +1,16 @@
+{
+  "motorcycle": {
+    "name": "Motorcycle",
+    "class": "gunslinger",
+    "entity": "motorcycle",
+    "ride_speed": 1.9,
+    "cost": { "salvaged-plate": 8, "scrap-wire": 4 }
+  },
+  "warhorse-crystal": {
+    "name": "Warhorse summoning crystal",
+    "class": "mage",
+    "entity": "horse",
+    "ride_speed": 1.8,
+    "cost": { "ash-heartwood": 6, "binding-resin": 3 }
+  }
+}

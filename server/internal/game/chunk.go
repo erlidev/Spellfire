@@ -228,7 +228,7 @@ func (w *World) generateScatter(coord gridCell, inner, outer float64) []*Entity 
 			// Authored fixtures are the one thing generation defers to, and they
 			// are read from the table rather than from the world, so deferring to
 			// them stays independent of what is currently resident.
-			if w.fixtureOverlaps(position, radius+terrain.Spacing) {
+			if w.fixtureOverlaps(position, radius+terrain.Spacing) || w.insideOutpost(position, radius+terrain.Spacing) {
 				continue
 			}
 			objects := collisionObjectsFromTuning(definition.CollisionObjects)
@@ -278,7 +278,7 @@ func (w *World) generateBelts(coord gridCell, inner, outer float64) []*Entity {
 			draw := newSiteStream(belts.Seed, bx, by)
 			base := newEntity("", kind, Vec{}, definition, EntityOverrides{})
 			radius := base.circleRadius() + draw.next()*belts.RadiusSpread
-			if w.fixtureOverlaps(position, radius) {
+			if w.fixtureOverlaps(position, radius) || w.insideOutpost(position, radius) {
 				continue
 			}
 			objects := collisionObjectsFromTuning(definition.CollisionObjects)

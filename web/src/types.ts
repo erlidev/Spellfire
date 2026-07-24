@@ -41,6 +41,8 @@ export interface Entity {
   recoilDegrees: number; shots: number;
   /** What is left of the raised shield, and the pool it is spent from. */
   shield: number; maxShield: number;
+  /** Set on a player riding a mount or vehicle, so it is drawn astride its ride. */
+  mounted: boolean;
 }
 
 export interface Collider {
@@ -62,7 +64,7 @@ export interface ServerMessage {
 }
 
 export const Buttons = { Up: 1, Down: 2, Left: 4, Right: 8, Fire: 16, Dash: 32, Reload: 64, Interact: 128, Scope: 256 } as const;
-export const EntityType = { Player: 1, Projectile: 2, Mob: 3, Drop: 4, Node: 5, Telegraph: 6, Deployable: 7, Boss: 8, WorldItem: 9 } as const;
+export const EntityType = { Player: 1, Projectile: 2, Mob: 3, Drop: 4, Node: 5, Telegraph: 6, Deployable: 7, Boss: 8, WorldItem: 9, Mount: 10 } as const;
 export const Allegiance = { Self: 1, Squad: 2, Neutral: 3, Hostile: 4 } as const;
 export const TelegraphState = { Pending: 1, Active: 2, Resolved: 3 } as const;
 export const ClientKind = { Join: 1, Input: 2, Respawn: 3, Ping: 4, Loadout: 5, Craft: 6, Ammunition: 7 } as const;

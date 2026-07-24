@@ -1,1 +1,42 @@
-{}
+{
+  "waystation-hollow": {
+    "name": "Waystation Hollow",
+    "band": "fringe",
+    "position": [2772, 1009],
+    "safe_radius": 650,
+    "discovery_radius": 900,
+    "services": ["loadout", "crafting", "respawn"]
+  },
+  "saltmarch-post": {
+    "name": "Saltmarch Post",
+    "band": "frontier",
+    "position": [-5121, -1864],
+    "safe_radius": 650,
+    "discovery_radius": 900,
+    "services": ["crafting", "respawn"]
+  },
+  "highreach-camp": {
+    "name": "Highreach Camp",
+    "band": "frontier",
+    "position": [1459, 8272],
+    "safe_radius": 650,
+    "discovery_radius": 900,
+    "services": ["crafting", "respawn"]
+  },
+  "cinderwatch": {
+    "name": "Cinderwatch",
+    "band": "frontier",
+    "position": [9039, -7585],
+    "safe_radius": 650,
+    "discovery_radius": 900,
+    "services": ["respawn"]
+  },
+  "faredge-hold": {
+    "name": "Faredge Hold",
+    "band": "frontier",
+    "position": [-11950, 10028],
+    "safe_radius": 650,
+    "discovery_radius": 900,
+    "services": ["respawn"]
+  }
+}
