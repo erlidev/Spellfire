@@ -25,9 +25,18 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
   && rm -rf /var/lib/apt/lists/*
 
 # --- persisted dirs ---------------------------------------------------------
-# Created here so the named volumes mount with correct ownership.
-RUN mkdir -p /commandhistory /home/node/.claude /workspace \
-  && chown -R node:node /commandhistory /home/node /workspace
+RUN mkdir -p \
+      /commandhistory \
+      /home/node/.claude \
+      /home/node/.vscode-server \
+      /home/node/.vscode-server-insiders \
+      /vscode \
+      /workspace \
+  && chown -R node:node \
+      /commandhistory \
+      /home/node \
+      /vscode \
+      /workspace
 
 # --- egress firewall --------------------------------------------------------
 COPY init-firewall.sh /usr/local/bin/init-firewall.sh
