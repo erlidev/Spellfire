@@ -24,11 +24,19 @@
     // written in /workspace are owned by you, not by a subuid.
     "--userns=keep-id:uid=1000,gid=1000",
 
-    // Drop every capability, then re-add only what the egress firewall
-    // needs. See the note in the README about no-new-privileges.
+    // Drop every capability, then re-add only what is strictly needed.
+    //   NET_ADMIN / NET_RAW : the egress firewall's iptables + ipset rules
+    //   SETUID / SETGID     : sudo's transition to root for that script
+    //   AUDIT_WRITE         : sudo's sudoers_audit plugin
+    // These are namespaced capabilities. Under rootless Podman, container
+    // root maps to an unprivileged subuid on the host, so holding them
+    // inside the container confers no host privilege.
     "--cap-drop=ALL",
     "--cap-add=NET_ADMIN",
     "--cap-add=NET_RAW",
+    "--cap-add=SETUID",
+    "--cap-add=SETGID",
+    "--cap-add=AUDIT_WRITE",
 
     // Pin DNS so the firewall's allowlist resolution is deterministic
     // and the container can't be steered by host resolver changes.
@@ -57,11 +65,6 @@
     // Single revocable credential, minted on the host with:
     //   claude setup-token
     "CLAUDE_CODE_OAUTH_TOKEN": "${localEnv:CLAUDE_CODE_OAUTH_TOKEN}",
-
-    // Optional: a fine-grained, single-repo GitHub PAT. Do NOT pass your
-    // main account token or forward your SSH agent.
-    "GITHUB_TOKEN": "${localEnv:SANDBOX_GITHUB_TOKEN}",
-
     "HISTFILE": "/commandhistory/.bash_history",
     "NODE_OPTIONS": "--max-old-space-size=4096"
   },
