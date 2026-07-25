@@ -1,0 +1,85 @@
+{
+  "name": "claude-sandbox",
+
+  "build": {
+    "dockerfile": "Dockerfile",
+    "args": {
+      "TZ": "${localEnv:TZ:America/Denver}",
+      "NODE_VERSION": "22"
+    }
+  },
+
+  // ---------------------------------------------------------------
+  // Workspace mount. The ",Z" suffix is REQUIRED on Fedora: it tells
+  // Podman to relabel the bind mount with a private SELinux category
+  // so container_t can write to it. Without it every write fails with
+  // EACCES and the SELinux denial is silent inside the container.
+  // Dev Containers' default workspaceMount omits it, so we override.
+  // ---------------------------------------------------------------
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,Z",
+  "workspaceFolder": "/workspace",
+
+  "runArgs": [
+    // Map container UID 1000 (the "node" user) to your host UID so files
+    // written in /workspace are owned by you, not by a subuid.
+    "--userns=keep-id:uid=1000,gid=1000",
+
+    // Drop every capability, then re-add only what the egress firewall
+    // needs. See the note in the README about no-new-privileges.
+    "--cap-drop=ALL",
+    "--cap-add=NET_ADMIN",
+    "--cap-add=NET_RAW",
+
+    // Pin DNS so the firewall's allowlist resolution is deterministic
+    // and the container can't be steered by host resolver changes.
+    "--dns=1.1.1.1",
+
+    // Keep the container off the host network namespace explicitly.
+    "--network=bridge"
+  ],
+
+  // Dev Containers tries to chown/usermod the remote user's UID at
+  // startup, which fights with --userns=keep-id. Disable it.
+  "updateRemoteUserUID": false,
+  "containerUser": "node",
+  "remoteUser": "node",
+
+  // ---------------------------------------------------------------
+  // Named volumes, NOT host bind mounts. Never mount the host ~/.claude,
+  // ~/.ssh, ~/.aws or ~/.config/gh into an autopilot container.
+  // ---------------------------------------------------------------
+  "mounts": [
+    "source=claude-sandbox-config,target=/home/node/.claude,type=volume",
+    "source=claude-sandbox-history,target=/commandhistory,type=volume"
+  ],
+
+  "remoteEnv": {
+    // Single revocable credential, minted on the host with:
+    //   claude setup-token
+    "CLAUDE_CODE_OAUTH_TOKEN": "${localEnv:CLAUDE_CODE_OAUTH_TOKEN}",
+
+    // Optional: a fine-grained, single-repo GitHub PAT. Do NOT pass your
+    // main account token or forward your SSH agent.
+    "GITHUB_TOKEN": "${localEnv:SANDBOX_GITHUB_TOKEN}",
+
+    "HISTFILE": "/commandhistory/.bash_history",
+    "NODE_OPTIONS": "--max-old-space-size=4096"
+  },
+
+  // Runs as root via a single NOPASSWD sudo rule scoped to this script.
+  "postCreateCommand": "sudo /usr/local/bin/init-firewall.sh",
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "anthropic.claude-code",
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode"
+      ],
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "fish",
+        "editor.formatOnSave": true
+      }
+    }
+  }
+}
