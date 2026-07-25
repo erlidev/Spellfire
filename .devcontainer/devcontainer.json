@@ -62,9 +62,6 @@
   ],
 
   "remoteEnv": {
-    // Single revocable credential, minted on the host with:
-    //   claude setup-token
-    "CLAUDE_CODE_OAUTH_TOKEN": "${localEnv:CLAUDE_CODE_OAUTH_TOKEN}",
     "HISTFILE": "/commandhistory/.bash_history",
     "NODE_OPTIONS": "--max-old-space-size=4096"
   },
