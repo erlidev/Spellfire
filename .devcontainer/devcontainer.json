@@ -1,5 +1,5 @@
 {
-  "name": "claude-sandbox",
+  "name": "ai-sandbox",
 
   "build": {
     "dockerfile": "Dockerfile",
