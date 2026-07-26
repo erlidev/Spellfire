@@ -28,6 +28,7 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
 RUN mkdir -p \
       /commandhistory \
       /home/node/.claude \
+      /home/node/.pi/agent \
       /home/node/.vscode-server \
       /home/node/.vscode-server-insiders \
       /vscode \
