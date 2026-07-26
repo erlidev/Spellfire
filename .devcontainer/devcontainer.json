@@ -58,16 +58,18 @@
   // ---------------------------------------------------------------
   "mounts": [
     "source=claude-sandbox-config,target=/home/node/.claude,type=volume",
-    "source=claude-sandbox-history,target=/commandhistory,type=volume"
+    "source=claude-sandbox-history,target=/commandhistory,type=volume",
+    "source=pi-sandbox-config,target=/home/node/.pi,type=volume"
   ],
 
   "remoteEnv": {
     "HISTFILE": "/commandhistory/.bash_history",
-    "NODE_OPTIONS": "--max-old-space-size=4096"
+    "NODE_OPTIONS": "--max-old-space-size=4096",
+    "LLAMA_SERVER_API_KEY": "${localEnv:LLAMA_SERVER_API_KEY}"
   },
 
   // Runs as root via a single NOPASSWD sudo rule scoped to this script.
-  "postCreateCommand": "sudo /usr/local/bin/init-firewall.sh",
+  "postCreateCommand": "sudo /usr/local/bin/init-firewall.sh && /usr/local/bin/init-pi.sh",
 
   "customizations": {
     "vscode": {

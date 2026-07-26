@@ -24,6 +24,8 @@ ALLOWED_DOMAINS=(
   index.crates.io
   proxy.golang.org
   sum.golang.org
+  # Miscellaneous domains
+  llama.erli.xyz
 )
 
 echo "[firewall] flushing"

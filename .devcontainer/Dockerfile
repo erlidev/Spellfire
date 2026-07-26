@@ -45,6 +45,10 @@ RUN chmod 0755 /usr/local/bin/init-firewall.sh \
        > /etc/sudoers.d/init-firewall \
   && chmod 0440 /etc/sudoers.d/init-firewall
 
+# --- pi agent config --------------------------------------------------------
+COPY init-pi.sh /usr/local/bin/init-pi.sh
+RUN chmod 0755 /usr/local/bin/init-pi.sh
+
 # --- Claude Code ------------------------------------------------------------
 RUN npm install -g @anthropic-ai/claude-code
 
