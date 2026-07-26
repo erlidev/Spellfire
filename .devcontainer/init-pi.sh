@@ -7,15 +7,22 @@ mkdir -p "$AGENT_DIR"
 cat > "$AGENT_DIR/models.json" <<'JSON'
 {
   "providers": {
-    "myprovider": {
+    "llama-server": {
       "baseUrl": "https://llama.erli.xyz/v1",
       "api": "openai-completions",
       "apiKey": "$LLAMA_SERVER_API_KEY",
+      "headers": {
+        "User-Agent": "pi-agent/1.0"
+      },
       "models": [
         {
           "id": "qwen3.6-27b",
           "name": "Qwen3.6 27B",
           "reasoning": true,
+          "compat": {
+            "supportsDeveloperRole": false,
+            "supportsReasoningEffort": false
+          },
           "input": ["text"],
           "contextWindow": 131000,
           "maxTokens": 32000,
