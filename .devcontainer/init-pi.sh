@@ -20,7 +20,7 @@ cat > "$AGENT_DIR/models.json" <<'JSON'
           "name": "Qwen3.6 27B",
           "reasoning": true,
           "compat": {
-            "supportsDeveloperRole": false,
+            "supportsDeveloperRole": true,
             "supportsReasoningEffort": false
           },
           "input": ["text"],
